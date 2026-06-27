@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import {
   LogOut,
@@ -13,7 +14,9 @@ import optilacteoLogo from "../../assets/images/optilacteo_logo.png";
 
 export function Sidebar() {
   const { user, logout } = useAuth();
-  
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const esAdmin = user?.role === Role.ADMIN;
   const esGerente = user?.role === Role.GERENTE;
   const puedeVerUsuarios = esAdmin || esGerente;
@@ -44,10 +47,10 @@ export function Sidebar() {
   }, [puedeVerUsuarios]);
 
   const navItems = [
-    { label: "Dashboard", icon: LayoutDashboard },
-    { label: "Empresas", icon: Building2, count: counts.empresas },
+    { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+    { label: "Empresas", icon: Building2, count: counts.empresas, path: "/empresas" },
     ...(puedeVerUsuarios
-      ? [{ label: "Usuarios", icon: Users, count: counts.usuarios }]
+      ? [{ label: "Usuarios", icon: Users, count: counts.usuarios, path: "/usuarios" }]
       : []),
   ];
 
@@ -71,12 +74,13 @@ export function Sidebar() {
         <ul className="flex flex-col gap-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = item.label === "Usuarios"; 
+            const isActive = location.pathname.startsWith(item.path);
 
             return (
               <li key={item.label}>
                 <button
                   type="button"
+                  onClick={() => navigate(item.path)}
                   className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition ${
                     isActive
                       ? "bg-blue-50 text-blue-700"

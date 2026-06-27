@@ -65,7 +65,7 @@ export function useUsuarios(): UseUsuariosResult {
     return usuarios.filter((usuario) => {
       const matchesEmpresa =
         empresaFiltro === TODAS_LAS_EMPRESAS ||
-        String(usuario.empresa.id) === empresaFiltro;
+        String(usuario.empresa?.id) === empresaFiltro;
 
       if (!matchesEmpresa) return false;
       if (!term) return true;
@@ -73,7 +73,7 @@ export function useUsuarios(): UseUsuariosResult {
       return (
         usuario.name.toLowerCase().includes(term) ||
         usuario.email.toLowerCase().includes(term) ||
-        usuario.empresa.name.toLowerCase().includes(term)
+        (usuario.empresa?.name ?? "").toLowerCase().includes(term)
       );
     });
   }, [usuarios, search, empresaFiltro]);

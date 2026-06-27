@@ -5,6 +5,7 @@ import { Role } from "./types/usuario.types";
 import LoginPage from "./pages/Login/LoginPage";
 import DashboardPage from "./pages/Dashboard/DashboardPage";
 import UsuariosPage from "./pages/Usuarios/UsuariosPage";
+import EmpresasPage from "./pages/Empresas/EmpresasPage";
 
 function App() {
   return (
@@ -17,6 +18,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/empresas"
+            element={
+              <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+                <EmpresasPage />
               </ProtectedRoute>
             }
           />

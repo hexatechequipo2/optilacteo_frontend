@@ -40,7 +40,7 @@ export default function UsuariosPage() {
     })),
   ];
 
-  const empresasUnicas = new Set(usuarios.map((usuario) => usuario.empresa.id)).size;
+  const empresasUnicas = new Set(usuarios.map((usuario) => usuario.empresa?.id).filter(Boolean)).size;
 
   return (
     <Layout breadcrumb="Consola > Usuarios">

@@ -30,7 +30,7 @@ export interface UsuarioType {
   empresa: {
     id: number;
     name: string;
-  };
+  } | null;
 }
 
 export interface CreateUsuarioDto {
