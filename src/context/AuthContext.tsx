@@ -1,4 +1,4 @@
-import { createContext, useState, type ReactNode } from "react";
+import { createContext, useState, type ReactNode, useContext } from "react";
 import { authService } from "../services/auth.service";
 import type { LoginResponse } from "../types/usuario.types";
 
@@ -9,6 +9,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(
@@ -43,11 +44,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const logout = async () => {
+    try {
+      // Intentamos revocar el token en el servidor primero
+      await authService.logout();
+    } catch (error) {
+      console.error("Error al revocar sesión en el servidor:", error);
+    } finally {
+      // Limpieza local independientemente del resultado del servidor
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(USER_KEY);
+      setToken(null);
+      setUser(null);
+      window.location.href = "/login";
+    }
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: !!token, isLoading, login }}
+      value={{ user, isAuthenticated: !!token, isLoading, login, logout }}
     >
       {children}
     </AuthContext.Provider>
   );
 }
+
+// Hook personalizado para facilitar el uso del contexto
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth debe ser usado dentro de un AuthProvider");
+  }
+  return context;
+};
