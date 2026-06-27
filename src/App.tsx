@@ -3,6 +3,8 @@ import { AuthProvider } from "./context/AuthContext";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { Role } from "./types/usuario.types";
 import LoginPage from "./pages/Login/LoginPage";
+import ForgotPasswordPage from "./pages/Login/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/Login/ResetPasswordPage";
 import DashboardPage from "./pages/Dashboard/DashboardPage";
 import UsuariosPage from "./pages/Usuarios/UsuariosPage";
 import EmpresasPage from "./pages/Empresas/EmpresasPage";
@@ -13,6 +15,9 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
           <Route
             path="/dashboard"
             element={

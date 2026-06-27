@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Eye, EyeOff, Lock } from "lucide-react";
 import { Input } from "../../components/ui/Input";
@@ -153,12 +153,12 @@ export default function LoginPage() {
                 />
                 Recordarme
               </label>
-              <a
-                href="#"
+              <Link
+                to="/forgot-password"
                 className="text-sm text-blue-600 hover:underline"
               >
                 ¿Olvidaste tu contraseña?
-              </a>
+              </Link>
             </div>
 
             {serverError && (
