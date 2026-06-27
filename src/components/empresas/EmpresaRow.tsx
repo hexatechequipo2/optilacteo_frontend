@@ -1,0 +1,52 @@
+import { Pencil } from "lucide-react";
+import type { EmpresaType } from "../../types/empresa.types";
+import { EmpresaAvatar } from "./EmpresaAvatar";
+import { PlanBadge } from "./PlanBadge";
+import { EstadoBadge } from "./EstadoBadge";
+import { ModulosDots } from "./ModulosDots";
+
+interface EmpresaRowProps {
+  empresa: EmpresaType;
+  onEdit: (empresa: EmpresaType) => void;
+}
+
+export function EmpresaRow({ empresa, onEdit }: EmpresaRowProps) {
+  return (
+    <tr className="text-sm">
+      <td className="px-5 py-3">
+        <div className="flex items-center gap-3">
+          <EmpresaAvatar nombre={empresa.name} />
+          <div>
+            <p className="font-medium text-slate-900">{empresa.name}</p>
+            <p className="text-xs text-slate-500">{empresa.cuit}</p>
+          </div>
+        </div>
+      </td>
+      <td className="px-5 py-3">
+        <PlanBadge plan={empresa.plan} />
+      </td>
+      <td className="px-5 py-3">
+        <ModulosDots modulos={empresa.modulos} />
+      </td>
+      <td className="px-5 py-3 text-slate-600">
+        {empresa.cantidadUsuarios ?? 0}
+      </td>
+      <td className="px-5 py-3 text-slate-600">
+        {empresa.direccion ?? "—"}
+      </td>
+      <td className="px-5 py-3">
+        <EstadoBadge isActive={empresa.isActive} />
+      </td>
+      <td className="px-5 py-3 text-right">
+        <button
+          type="button"
+          onClick={() => onEdit(empresa)}
+          aria-label={`Editar ${empresa.name}`}
+          className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
+      </td>
+    </tr>
+  );
+}

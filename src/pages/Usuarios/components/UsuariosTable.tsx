@@ -65,12 +65,16 @@ export function UsuariosTable({ usuarios, onEdit }: UsuariosTableProps) {
                 </div>
               </td>
               <td className="px-5 py-3">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-100 text-[10px] font-semibold text-amber-700">
-                    {usuario.empresa.name.slice(0, 2).toUpperCase()}
+                {usuario.empresa ? (
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-100 text-[10px] font-semibold text-amber-700">
+                      {usuario.empresa.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <span className="text-slate-700">{usuario.empresa.name}</span>
                   </div>
-                  <span className="text-slate-700">{usuario.empresa.name}</span>
-                </div>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
               </td>
               <td className="px-5 py-3">
                 <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">

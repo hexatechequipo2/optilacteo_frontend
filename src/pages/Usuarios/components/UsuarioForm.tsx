@@ -69,7 +69,7 @@ export function UsuarioForm({
   const [email, setEmail] = useState(usuario?.email ?? "");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>((usuario?.role as Role) ?? Role.OPERARIO_LINEA);
-  const [empresaId, setEmpresaId] = useState(usuario ? String(usuario.empresa.id) : "");
+  const [empresaId, setEmpresaId] = useState(usuario ? String(usuario.empresa?.id ?? "") : "");
   const [isActive, setIsActive] = useState(usuario?.isActive ?? true);
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState("");
