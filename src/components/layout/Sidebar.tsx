@@ -6,9 +6,11 @@ import {
   LayoutDashboard,
   Building2,
   Users,
+  Package,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
+import { planesService } from "../../services/planes.service";
 import { getRoleLabel, Role } from "../../types/usuario.types";
 import optilacteoLogo from "../../assets/images/optilacteo_logo.png";
 
@@ -24,19 +26,22 @@ export function Sidebar() {
   const [counts, setCounts] = useState({
     empresas: 0,
     usuarios: 0,
+    planes: 0,
   });
 
   useEffect(() => {
     async function loadCounts() {
       try {
-        const [empresas, usuarios] = await Promise.all([
+        const [empresas, usuarios, planes] = await Promise.all([
           empresasService.getAll(),
-          puedeVerUsuarios ? usuariosService.getAll() : Promise.resolve([])
+          puedeVerUsuarios ? usuariosService.getAll() : Promise.resolve([]),
+          planesService.getAll(),
         ]);
 
         setCounts({
           empresas: empresas.length,
           usuarios: usuarios.length,
+          planes: planes.length,
         });
       } catch (error) {
         console.error("Error al cargar contadores:", error);
@@ -52,6 +57,7 @@ export function Sidebar() {
     ...(puedeVerUsuarios
       ? [{ label: "Usuarios", icon: Users, count: counts.usuarios, path: "/usuarios" }]
       : []),
+    { label: "Planes", icon: Package, count: counts.planes, path: "/planes" },
   ];
 
   return (
