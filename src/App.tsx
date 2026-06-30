@@ -9,6 +9,7 @@ import DashboardPage from "./pages/Dashboard/DashboardPage";
 import UsuariosPage from "./pages/Usuarios/UsuariosPage";
 import EmpresasPage from "./pages/Empresas/EmpresasPage";
 import PlanesPage from "./pages/Planes/PlanesPage";
+import ProveedoresPage from "./pages/Proveedores/ProveedoresPage";
 
 function App() {
   return (
@@ -48,6 +49,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={[Role.ADMIN]}>
                 <PlanesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/proveedores"
+            element={
+              <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+                <ProveedoresPage />
               </ProtectedRoute>
             }
           />
