@@ -8,6 +8,7 @@ import ResetPasswordPage from "./pages/Login/ResetPasswordPage";
 import DashboardPage from "./pages/Dashboard/DashboardPage";
 import UsuariosPage from "./pages/Usuarios/UsuariosPage";
 import EmpresasPage from "./pages/Empresas/EmpresasPage";
+import PlanesPage from "./pages/Planes/PlanesPage";
 
 function App() {
   return (
@@ -39,6 +40,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={[Role.ADMIN, Role.GERENTE]}>
                 <UsuariosPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/planes"
+            element={
+              <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+                <PlanesPage />
               </ProtectedRoute>
             }
           />
