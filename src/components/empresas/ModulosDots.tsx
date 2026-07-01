@@ -1,22 +1,30 @@
-import type { EmpresaModulo, ModuloEnum } from "../../types/empresa.types";
+import type { ModuloEnum } from "../../types/empresa.types";
+import type { Plan } from "../../types/plan.types";
 
 const TODOS_LOS_MODULOS: ModuloEnum[] = [
-  "usuarios",
-  "reportes",
-  "inventario",
-  "produccion",
-  "calidad",
+  "dashboard",
+  "recepcion",
+  "destino_productivo_ia",
+  "monitoreo_alertas",
+  "sensores_iot",
+  "trazabilidad",
+  "reportes_forecast",
+  "asistente_voz",
 ];
 
 interface ModulosDotsProps {
-  modulos?: EmpresaModulo[];
+  plan: string;
+  planes: Plan[];
 }
 
-export function ModulosDots({ modulos = [] }: ModulosDotsProps) {
-  const activosSet = new Set(
-    modulos.filter((m) => m.isActive).map((m) => m.modulo),
+export function ModulosDots({ plan, planes }: ModulosDotsProps) {
+  const planDeLaEmpresa = planes.find(
+    (p) => p.nombre.toLowerCase() === plan.toLowerCase(),
   );
-  const activosCount = activosSet.size;
+  const modulosDelPlan = new Set(
+    planDeLaEmpresa?.modulos.map((m) => m.codigo) ?? [],
+  );
+  const activosCount = modulosDelPlan.size;
 
   return (
     <div className="flex items-center gap-2">
@@ -26,12 +34,12 @@ export function ModulosDots({ modulos = [] }: ModulosDotsProps) {
             key={modulo}
             title={modulo}
             className={`h-2 w-2 rounded-full ${
-              activosSet.has(modulo) ? "bg-blue-500" : "bg-slate-200"
+              modulosDelPlan.has(modulo) ? "bg-blue-500" : "bg-slate-200"
             }`}
           />
         ))}
       </div>
-      <span className="text-xs text-slate-400">{activosCount}/5</span>
+      <span className="text-xs text-slate-400">{activosCount}/8</span>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import type { EmpresaType } from "../../types/empresa.types";
+import type { Plan } from "../../types/plan.types";
 import { EmpresaRow } from "./EmpresaRow";
 
 const HEADERS = [
@@ -13,10 +14,11 @@ const HEADERS = [
 
 interface EmpresasTableProps {
   empresas: EmpresaType[];
+  planes: Plan[];
   onEdit: (empresa: EmpresaType) => void;
 }
 
-export function EmpresasTable({ empresas, onEdit }: EmpresasTableProps) {
+export function EmpresasTable({ empresas, planes, onEdit }: EmpresasTableProps) {
   if (empresas.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center">
@@ -47,7 +49,12 @@ export function EmpresasTable({ empresas, onEdit }: EmpresasTableProps) {
         </thead>
         <tbody className="divide-y divide-slate-100">
           {empresas.map((empresa) => (
-            <EmpresaRow key={empresa.id} empresa={empresa} onEdit={onEdit} />
+            <EmpresaRow
+              key={empresa.id}
+              empresa={empresa}
+              planes={planes}
+              onEdit={onEdit}
+            />
           ))}
         </tbody>
       </table>
