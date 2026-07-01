@@ -110,7 +110,7 @@ export function NuevaEmpresaModal({
           <button
             type="button"
             onClick={handleClose}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Cancelar
           </button>
@@ -125,7 +125,7 @@ export function NuevaEmpresaModal({
         </div>
       }
     >
-      <p className="mb-6 text-sm text-slate-500">
+      <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
         Completá los datos para registrar una nueva organización en la plataforma.
       </p>
 
@@ -190,7 +190,7 @@ export function NuevaEmpresaModal({
         />
 
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-slate-700">Plan</p>
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Plan</p>
           <div className="flex flex-col gap-2">
             {PLANES.map((plan) => (
               <RadioCard

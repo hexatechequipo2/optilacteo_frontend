@@ -17,8 +17,8 @@ export function RadioCard({
     <label
       className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 transition ${
         checked
-          ? "border-blue-500 bg-blue-50"
-          : "border-slate-200 bg-white hover:border-slate-300"
+          ? "border-blue-500 bg-blue-50 dark:border-blue-500 dark:bg-blue-500/10"
+          : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600"
       }`}
     >
       <input
@@ -29,7 +29,7 @@ export function RadioCard({
         onChange={() => onChange(value)}
         className="h-4 w-4 accent-blue-600"
       />
-      <span className="text-sm font-medium text-slate-800">{label}</span>
+      <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{label}</span>
     </label>
   );
 }

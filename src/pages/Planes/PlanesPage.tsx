@@ -14,22 +14,22 @@ export default function PlanesPage() {
   return (
     <Layout breadcrumb="Consola > Planes">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
           Planes
         </h1>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           {planes.length} planes de suscripción · {totalEmpresas} empresas
           asignadas
         </p>
       </div>
 
       {error && (
-        <div className="mb-4 flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
           <span>{error}</span>
           <button
             type="button"
             onClick={() => void fetchPlanes()}
-            className="ml-4 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200"
+            className="ml-4 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
           >
             Reintentar
           </button>
@@ -41,13 +41,13 @@ export default function PlanesPage() {
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-80 animate-pulse rounded-xl border border-slate-200 bg-white"
+              className="h-80 animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
             />
           ))}
         </div>
       ) : planes.length === 0 ? (
-        <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16">
-          <p className="text-sm text-slate-500">No hay planes registrados.</p>
+        <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16 dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-sm text-slate-500 dark:text-slate-400">No hay planes registrados.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">

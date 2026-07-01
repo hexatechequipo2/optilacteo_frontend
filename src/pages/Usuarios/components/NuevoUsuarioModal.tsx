@@ -31,14 +31,14 @@ export function NuevoUsuarioModal({ isOpen, empresas, isSubmitting, onClose, onC
       onClose={onClose}
       footer={
         <div className="flex gap-3 justify-end">
-          <button 
+          <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-lg border border-slate-200 transition"
+            className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-lg border border-slate-200 transition dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800"
           >
             Cancelar
           </button>
-          <button 
+          <button
             type="submit"
             form="usuario-form" // Esto es lo que conecta el botón con el form
             disabled={isSubmitting}
@@ -49,7 +49,7 @@ export function NuevoUsuarioModal({ isOpen, empresas, isSubmitting, onClose, onC
         </div>
       }
     >
-      <p className="text-sm text-slate-500 mb-6">
+      <p className="text-sm text-slate-500 mb-6 dark:text-slate-400">
         Asigna una empresa, un rol y sus permisos
       </p>
 

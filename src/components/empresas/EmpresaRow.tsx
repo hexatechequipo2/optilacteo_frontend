@@ -19,8 +19,8 @@ export function EmpresaRow({ empresa, planes, onEdit }: EmpresaRowProps) {
         <div className="flex items-center gap-3">
           <EmpresaAvatar nombre={empresa.name} />
           <div>
-            <p className="font-medium text-slate-900">{empresa.name}</p>
-            <p className="text-xs text-slate-500">{empresa.cuit}</p>
+            <p className="font-medium text-slate-900 dark:text-white">{empresa.name}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{empresa.cuit}</p>
           </div>
         </div>
       </td>
@@ -30,10 +30,10 @@ export function EmpresaRow({ empresa, planes, onEdit }: EmpresaRowProps) {
       <td className="px-5 py-3">
         <ModulosDots plan={empresa.plan} planes={planes} />
       </td>
-      <td className="px-5 py-3 text-slate-600">
+      <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
         {empresa.cantidadUsuarios ?? 0}
       </td>
-      <td className="px-5 py-3 text-slate-600">
+      <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
         {empresa.direccion ?? "—"}
       </td>
       <td className="px-5 py-3">
@@ -44,7 +44,7 @@ export function EmpresaRow({ empresa, planes, onEdit }: EmpresaRowProps) {
           type="button"
           onClick={() => onEdit(empresa)}
           aria-label={`Editar ${empresa.name}`}
-          className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
         >
           <Pencil className="h-4 w-4" />
         </button>

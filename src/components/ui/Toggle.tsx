@@ -18,7 +18,7 @@ export function Toggle({ checked, onChange, label, id }: ToggleProps) {
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={`relative h-6 w-11 rounded-full transition ${
-          checked ? "bg-green-500" : "bg-slate-300"
+          checked ? "bg-green-500" : "bg-slate-300 dark:bg-slate-700"
         }`}
       >
         <span
@@ -28,7 +28,7 @@ export function Toggle({ checked, onChange, label, id }: ToggleProps) {
         />
       </button>
       {label && (
-        <span className="text-sm font-medium text-slate-700">{label}</span>
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</span>
       )}
     </label>
   );

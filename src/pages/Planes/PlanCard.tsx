@@ -26,9 +26,9 @@ const TODOS_LOS_MODULOS: { nombre: string; icono: LucideIcon }[] = [
 
 function topBorderClass(nombre: string): string {
   const lower = nombre.toLowerCase();
-  if (lower === "pro") return "border-t-[3px] border-t-blue-600 shadow-lg";
+  if (lower === "pro") return "border-t-[3px] border-t-blue-600 shadow-lg dark:shadow-none";
   if (lower === "enterprise") return "border-t-[3px] border-t-blue-500";
-  return "border-t-[3px] border-t-slate-300";
+  return "border-t-[3px] border-t-slate-300 dark:border-t-slate-600";
 }
 
 function formatMrr(mrr: number): string {
@@ -46,51 +46,51 @@ export function PlanCard({ plan }: PlanCardProps) {
 
   return (
     <div
-      className={`flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-6 ${topBorderClass(plan.nombre)}`}
+      className={`flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 ${topBorderClass(plan.nombre)}`}
     >
       {/* Header */}
       <div>
-        <h2 className="text-xl font-bold text-slate-900">{plan.nombre}</h2>
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">{plan.nombre}</h2>
       </div>
 
       {/* Precio */}
       <div className="flex items-baseline gap-1">
-        <span className="text-sm text-slate-500">US$</span>
-        <span className="text-4xl font-bold text-slate-900">{plan.precio}</span>
-        <span className="text-sm text-slate-500">/mes</span>
+        <span className="text-sm text-slate-500 dark:text-slate-400">US$</span>
+        <span className="text-4xl font-bold text-slate-900 dark:text-white">{plan.precio}</span>
+        <span className="text-sm text-slate-500 dark:text-slate-400">/mes</span>
       </div>
 
       {/* Stats chip */}
-      <div className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
+      <div className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3 dark:bg-slate-800">
         <div>
-          <p className="text-2xl font-bold text-slate-900">
+          <p className="text-2xl font-bold text-slate-900 dark:text-white">
             {plan.empresasAsignadas}
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             {plan.empresasAsignadas === 1 ? "empresa" : "empresas"}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             US${" "}
-            <span className="text-lg font-bold text-slate-900">
+            <span className="text-lg font-bold text-slate-900 dark:text-white">
               {formatMrr(plan.mrr)}
             </span>
           </p>
-          <p className="text-xs text-slate-500">MRR</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">MRR</p>
         </div>
       </div>
 
       {/* Límites */}
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 text-sm text-slate-700">
-          <Users className="h-4 w-4 flex-shrink-0 text-slate-400" />
+        <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+          <Users className="h-4 w-4 flex-shrink-0 text-slate-400 dark:text-slate-500" />
           <span>
             Hasta <strong>{plan.maxUsuarios}</strong> usuarios
           </span>
         </div>
-        <div className="flex items-center gap-2 text-sm text-slate-700">
-          <Radio className="h-4 w-4 flex-shrink-0 text-slate-400" />
+        <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+          <Radio className="h-4 w-4 flex-shrink-0 text-slate-400 dark:text-slate-500" />
           <span>
             Hasta <strong>{plan.maxSensores}</strong> sensores
           </span>
@@ -99,7 +99,7 @@ export function PlanCard({ plan }: PlanCardProps) {
 
       {/* Módulos */}
       <div className="flex flex-col gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
           {plan.modulos.length} de 8 módulos
         </p>
         <div className="flex flex-wrap gap-1.5">
@@ -110,8 +110,8 @@ export function PlanCard({ plan }: PlanCardProps) {
                 key={nombre}
                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
                   enabled
-                    ? "bg-blue-50 text-blue-700"
-                    : "bg-slate-100 text-slate-400"
+                    ? "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400"
+                    : "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
                 }`}
               >
                 <Icon className="h-3 w-3" />

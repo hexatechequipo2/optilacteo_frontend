@@ -111,7 +111,7 @@ export function Combobox({
   return (
     <div ref={containerRef} className="flex flex-col gap-1">
       {label && (
-        <label htmlFor={inputId} className="text-sm font-medium text-slate-700">
+        <label htmlFor={inputId} className="text-sm font-medium text-slate-700 dark:text-slate-300">
           {label}
         </label>
       )}
@@ -129,12 +129,12 @@ export function Combobox({
           onChange={handleInputChange}
           onFocus={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
-          className={`w-full rounded-md border px-3 py-2 pr-8 text-base text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-500 ${
-            error ? "border-red-500" : "border-slate-300"
+          className={`w-full rounded-md border px-3 py-2 pr-8 text-base text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 ${
+            error ? "border-red-500" : "border-slate-300 dark:border-slate-700"
           }`}
         />
 
-        <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+        <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
           {value && !isOpen ? (
             <button
               type="button"
@@ -154,10 +154,10 @@ export function Combobox({
           <ul
             ref={listRef}
             role="listbox"
-            className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+            className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800"
           >
             {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-slate-400">
+              <li className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">
                 No se encontraron localidades
               </li>
             ) : (
@@ -170,10 +170,10 @@ export function Combobox({
                   onMouseEnter={() => setHighlighted(index)}
                   className={`cursor-pointer px-3 py-2 text-sm ${
                     index === highlighted
-                      ? "bg-blue-50 text-blue-700"
+                      ? "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400"
                       : option === value
-                        ? "bg-slate-50 font-medium text-slate-900"
-                        : "text-slate-700 hover:bg-slate-50"
+                        ? "bg-slate-50 font-medium text-slate-900 dark:bg-slate-700 dark:text-white"
+                        : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"
                   }`}
                 >
                   {option}

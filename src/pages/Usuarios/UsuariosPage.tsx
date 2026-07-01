@@ -50,8 +50,8 @@ export default function UsuariosPage() {
         
         {/* Contenedor del Título y Contador (a la izquierda) */}
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight font-sans">Usuarios</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight font-sans dark:text-white">Usuarios</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             {usuarios.length} usuarios en {empresasUnicas} empresas
           </p>
         </div>
@@ -76,7 +76,7 @@ export default function UsuariosPage() {
             placeholder="Buscar por nombre, email o empresa..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="!w-full !rounded-full !py-2 !px-5 !border-slate-300"
+            className="!w-full !rounded-full !py-2 !px-5 !border-slate-300 dark:!border-slate-700"
           />
         </div>
         
@@ -87,21 +87,21 @@ export default function UsuariosPage() {
             options={empresaOptions}
             value={empresaFiltro}
             onChange={(event) => setEmpresaFiltro(event.target.value)}
-            className="!w-full !rounded-full !py-2 !px-4 !border-slate-300 !text-sm"
+            className="!w-full !rounded-full !py-2 !px-4 !border-slate-300 !text-sm dark:!border-slate-700"
           />
         </div>
       </div>
 
       {error && (
-        <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
           {error}
         </p>
       )}
 
       {/* Tabla con la corrección del tipo en onEdit */}
       {isLoading ? (
-        <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16">
-          <p className="text-sm text-slate-500">Cargando usuarios...</p>
+        <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16 dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-sm text-slate-500 dark:text-slate-400">Cargando usuarios...</p>
         </div>
       ) : (
         <UsuariosTable
