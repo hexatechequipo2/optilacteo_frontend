@@ -81,7 +81,7 @@ export function PlanFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Cancelar
           </button>
@@ -96,7 +96,7 @@ export function PlanFormModal({
         </div>
       }
     >
-      <p className="mb-6 text-sm text-slate-500">
+      <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
         Editá la información del plan de suscripción.
       </p>
 
@@ -139,7 +139,7 @@ export function PlanFormModal({
         />
 
         {serverError && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
             {serverError}
           </p>
         )}

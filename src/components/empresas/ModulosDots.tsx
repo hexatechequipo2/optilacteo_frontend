@@ -34,12 +34,12 @@ export function ModulosDots({ plan, planes }: ModulosDotsProps) {
             key={modulo}
             title={modulo}
             className={`h-2 w-2 rounded-full ${
-              modulosDelPlan.has(modulo) ? "bg-blue-500" : "bg-slate-200"
+              modulosDelPlan.has(modulo) ? "bg-blue-500" : "bg-slate-200 dark:bg-slate-700"
             }`}
           />
         ))}
       </div>
-      <span className="text-xs text-slate-400">{activosCount}/8</span>
+      <span className="text-xs text-slate-400 dark:text-slate-500">{activosCount}/8</span>
     </div>
   );
 }

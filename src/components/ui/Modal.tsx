@@ -25,12 +25,12 @@ export function Modal({ isOpen, title, onClose, children, footer }: ModalProps) 
       <div
         role="dialog"
         aria-modal="true"
-        className="flex h-full w-full max-w-md flex-col bg-white shadow-2xl animate-in slide-in-from-right"
+        className="flex h-full w-full max-w-md flex-col bg-white shadow-2xl animate-in slide-in-from-right dark:bg-slate-900"
       >
         {/* Cabecera */}
-        <div className="flex items-center justify-between border-b border-slate-100 p-6">
-          <h2 className="text-xl font-bold text-slate-900">{title}</h2>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">✕</button>
+        <div className="flex items-center justify-between border-b border-slate-100 p-6 dark:border-slate-800">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
+          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300">✕</button>
         </div>
 
         {/* Contenido (Scrollable) */}
@@ -40,7 +40,7 @@ export function Modal({ isOpen, title, onClose, children, footer }: ModalProps) 
 
         {/* Footer (Botones fijos abajo) */}
         {footer && (
-          <div className="border-t border-slate-100 p-6">
+          <div className="border-t border-slate-100 p-6 dark:border-slate-800">
             {footer}
           </div>
         )}

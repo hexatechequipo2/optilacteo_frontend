@@ -27,11 +27,11 @@ function EstadoBadge({ isActive }: { isActive: boolean }) {
 export function UsuariosTable({ usuarios, onEdit }: UsuariosTableProps) {
   if (usuarios.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center">
-        <p className="text-base font-medium text-slate-700">
+      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
+        <p className="text-base font-medium text-slate-700 dark:text-slate-300">
           No se encontraron usuarios
         </p>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           Probá ajustar la búsqueda o el filtro de empresa.
         </p>
       </div>
@@ -39,10 +39,10 @@ export function UsuariosTable({ usuarios, onEdit }: UsuariosTableProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <table className="w-full text-left">
         <thead>
-          <tr className="border-b border-slate-200 text-xs font-semibold tracking-wide text-slate-400">
+          <tr className="border-b border-slate-200 text-xs font-semibold tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
             <th className="px-5 py-3">USUARIO</th>
             <th className="px-5 py-3">EMPRESA</th>
             <th className="px-5 py-3">ROL</th>
@@ -50,7 +50,7 @@ export function UsuariosTable({ usuarios, onEdit }: UsuariosTableProps) {
             <th className="px-5 py-3" />
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
           {usuarios.map((usuario) => (
             <tr key={usuario.id} className="text-sm">
               <td className="px-5 py-3">
@@ -59,25 +59,25 @@ export function UsuariosTable({ usuarios, onEdit }: UsuariosTableProps) {
                     {getInitials(usuario.name)}
                   </div>
                   <div>
-                    <p className="font-medium text-slate-900">{usuario.name}</p>
-                    <p className="text-xs text-slate-500">{usuario.email}</p>
+                    <p className="font-medium text-slate-900 dark:text-white">{usuario.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{usuario.email}</p>
                   </div>
                 </div>
               </td>
               <td className="px-5 py-3">
                 {usuario.empresa ? (
                   <div className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-100 text-[10px] font-semibold text-amber-700">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-100 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
                       {usuario.empresa.name.slice(0, 2).toUpperCase()}
                     </div>
-                    <span className="text-slate-700">{usuario.empresa.name}</span>
+                    <span className="text-slate-700 dark:text-slate-300">{usuario.empresa.name}</span>
                   </div>
                 ) : (
-                  <span className="text-slate-400">—</span>
+                  <span className="text-slate-400 dark:text-slate-500">—</span>
                 )}
               </td>
               <td className="px-5 py-3">
-                <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+                <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
                   {getRoleLabel(usuario.role)}
                 </span>
               </td>
@@ -89,7 +89,7 @@ export function UsuariosTable({ usuarios, onEdit }: UsuariosTableProps) {
                 type="button"
                 onClick={() => onEdit(usuario)}
                 aria-label={`Editar ${usuario.name}`}
-                className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
               >
                 {/* Clase scale-x-[-1] voltea el icono horizontalmente */}
                 <span className="block scale-x-[-1]">✎</span>

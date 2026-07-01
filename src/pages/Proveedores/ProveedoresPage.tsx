@@ -26,16 +26,16 @@ const TIPO_LABEL: Record<string, string> = {
 };
 
 const TIPO_CLASS: Record<string, string> = {
-  tambo: "bg-green-50 text-green-700",
-  transporte: "bg-blue-50 text-blue-700",
-  insumos: "bg-amber-50 text-amber-700",
-  laboratorio: "bg-rose-50 text-rose-700",
+  tambo: "bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-400",
+  transporte: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400",
+  insumos: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+  laboratorio: "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400",
 };
 
 const ESTADO_CLASS: Record<string, string> = {
-  activa: "bg-green-50 text-green-700",
-  trial: "bg-blue-50 text-blue-700",
-  suspendida: "bg-slate-100 text-slate-600",
+  activa: "bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-400",
+  trial: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400",
+  suspendida: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
 };
 
 const ESTADO_DOT: Record<string, string> = {
@@ -113,10 +113,10 @@ export default function ProveedoresPage() {
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             Proveedores
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             {proveedores.length} proveedores · {totalTambos} tambos ·{" "}
             {totalActivos} activos
           </p>
@@ -133,17 +133,17 @@ export default function ProveedoresPage() {
       {/* Filtros */}
       <div className="mb-6 flex flex-wrap items-center gap-4">
         <div className="relative w-full max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             type="text"
             placeholder="Buscar por nombre, CUIT o empresa..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500"
           />
         </div>
 
-        <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1">
+        <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
           {TABS.map((tab) => (
             <button
               key={tab}
@@ -151,8 +151,8 @@ export default function ProveedoresPage() {
               onClick={() => setTabActivo(tab)}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
                 tabActivo === tab
-                  ? "border border-slate-200 bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "border border-slate-200 bg-white text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
               {tab}
@@ -163,12 +163,12 @@ export default function ProveedoresPage() {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
           <span>{error}</span>
           <button
             type="button"
             onClick={() => void fetchProveedores()}
-            className="ml-4 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200"
+            className="ml-4 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
           >
             Reintentar
           </button>
@@ -181,35 +181,35 @@ export default function ProveedoresPage() {
           {[1, 2, 3, 4, 5].map((i) => (
             <div
               key={i}
-              className="h-14 animate-pulse rounded-lg border border-slate-200 bg-white"
+              className="h-14 animate-pulse rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
             />
           ))}
         </div>
       ) : proveedoresFiltrados.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center">
-          <p className="text-base font-medium text-slate-700">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-base font-medium text-slate-700 dark:text-slate-300">
             No se encontraron proveedores
           </p>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Probá ajustar la búsqueda o el filtro de tipo.
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-slate-200">
+              <tr className="border-b border-slate-200 dark:border-slate-800">
                 {HEADERS.map((h, i) => (
                   <th
                     key={`${h}-${i}`}
-                    className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400"
+                    className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
                   >
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {proveedoresFiltrados.map((p) => {
                 const nombreEmpresa =
                   empresaMap.get(p.empresaId) ?? `Empresa #${p.empresaId}`;
@@ -218,14 +218,14 @@ export default function ProveedoresPage() {
                     {/* Proveedor */}
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
                           {getInitials(p.razonSocial)}
                         </div>
                         <div>
-                          <p className="font-medium text-slate-900">
+                          <p className="font-medium text-slate-900 dark:text-white">
                             {p.razonSocial}
                           </p>
-                          <p className="text-xs text-slate-500">{p.cuit}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{p.cuit}</p>
                         </div>
                       </div>
                     </td>
@@ -242,20 +242,20 @@ export default function ProveedoresPage() {
                     {/* Empresa */}
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
+                        <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
                           {getInitials(nombreEmpresa)}
                         </div>
-                        <span className="text-slate-700">{nombreEmpresa}</span>
+                        <span className="text-slate-700 dark:text-slate-300">{nombreEmpresa}</span>
                       </div>
                     </td>
 
                     {/* Capacidad */}
-                    <td className="px-5 py-3 text-slate-600">
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {capacidadLabel(p)}
                     </td>
 
                     {/* Ubicación */}
-                    <td className="px-5 py-3 text-slate-600">
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {[p.localidad, p.provincia].filter(Boolean).join(", ") ||
                         "—"}
                     </td>
@@ -278,7 +278,7 @@ export default function ProveedoresPage() {
                         type="button"
                         onClick={() => setProveedorEnEdicion(p)}
                         aria-label={`Editar ${p.razonSocial}`}
-                        className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                        className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>

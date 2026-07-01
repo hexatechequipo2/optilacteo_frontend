@@ -21,11 +21,11 @@ interface EmpresasTableProps {
 export function EmpresasTable({ empresas, planes, onEdit }: EmpresasTableProps) {
   if (empresas.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center">
-        <p className="text-base font-medium text-slate-700">
+      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
+        <p className="text-base font-medium text-slate-700 dark:text-slate-300">
           No se encontraron empresas
         </p>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           Probá ajustar la búsqueda o el filtro de estado.
         </p>
       </div>
@@ -33,21 +33,21 @@ export function EmpresasTable({ empresas, planes, onEdit }: EmpresasTableProps) 
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <table className="w-full text-left">
         <thead>
-          <tr className="border-b border-slate-200">
+          <tr className="border-b border-slate-200 dark:border-slate-800">
             {HEADERS.map((header, index) => (
               <th
                 key={`${header}-${index}`}
-                className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400"
+                className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
               >
                 {header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
           {empresas.map((empresa) => (
             <EmpresaRow
               key={empresa.id}
