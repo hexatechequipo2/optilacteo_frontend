@@ -1,5 +1,8 @@
+import type { ModuloEnum } from "./empresa.types";
+
 export interface PlanModulo {
   nombre: string;
+  codigo: ModuloEnum;
   icono?: string;
 }
 

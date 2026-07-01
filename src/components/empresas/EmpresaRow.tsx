@@ -1,5 +1,6 @@
 import { Pencil } from "lucide-react";
 import type { EmpresaType } from "../../types/empresa.types";
+import type { Plan } from "../../types/plan.types";
 import { EmpresaAvatar } from "./EmpresaAvatar";
 import { PlanBadge } from "./PlanBadge";
 import { EstadoBadge } from "./EstadoBadge";
@@ -7,10 +8,11 @@ import { ModulosDots } from "./ModulosDots";
 
 interface EmpresaRowProps {
   empresa: EmpresaType;
+  planes: Plan[];
   onEdit: (empresa: EmpresaType) => void;
 }
 
-export function EmpresaRow({ empresa, onEdit }: EmpresaRowProps) {
+export function EmpresaRow({ empresa, planes, onEdit }: EmpresaRowProps) {
   return (
     <tr className="text-sm">
       <td className="px-5 py-3">
@@ -26,7 +28,7 @@ export function EmpresaRow({ empresa, onEdit }: EmpresaRowProps) {
         <PlanBadge plan={empresa.plan} />
       </td>
       <td className="px-5 py-3">
-        <ModulosDots modulos={empresa.modulos} />
+        <ModulosDots plan={empresa.plan} planes={planes} />
       </td>
       <td className="px-5 py-3 text-slate-600">
         {empresa.cantidadUsuarios ?? 0}

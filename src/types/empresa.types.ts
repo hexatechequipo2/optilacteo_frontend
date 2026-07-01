@@ -1,11 +1,14 @@
 export type PlanEmpresa = 'starter' | 'pro' | 'enterprise';
 
 export type ModuloEnum =
-  | 'usuarios'
-  | 'reportes'
-  | 'inventario'
-  | 'produccion'
-  | 'calidad';
+  | 'dashboard'
+  | 'recepcion'
+  | 'destino_productivo_ia'
+  | 'monitoreo_alertas'
+  | 'sensores_iot'
+  | 'trazabilidad'
+  | 'reportes_forecast'
+  | 'asistente_voz';
 
 /** El backend no devuelve id ni empresaId en el mapper de respuesta */
 export interface EmpresaModulo {
