@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { Eye, EyeOff, CheckCircle } from "lucide-react";
@@ -30,7 +30,16 @@ function validate(newPassword: string, confirmPassword: string): FormErrors {
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const token = searchParams.get("token");
+
+  // El token se guarda en memoria (state), no persiste en localStorage/sessionStorage
+  const [token] = useState<string | null>(() => searchParams.get("token"));
+
+  useEffect(() => {
+    if (searchParams.get("token")) {
+      // Limpia el token de la URL visible sin recargar la página
+      navigate("/reset-password", { replace: true });
+    }
+  }, []);
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
