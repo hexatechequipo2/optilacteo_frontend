@@ -8,16 +8,16 @@ export interface LoginDto {
 
 export const authService = {
   login: async (credentials: LoginDto): Promise<LoginResponse> => {
-    const { data } = await api.post<LoginResponse>("/api/v1/auth/login", credentials);
+    const { data } = await api.post<LoginResponse>("/login", credentials);
     return data;
   },
   logout: async (): Promise<void> => {
-    await api.post("/api/v1/auth/logout");
+    await api.post("/logout");
   },
   requestPasswordReset: async (email: string): Promise<void> => {
-    await api.post("/auth/request-password-reset", { email });
+    await api.post("/request-password-reset", { email });
   },
   resetPassword: async (token: string, newPassword: string, confirmPassword: string): Promise<void> => {
-    await api.post("/auth/reset-password", { token, newPassword, confirmPassword });
+    await api.post("/reset-password", { token, newPassword, confirmPassword });
   },
 };
