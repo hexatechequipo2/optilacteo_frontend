@@ -12,10 +12,13 @@ import EmpresasPage from "./pages/Empresas/EmpresasPage";
 import PlanesPage from "./pages/Planes/PlanesPage";
 import ProveedoresPage from "./pages/Proveedores/ProveedoresPage";
 
+import { InactivityMonitor } from "./components/layout/InactivityMonitor";
+
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <InactivityMonitor />
         <Routes>
 
           {/* AUTH */}
