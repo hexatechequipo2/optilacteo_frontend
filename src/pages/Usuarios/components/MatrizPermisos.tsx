@@ -16,12 +16,45 @@ const MODULOS: { key: ModuloSistema; label: string }[] = [
   { key: "asistente_voz", label: "Asistente de voz" },
 ];
 
+type NivelAcceso = "sin_acceso" | "solo_lectura" | "lectura_escritura";
+
+// Orden del ciclo al hacer click: cada nivel implica los permisos del anterior
+// (no se puede representar canWrite sin canRead).
+const CICLO: NivelAcceso[] = ["sin_acceso", "solo_lectura", "lectura_escritura"];
+
+const NIVEL_CONFIG: Record<NivelAcceso, { label: string; swatchClass: string }> = {
+  sin_acceso: {
+    label: "Sin acceso",
+    swatchClass: "bg-slate-100 dark:bg-slate-800",
+  },
+  solo_lectura: {
+    label: "Solo lectura",
+    swatchClass: "bg-blue-200 dark:bg-blue-300",
+  },
+  lectura_escritura: {
+    label: "Lectura y escritura",
+    swatchClass: "bg-blue-600 dark:bg-blue-600",
+  },
+};
+
 function getPermiso(rol: RolType, modulo: ModuloSistema) {
   return rol.permisos.find((p) => p.modulo === modulo) ?? {
     modulo,
     canRead: false,
     canWrite: false,
   };
+}
+
+function getNivel(permiso: { canRead: boolean; canWrite: boolean }): NivelAcceso {
+  if (permiso.canWrite) return "lectura_escritura";
+  if (permiso.canRead) return "solo_lectura";
+  return "sin_acceso";
+}
+
+function nivelAPermiso(nivel: NivelAcceso): { canRead: boolean; canWrite: boolean } {
+  if (nivel === "lectura_escritura") return { canRead: true, canWrite: true };
+  if (nivel === "solo_lectura") return { canRead: true, canWrite: false };
+  return { canRead: false, canWrite: false };
 }
 
 export function MatrizPermisos({ roles, onTogglePermiso }: MatrizPermisosProps) {
@@ -31,18 +64,10 @@ export function MatrizPermisos({ roles, onTogglePermiso }: MatrizPermisosProps) 
     (rol) => rol.nombre.trim().toLowerCase() !== "administrador",
   );
 
-  const handleToggle = (
-    rol: RolType,
-    modulo: ModuloSistema,
-    field: "canRead" | "canWrite",
-    value: boolean,
-  ) => {
-    const permisoActual = getPermiso(rol, modulo);
-    onTogglePermiso(rol.id, {
-      modulo,
-      canRead: field === "canRead" ? value : permisoActual.canRead,
-      canWrite: field === "canWrite" ? value : permisoActual.canWrite,
-    });
+  const handleClick = (rol: RolType, modulo: ModuloSistema) => {
+    const nivelActual = getNivel(getPermiso(rol, modulo));
+    const siguiente = CICLO[(CICLO.indexOf(nivelActual) + 1) % CICLO.length];
+    onTogglePermiso(rol.id, { modulo, ...nivelAPermiso(siguiente) });
   };
 
   if (rolesVisibles.length === 0) {
@@ -51,19 +76,34 @@ export function MatrizPermisos({ roles, onTogglePermiso }: MatrizPermisosProps) 
 
   return (
     <div className="mt-8 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
           Matriz de permisos por rol
         </h2>
+
+        {/* Leyenda */}
+        <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+          {CICLO.map((nivel) => (
+            <div key={nivel} className="flex items-center gap-1.5">
+              <span
+                className={`h-3 w-3 flex-shrink-0 rounded-sm ${NIVEL_CONFIG[nivel].swatchClass}`}
+              />
+              {NIVEL_CONFIG[nivel].label}
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-left">
+        <table className="w-full table-fixed text-left">
           <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
             <tr>
-              <th className="px-4 py-3">Módulo</th>
+              <th className="w-56 px-4 py-3">Módulo</th>
               {rolesVisibles.map((rol) => (
-                <th key={rol.id} className="px-4 py-3 text-center">
+                <th
+                  key={rol.id}
+                  className="w-28 px-2 py-3 text-center leading-tight"
+                >
                   {rol.nombre}
                 </th>
               ))}
@@ -78,30 +118,22 @@ export function MatrizPermisos({ roles, onTogglePermiso }: MatrizPermisosProps) 
                 </td>
 
                 {rolesVisibles.map((rol) => {
-                  const permiso = getPermiso(rol, key);
+                  const nivel = getNivel(getPermiso(rol, key));
                   return (
-                    <td key={rol.id} className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-3">
-                        <label className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                          <input
-                            type="checkbox"
-                            checked={permiso.canRead}
-                            onChange={(e) =>
-                              handleToggle(rol, key, "canRead", e.target.checked)
-                            }
-                          />
-                          Lectura
-                        </label>
-                        <label className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                          <input
-                            type="checkbox"
-                            checked={permiso.canWrite}
-                            onChange={(e) =>
-                              handleToggle(rol, key, "canWrite", e.target.checked)
-                            }
-                          />
-                          Escritura
-                        </label>
+                    <td key={rol.id} className="px-2 py-3">
+                      <div className="group relative flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => handleClick(rol, key)}
+                          aria-label={`${label} · ${rol.nombre} · ${NIVEL_CONFIG[nivel].label}`}
+                          className={`h-8 w-8 rounded-md transition hover:ring-2 hover:ring-blue-500 hover:ring-offset-1 dark:hover:ring-offset-slate-900 ${NIVEL_CONFIG[nivel].swatchClass}`}
+                        />
+                        <span
+                          role="tooltip"
+                          className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition group-hover:opacity-100 dark:bg-slate-700"
+                        >
+                          {label} · {rol.nombre} · {NIVEL_CONFIG[nivel].label}
+                        </span>
                       </div>
                     </td>
                   );

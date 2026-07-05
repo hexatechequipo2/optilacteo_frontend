@@ -11,10 +11,18 @@ export interface CreateEmpresaDto {
 }
 
 export const empresasService = {
-  /** Trae todas las empresas registradas (solo Administrador) */
-  getAll: async (): Promise<EmpresaType[]> => {
-    const { data } = await api.get<EmpresaType[]>("/empresa");
-    return data;
+  /**
+   * Trae todas las empresas registradas (solo Administrador).
+   * Límite temporal fijo en 100 (el máximo permitido por el backend en
+   * PaginationQueryDto). Si la cantidad real de empresas supera este
+   * valor, van a faltar registros en la tabla de EmpresasPage.
+   * Solución definitiva pendiente: implementar paginación real en la UI.
+   */
+  getAll: async (limit = 100): Promise<EmpresaType[]> => {
+    const { data } = await api.get<{ data: EmpresaType[] }>("/empresa", {
+      params: { limit },
+    });
+    return data.data;
   },
 
   /** Trae la empresa del usuario autenticado (Administrador o Gerente) */
