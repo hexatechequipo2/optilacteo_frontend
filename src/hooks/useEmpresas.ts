@@ -21,7 +21,14 @@ interface UseEmpresasResult {
   isUpdating: boolean;
 }
 
-export function useEmpresas(): UseEmpresasResult {
+/**
+ * @param soloMiEmpresa Cuando es `true` (usuario Gerente), trae únicamente
+ * la empresa propia vía GET /empresa/me y la devuelve como un array de un
+ * solo elemento, para que el resto del código (que espera `EmpresaType[]`)
+ * no necesite cambios. Cuando es `false`/`undefined` (Administrador), trae
+ * el listado completo vía GET /empresa, como antes.
+ */
+export function useEmpresas(soloMiEmpresa = false): UseEmpresasResult {
   const [empresas, setEmpresas] = useState<EmpresaType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -32,14 +39,19 @@ export function useEmpresas(): UseEmpresasResult {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await empresasService.getAll();
-      setEmpresas(data);
+      if (soloMiEmpresa) {
+        const data = await empresasService.getMine();
+        setEmpresas([data]);
+      } else {
+        const data = await empresasService.getAll();
+        setEmpresas(data);
+      }
     } catch {
       setError("No se pudieron cargar las empresas.");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [soloMiEmpresa]);
 
   useEffect(() => {
     fetchEmpresas();

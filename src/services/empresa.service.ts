@@ -11,9 +11,15 @@ export interface CreateEmpresaDto {
 }
 
 export const empresasService = {
-  /** Trae todas las empresas registradas */
+  /** Trae todas las empresas registradas (solo Administrador) */
   getAll: async (): Promise<EmpresaType[]> => {
     const { data } = await api.get<EmpresaType[]>("/empresa");
+    return data;
+  },
+
+  /** Trae la empresa del usuario autenticado (Administrador o Gerente) */
+  getMine: async (): Promise<EmpresaType> => {
+    const { data } = await api.get<EmpresaType>("/empresa/me");
     return data;
   },
 

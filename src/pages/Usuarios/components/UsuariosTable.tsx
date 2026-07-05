@@ -1,5 +1,3 @@
-import { Badge } from "../../../components/ui/Badge";
-import { getRoleLabel } from "../../../types/usuario.types";
 import type { UsuarioType } from "../../../types/usuario.types";
 
 interface UsuariosTableProps {
@@ -17,21 +15,27 @@ function getInitials(name: string): string {
 }
 
 function EstadoBadge({ isActive }: { isActive: boolean }) {
-  return isActive ? (
-    <Badge variant="success">Activo</Badge>
-  ) : (
-    <Badge variant="neutral">Inactivo</Badge>
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+        isActive
+          ? "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400"
+          : "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400"
+      }`}
+    >
+      {isActive ? "Activo" : "Inactivo"}
+    </span>
   );
 }
 
 export function UsuariosTable({ usuarios, onEdit }: UsuariosTableProps) {
   if (usuarios.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-base font-medium text-slate-700 dark:text-slate-300">
+      <div className="rounded-xl border border-slate-200 bg-white p-8 text-center dark:border-slate-800 dark:bg-slate-900">
+        <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
           No se encontraron usuarios
         </p>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Probá ajustar la búsqueda o el filtro de empresa.
         </p>
       </div>
@@ -41,60 +45,73 @@ export function UsuariosTable({ usuarios, onEdit }: UsuariosTableProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <table className="w-full text-left">
-        <thead>
-          <tr className="border-b border-slate-200 text-xs font-semibold tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
-            <th className="px-5 py-3">USUARIO</th>
-            <th className="px-5 py-3">EMPRESA</th>
-            <th className="px-5 py-3">ROL</th>
-            <th className="px-5 py-3">ESTADO</th>
-            <th className="px-5 py-3" />
+        <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
+          <tr>
+            <th className="px-4 py-3">Usuario</th>
+            <th className="px-4 py-3">Empresa</th>
+            <th className="px-4 py-3">Rol</th>
+            <th className="px-4 py-3">Estado</th>
+            <th className="px-4 py-3 text-right">Acciones</th>
           </tr>
         </thead>
+
         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
           {usuarios.map((usuario) => (
-            <tr key={usuario.id} className="text-sm">
-              <td className="px-5 py-3">
+            <tr key={usuario.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+              
+              {/* Usuario */}
+              <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-700 text-xs font-semibold text-white">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-xs font-semibold text-white">
                     {getInitials(usuario.name)}
                   </div>
+
                   <div>
-                    <p className="font-medium text-slate-900 dark:text-white">{usuario.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{usuario.email}</p>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white">
+                      {usuario.name}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {usuario.email}
+                    </p>
                   </div>
                 </div>
               </td>
-              <td className="px-5 py-3">
+
+              {/* Empresa */}
+              <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
                 {usuario.empresa ? (
                   <div className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-100 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                    <div className="flex h-7 w-7 items-center justify-center rounded bg-slate-200 text-xs font-medium dark:bg-slate-700">
                       {usuario.empresa.name.slice(0, 2).toUpperCase()}
                     </div>
-                    <span className="text-slate-700 dark:text-slate-300">{usuario.empresa.name}</span>
+                    {usuario.empresa.name}
                   </div>
                 ) : (
-                  <span className="text-slate-400 dark:text-slate-500">—</span>
+                  <span className="text-slate-400">—</span>
                 )}
               </td>
-              <td className="px-5 py-3">
-                <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                  {getRoleLabel(usuario.role)}
-                </span>
+
+              {/* Rol */}
+              <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
+                {usuario?.rolNombre ?? "Sin rol"}
               </td>
-              <td className="px-5 py-3">
+
+              {/* Estado */}
+              <td className="px-4 py-3">
                 <EstadoBadge isActive={usuario.isActive} />
               </td>
-              <td className="px-5 py-3 text-right">
-              <button
-                type="button"
-                onClick={() => onEdit(usuario)}
-                aria-label={`Editar ${usuario.name}`}
-                className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-              >
-                {/* Clase scale-x-[-1] voltea el icono horizontalmente */}
-                <span className="block scale-x-[-1]">✎</span>
-              </button>
-            </td>
+
+              {/* Acciones */}
+              <td className="px-4 py-3 text-right">
+                <button
+                  type="button"
+                  onClick={() => onEdit(usuario)}
+                  aria-label={`Editar ${usuario.name}`}
+                  className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                >
+                  ✎
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>

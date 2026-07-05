@@ -5,10 +5,12 @@ import { Select } from "../../components/ui/Select";
 import { Button } from "../../components/ui/Button";
 import { useUsuarios, TODAS_LAS_EMPRESAS } from "../../hooks/useUsuarios";
 import { useEmpresas } from "../../hooks/useEmpresas";
+import { useRoles } from "../../hooks/useRoles";
 import type { UsuarioType } from "../../types/usuario.types";
 import { UsuariosTable } from "./components/UsuariosTable";
 import { NuevoUsuarioModal } from "./components/NuevoUsuarioModal";
 import { EditarUsuarioModal } from "./components/EditarUsuarioModal";
+import { MatrizPermisos } from "./components/MatrizPermisos"; // 👈 agregar
 
 export default function UsuariosPage() {
   const {
@@ -27,9 +29,9 @@ export default function UsuariosPage() {
   } = useUsuarios();
 
   const { empresas } = useEmpresas();
+  const { roles, updatePermiso } = useRoles(); // 👈 agregar updatePermiso
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  
-  // CORRECCIÓN: Definición explícita del tipo genérico
+
   const [usuarioEnEdicion, setUsuarioEnEdicion] = useState<UsuarioType | null>(null);
 
   const empresaOptions = [
@@ -45,18 +47,14 @@ export default function UsuariosPage() {
   return (
     <Layout breadcrumb="Consola > Usuarios">
       
-      {/* SECCIÓN SUPERIOR: Título a la izquierda, Botón a la derecha */}
       <div className="mb-6 flex items-center justify-between">
-        
-        {/* Contenedor del Título y Contador (a la izquierda) */}
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight font-sans dark:text-white">Usuarios</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight font-sans dark:text-white">Usuarios y Roles</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {usuarios.length} usuarios en {empresasUnicas} empresas
           </p>
         </div>
         
-        {/* Botón: Se alinea automáticamente a la derecha */}
         <Button
           type="button"
           className="!w-auto px-6" 
@@ -66,10 +64,7 @@ export default function UsuariosPage() {
         </Button>
       </div>
 
-      {/* FILTROS: Buscador compacto y Select a la derecha */}
       <div className="mb-6 flex gap-4">
-        
-        {/* Buscador: limitamos su crecimiento máximo */}
         <div className="w-full max-w-sm">
           <Input
             id="usuarios-search"
@@ -80,7 +75,6 @@ export default function UsuariosPage() {
           />
         </div>
         
-        {/* Select: con un ancho fijo más pequeño */}
         <div className="w-52 flex-shrink-0">
           <Select
             id="usuarios-empresa-filtro"
@@ -98,7 +92,6 @@ export default function UsuariosPage() {
         </p>
       )}
 
-      {/* Tabla con la corrección del tipo en onEdit */}
       {isLoading ? (
         <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16 dark:border-slate-800 dark:bg-slate-900">
           <p className="text-sm text-slate-500 dark:text-slate-400">Cargando usuarios...</p>
@@ -110,9 +103,13 @@ export default function UsuariosPage() {
         />
       )}
 
+      {/* 👇 Matriz de permisos, debajo de la tabla de usuarios */}
+      <MatrizPermisos roles={roles} onTogglePermiso={updatePermiso} />
+
       <NuevoUsuarioModal
         isOpen={isCreateModalOpen}
         empresas={empresas}
+        roles={roles}
         isSubmitting={isCreating}
         onClose={() => setIsCreateModalOpen(false)}
         onCreate={createUsuario}
@@ -121,6 +118,7 @@ export default function UsuariosPage() {
       <EditarUsuarioModal
         usuario={usuarioEnEdicion}
         empresas={empresas}
+        roles={roles}
         isSubmitting={isUpdating}
         onClose={() => setUsuarioEnEdicion(null)}
         onUpdate={updateUsuario}
