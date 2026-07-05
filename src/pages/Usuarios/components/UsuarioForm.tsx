@@ -5,14 +5,14 @@ import { Toggle } from "../../../components/ui/Toggle";
 import { RadioCard } from "../../../components/ui/RadioCard";
 import { SectionHeader } from "../../../components/ui/SectionHeader";
 import type { EmpresaType } from "../../../types/empresa.types";
-import { Role, ROLE_LABELS } from "../../../types/usuario.types";
 import type { UsuarioType } from "../../../types/usuario.types";
+import type { RolType } from "../../../types/rol.types";
 
 export interface UsuarioFormValues {
+  rolId: number;
   name: string;
   email: string;
   password: string;
-  role: Role;
   empresaId: string;
   isActive: boolean;
 }
@@ -22,12 +22,14 @@ interface FormErrors {
   email?: string;
   password?: string;
   empresaId?: string;
+  rolId?: string;
 }
 
 interface UsuarioFormProps {
-  id: string; // ID obligatorio para conectar con el footer
+  id: string;
   usuario?: UsuarioType;
   empresas: EmpresaType[];
+  roles: RolType[];
   onCancel?: () => void;
   onSubmit: (values: UsuarioFormValues) => Promise<void>;
 }
@@ -37,22 +39,35 @@ function validate(values: {
   email: string;
   password: string;
   empresaId: string;
+  rolId: number;
   isEditing: boolean;
 }): FormErrors {
   const errors: FormErrors = {};
 
-  if (!values.name.trim()) errors.name = "El nombre es obligatorio";
+  if (!values.name.trim()) {
+    errors.name = "El nombre es obligatorio";
+  }
+
   if (!values.email.trim()) {
     errors.email = "El email es obligatorio";
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) {
     errors.email = "El email no es válido";
   }
 
-  if (!values.isEditing && (!values.password.trim() || values.password.length < 8)) {
+  if (
+    !values.isEditing &&
+    (!values.password.trim() || values.password.length < 8)
+  ) {
     errors.password = "La contraseña debe tener al menos 8 caracteres";
   }
 
-  if (!values.empresaId) errors.empresaId = "Seleccioná una empresa";
+  if (!values.empresaId) {
+    errors.empresaId = "Seleccioná una empresa";
+  }
+
+  if (!values.rolId) {
+    errors.rolId = "Seleccioná un rol";
+  }
 
   return errors;
 }
@@ -61,6 +76,7 @@ export function UsuarioForm({
   id,
   usuario,
   empresas,
+  roles,
   onSubmit,
 }: UsuarioFormProps) {
   const isEditing = !!usuario;
@@ -68,7 +84,7 @@ export function UsuarioForm({
   const [name, setName] = useState(usuario?.name ?? "");
   const [email, setEmail] = useState(usuario?.email ?? "");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>((usuario?.role as Role) ?? Role.OPERARIO_LINEA);
+  const [rolId, setRolId] = useState<number>(usuario?.rolId ?? 0);
   const [empresaId, setEmpresaId] = useState(usuario ? String(usuario.empresa?.id ?? "") : "");
   const [isActive, setIsActive] = useState(usuario?.isActive ?? true);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -78,12 +94,12 @@ export function UsuarioForm({
     event.preventDefault();
     setServerError("");
 
-    const validationErrors = validate({ name, email, password, empresaId, isEditing });
+    const validationErrors = validate({ name, email, password, empresaId, rolId, isEditing });
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
     try {
-      await onSubmit({ name, email, password, role, empresaId, isActive });
+      await onSubmit({ name, email, password, rolId, empresaId, isActive });
     } catch {
       setServerError("No se pudo guardar el usuario. Intentá nuevamente.");
     }
@@ -139,16 +155,20 @@ export function UsuarioForm({
       <div className="flex flex-col gap-3">
         <SectionHeader>ROL</SectionHeader>
         <div className="flex flex-col gap-2">
-          {Object.values(Role).map((rol) => (
+          {roles.map((rol) => (
             <RadioCard
-              key={rol}
+              key={rol.id}
               name="role-group"
-              value={rol}
-              label={ROLE_LABELS[rol]}
-              checked={role === rol}
-              onChange={(value) => setRole(value as Role)}
+              value={String(rol.id)}
+              label={rol.nombre}
+              checked={rolId === rol.id}
+              onChange={(value) => setRolId(Number(value))}
             />
           ))}
+
+          {errors.rolId && (
+            <p className="text-sm text-red-600">{errors.rolId}</p>
+          )}
         </div>
       </div>
 

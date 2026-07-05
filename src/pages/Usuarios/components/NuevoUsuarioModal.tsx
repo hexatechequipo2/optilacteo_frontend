@@ -1,24 +1,26 @@
 import { Modal } from "../../../components/ui/Modal";
 import type { EmpresaType } from "../../../types/empresa.types";
+import type { RolType } from "../../../types/rol.types";
 import type { CreateUsuarioDto } from "../../../types/usuario.types";
 import { UsuarioForm, type UsuarioFormValues } from "./UsuarioForm";
 
 interface NuevoUsuarioModalProps {
   isOpen: boolean;
   empresas: EmpresaType[];
+  roles: RolType[]; 
   isSubmitting: boolean;
   onClose: () => void;
   onCreate: (payload: CreateUsuarioDto) => Promise<void>;
 }
 
-export function NuevoUsuarioModal({ isOpen, empresas, isSubmitting, onClose, onCreate }: NuevoUsuarioModalProps) {
+export function NuevoUsuarioModal({ isOpen, empresas, roles, isSubmitting, onClose, onCreate }: NuevoUsuarioModalProps) {
   
   const handleSubmit = async (values: UsuarioFormValues) => {
     await onCreate({
       name: values.name,
       email: values.email,
       password: values.password,
-      role: values.role,
+      rolId: values.rolId,
       empresaId: Number(values.empresaId),
     });
     onClose();
@@ -56,6 +58,7 @@ export function NuevoUsuarioModal({ isOpen, empresas, isSubmitting, onClose, onC
       <UsuarioForm
         id="usuario-form" // Este ID debe coincidir con el atributo 'form' del botón
         empresas={empresas}
+        roles={roles} 
         onCancel={onClose}
         onSubmit={handleSubmit}
       />

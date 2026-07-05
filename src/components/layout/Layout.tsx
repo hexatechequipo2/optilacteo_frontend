@@ -3,7 +3,6 @@ import { Sidebar } from "./Sidebar";
 import { useAuth } from "../../hooks/useAuth";
 import { useTheme } from "../../hooks/useTheme";
 import { Bell, Moon, Sun, Menu } from "lucide-react";
-import { getRoleLabel } from "../../types/usuario.types";
 
 interface LayoutProps {
   breadcrumb: string;
@@ -18,19 +17,20 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
   const breadcrumbs = breadcrumb.split(" > ");
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950">
       {isSidebarOpen && <Sidebar />}
 
       <div className="flex flex-1 flex-col overflow-y-auto">
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-8 py-4 dark:border-slate-800 dark:bg-slate-900">
-          {/* Breadcrumb y Menú */}
+          {/* Breadcrumb y menú */}
           <div className="flex items-center gap-4">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="rounded-md p-2 text-slate-500 hover:bg-slate-100 transition dark:text-slate-400 dark:hover:bg-slate-800"
+              className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
             >
               <Menu className="h-5 w-5" />
             </button>
+
             <nav className="flex items-center gap-2 text-sm">
               {breadcrumbs.map((item, index) => (
                 <div key={item} className="flex items-center gap-2">
@@ -39,6 +39,7 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
                       ›
                     </span>
                   )}
+
                   <span
                     className={
                       index === breadcrumbs.length - 1
@@ -89,8 +90,9 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
                 <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                   {user?.email ?? "Usuario"}
                 </p>
+
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {getRoleLabel(user?.role ?? "")}
+                  {user?.rolNombre ?? "Sin rol"}
                 </p>
               </div>
             </div>

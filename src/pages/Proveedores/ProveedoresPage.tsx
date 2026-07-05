@@ -4,6 +4,7 @@ import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { useProveedores } from "../../hooks/useProveedores";
 import { useEmpresas } from "../../hooks/useEmpresas";
+import { useAuth } from "../../hooks/useAuth";
 import { ProveedorFormModal } from "./ProveedorFormModal";
 import type { Proveedor, TipoProveedor } from "../../types/proveedor.types";
 
@@ -68,7 +69,14 @@ export default function ProveedoresPage() {
     updateProveedor,
     isUpdating,
   } = useProveedores();
-  const { empresas } = useEmpresas();
+  const { user } = useAuth();
+
+  const esGerente =
+    (user?.rolNombre ?? "").trim().toLowerCase() === "gerente";
+
+  // Administrador -> GET /empresa (todas). Gerente -> GET /empresa/me
+  // (solo la propia, envuelta en un array de un elemento).
+  const { empresas } = useEmpresas(esGerente);
 
   const [busqueda, setBusqueda] = useState("");
   const [tabActivo, setTabActivo] = useState<TabTipo>("Todos");
@@ -79,6 +87,11 @@ export default function ProveedoresPage() {
     () => new Map(empresas.map((e) => [e.id, e.name])),
     [empresas],
   );
+
+  // Si es gerente, `empresas` viene de /empresa/me y trae un solo elemento:
+  // su propia empresa. Si es administrador, queda undefined y el modal
+  // muestra el <select> completo con todas las empresas.
+  const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
 
   const totalTambos = useMemo(
     () => proveedores.filter((p) => p.tipo === "tambo").length,
@@ -295,6 +308,7 @@ export default function ProveedoresPage() {
         isOpen={isModalOpen}
         proveedor={null}
         empresas={empresas}
+        empresaIdBloqueada={empresaIdBloqueada}
         isSubmitting={isCreating}
         onClose={() => setIsModalOpen(false)}
         onSubmit={createProveedor}
@@ -305,6 +319,7 @@ export default function ProveedoresPage() {
           isOpen={true}
           proveedor={proveedorEnEdicion}
           empresas={empresas}
+          empresaIdBloqueada={empresaIdBloqueada}
           isSubmitting={isUpdating}
           onClose={() => setProveedorEnEdicion(null)}
           onSubmit={(dto) => updateProveedor(proveedorEnEdicion.id, dto)}

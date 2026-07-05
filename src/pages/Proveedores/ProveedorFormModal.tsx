@@ -152,6 +152,13 @@ interface ProveedorFormModalProps {
   isOpen: boolean;
   proveedor: Proveedor | null;
   empresas: EmpresaType[];
+  /**
+   * Cuando viene definido (caso Gerente), el select de "Empresa asignada"
+   * se bloquea y se fuerza siempre a este id, tanto al crear como al editar.
+   * Cuando es undefined (caso Administrador), se muestra el select completo
+   * con todas las empresas.
+   */
+  empresaIdBloqueada?: number;
   isSubmitting: boolean;
   onClose: () => void;
   onSubmit: (dto: CreateProveedorDto) => Promise<void>;
@@ -161,6 +168,7 @@ export function ProveedorFormModal({
   isOpen,
   proveedor,
   empresas,
+  empresaIdBloqueada,
   isSubmitting,
   onClose,
   onSubmit,
@@ -172,14 +180,26 @@ export function ProveedorFormModal({
 
   useEffect(() => {
     if (!isOpen) return;
+
     if (proveedor) {
-      setValues(proveedorToFormValues(proveedor));
+      const base = proveedorToFormValues(proveedor);
+      setValues({
+        ...base,
+        // Si es gerente (empresaIdBloqueada definido), su empresa siempre
+        // prevalece por sobre la que tuviera cargada el proveedor.
+        empresaId: empresaIdBloqueada
+          ? String(empresaIdBloqueada)
+          : base.empresaId,
+      });
     } else {
-      setValues(INITIAL_VALUES);
+      setValues({
+        ...INITIAL_VALUES,
+        empresaId: empresaIdBloqueada ? String(empresaIdBloqueada) : "",
+      });
     }
     setErrors({});
     setServerError("");
-  }, [isOpen, proveedor]);
+  }, [isOpen, proveedor, empresaIdBloqueada]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -345,6 +365,7 @@ export function ProveedorFormModal({
                 value={values.empresaId}
                 onChange={set("empresaId")}
                 error={errors.empresaId}
+                disabled={!!empresaIdBloqueada}
               />
               <div className="grid grid-cols-2 gap-3">
                 <Select

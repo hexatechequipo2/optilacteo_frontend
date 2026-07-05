@@ -13,7 +13,6 @@ import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
 import { planesService } from "../../services/planes.service";
 import { proveedoresService } from "../../services/proveedores.service";
-import { getRoleLabel, Role } from "../../types/usuario.types";
 import optilacteoLogo from "../../assets/images/optilacteo_logo.png";
 
 export function Sidebar() {
@@ -21,9 +20,13 @@ export function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const esAdmin = user?.role === Role.ADMIN;
-  const esGerente = user?.role === Role.GERENTE;
+  const esAdmin = user?.rolNombre === "Administrador";
+  const esGerente = user?.rolNombre === "Gerente";
+  const puedeVerDashboard = esAdmin;
   const puedeVerUsuarios = esAdmin || esGerente;
+  const puedeVerEmpresas = esAdmin;
+  const puedeVerPlanes = esAdmin;
+  const puedeVerProveedores = esAdmin || esGerente;
 
   const [counts, setCounts] = useState({
     empresas: 0,
@@ -36,10 +39,10 @@ export function Sidebar() {
     async function loadCounts() {
       try {
         const [empresas, usuarios, planes, proveedores] = await Promise.all([
-          empresasService.getAll(),
+          puedeVerEmpresas ? empresasService.getAll() : Promise.resolve([]),
           puedeVerUsuarios ? usuariosService.getAll() : Promise.resolve([]),
-          planesService.getAll(),
-          proveedoresService.getAll(),
+          puedeVerPlanes ? planesService.getAll() : Promise.resolve([]),
+          puedeVerProveedores ? proveedoresService.getAll() : Promise.resolve([]),
         ]);
 
         setCounts({
@@ -54,16 +57,24 @@ export function Sidebar() {
     }
 
     loadCounts();
-  }, [puedeVerUsuarios]);
+  }, [puedeVerEmpresas, puedeVerUsuarios, puedeVerPlanes, puedeVerProveedores]);
 
   const navItems = [
-    { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-    { label: "Empresas", icon: Building2, count: counts.empresas, path: "/empresas" },
+    ...(puedeVerDashboard
+      ? [{ label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" }]
+      : []),
+    ...(puedeVerEmpresas
+      ? [{ label: "Empresas", icon: Building2, count: counts.empresas, path: "/empresas" }]
+      : []),
     ...(puedeVerUsuarios
       ? [{ label: "Usuarios", icon: Users, count: counts.usuarios, path: "/usuarios" }]
       : []),
-    { label: "Planes", icon: Package, count: counts.planes, path: "/planes" },
-    { label: "Proveedores", icon: Home, count: counts.proveedores, path: "/proveedores" },
+    ...(puedeVerPlanes
+      ? [{ label: "Planes", icon: Package, count: counts.planes, path: "/planes" }]
+      : []),
+    ...(puedeVerProveedores
+      ? [{ label: "Proveedores", icon: Home, count: counts.proveedores, path: "/proveedores" }]
+      : []),
   ];
 
   return (
@@ -74,7 +85,7 @@ export function Sidebar() {
           <h1 className="truncate text-xl font-bold text-slate-900 dark:text-white">OptiLácteo</h1>
         </div>
         <span className="flex-shrink-0 rounded-md bg-blue-100 px-3 py-1 text-xs font-semibold uppercase text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
-          {user?.role}
+          {user?.rolNombre ?? "Sin rol"}
         </span>
       </div>
 
@@ -132,7 +143,7 @@ export function Sidebar() {
               {user?.email ?? "Usuario"}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {getRoleLabel(user?.role ?? "")}
+              {user?.rolNombre ?? "Sin rol"}
             </p>
           </div>
           <button

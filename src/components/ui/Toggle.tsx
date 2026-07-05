@@ -7,10 +7,7 @@ interface ToggleProps {
 
 export function Toggle({ checked, onChange, label, id }: ToggleProps) {
   return (
-    <label
-      htmlFor={id}
-      className="flex w-fit cursor-pointer items-center gap-3"
-    >
+    <div className="flex items-center gap-3">
       <button
         type="button"
         id={id}
@@ -27,9 +24,12 @@ export function Toggle({ checked, onChange, label, id }: ToggleProps) {
           }`}
         />
       </button>
+
       {label && (
-        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</span>
+        <span className="text-sm text-slate-700 dark:text-slate-300">
+          {label}
+        </span>
       )}
-    </label>
+    </div>
   );
 }

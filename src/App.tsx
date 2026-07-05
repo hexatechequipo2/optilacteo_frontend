@@ -1,10 +1,11 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
-import { Role } from "./types/usuario.types";
+
 import LoginPage from "./pages/Login/LoginPage";
 import ForgotPasswordPage from "./pages/Login/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/Login/ResetPasswordPage";
+
 import DashboardPage from "./pages/Dashboard/DashboardPage";
 import UsuariosPage from "./pages/Usuarios/UsuariosPage";
 import EmpresasPage from "./pages/Empresas/EmpresasPage";
@@ -16,10 +17,14 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+
+          {/* AUTH */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+
+          {/* DASHBOARD */}
           <Route
             path="/dashboard"
             element={
@@ -28,40 +33,51 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* EMPRESAS (solo ADMINISTRADOR) */}
           <Route
             path="/empresas"
             element={
-              <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+              <ProtectedRoute allowedRoles={["Administrador"]}>
                 <EmpresasPage />
               </ProtectedRoute>
             }
           />
+
+          {/* USUARIOS (ADMIN + GERENTE) */}
           <Route
             path="/usuarios"
             element={
-              <ProtectedRoute allowedRoles={[Role.ADMIN, Role.GERENTE]}>
+              <ProtectedRoute allowedRoles={["Administrador", "Gerente"]}>
                 <UsuariosPage />
               </ProtectedRoute>
             }
           />
+
+          {/* PLANES (solo ADMINISTRADOR) */}
           <Route
             path="/planes"
             element={
-              <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+              <ProtectedRoute allowedRoles={["Administrador"]}>
                 <PlanesPage />
               </ProtectedRoute>
             }
           />
+
+          {/* PROVEEDORES (ADMINISTRADOR Y GERENTE) */}
           <Route
             path="/proveedores"
             element={
-              <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+              <ProtectedRoute allowedRoles={["Gerente", "Administrador"]}>
                 <ProveedoresPage />
               </ProtectedRoute>
             }
           />
+
+          {/* DEFAULT */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
+
         </Routes>
       </AuthProvider>
     </BrowserRouter>

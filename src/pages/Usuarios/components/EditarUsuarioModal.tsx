@@ -1,5 +1,6 @@
 import { Modal } from "../../../components/ui/Modal";
 import type { EmpresaType } from "../../../types/empresa.types";
+import type { RolType } from "../../../types/rol.types";
 import type {
   UpdateUsuarioDto,
   UsuarioType,
@@ -9,6 +10,7 @@ import { UsuarioForm, type UsuarioFormValues } from "./UsuarioForm";
 interface EditarUsuarioModalProps {
   usuario: UsuarioType | null;
   empresas: EmpresaType[];
+  roles: RolType[];
   isSubmitting: boolean;
   onClose: () => void;
   onUpdate: (
@@ -21,6 +23,7 @@ interface EditarUsuarioModalProps {
 export function EditarUsuarioModal({
   usuario,
   empresas,
+  roles,
   isSubmitting,
   onClose,
   onUpdate,
@@ -33,7 +36,7 @@ export function EditarUsuarioModal({
       {
         name: values.name,
         email: values.email,
-        role: values.role,
+        rolId: values.rolId,
         empresaId: Number(values.empresaId),
       },
       values.isActive,
@@ -73,6 +76,7 @@ export function EditarUsuarioModal({
       <UsuarioForm
         id="usuario-form-edit" // ID único para este form
         usuario={usuario}
+        roles={roles} 
         empresas={empresas}
         onSubmit={handleSubmit}
       />

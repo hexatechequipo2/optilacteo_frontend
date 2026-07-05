@@ -36,10 +36,9 @@ export function Combobox({
   const [isOpen, setIsOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
 
-  // Sincroniza el texto del input cuando el valor externo cambia
   useEffect(() => {
     setQuery(value);
   }, [value]);
@@ -65,7 +64,7 @@ export function Combobox({
     setQuery(e.target.value);
     setIsOpen(true);
     setHighlighted(0);
-    // Si el usuario borra todo, limpia el valor seleccionado
+
     if (!e.target.value) onChange("");
   };
 
@@ -74,6 +73,7 @@ export function Combobox({
       if (e.key === "ArrowDown" || e.key === "Enter") setIsOpen(true);
       return;
     }
+
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setHighlighted((prev) => Math.min(prev + 1, filtered.length - 1));
@@ -85,33 +85,32 @@ export function Combobox({
       if (filtered[highlighted]) select(filtered[highlighted]);
     } else if (e.key === "Escape") {
       setIsOpen(false);
-      setQuery(value); // restaura el valor anterior
+      setQuery(value);
     }
   };
 
-  // Scroll automático al ítem destacado
   useEffect(() => {
     if (!listRef.current) return;
     const item = listRef.current.children[highlighted] as HTMLElement | undefined;
     item?.scrollIntoView({ block: "nearest" });
   }, [highlighted]);
 
-  // Cierra al hacer click fuera
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) {
         setIsOpen(false);
-        setQuery(value); // restaura si salió sin seleccionar
+        setQuery(value);
       }
     };
+
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [value]);
 
   return (
-    <div ref={containerRef} className="flex flex-col gap-1">
+    <div ref={containerRef}>
       {label && (
-        <label htmlFor={inputId} className="text-sm font-medium text-slate-700 dark:text-slate-300">
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
           {label}
         </label>
       )}
@@ -158,7 +157,7 @@ export function Combobox({
           >
             {filtered.length === 0 ? (
               <li className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">
-                No se encontraron localidades
+                No se encontraron resultados
               </li>
             ) : (
               filtered.map((option, index) => (
