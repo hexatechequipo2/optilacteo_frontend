@@ -54,7 +54,7 @@ export default function LoginPage() {
 
     setIsSubmitting(true);
     try {
-      await login(email, password);
+      await login(email, password, rememberMe);
       navigate("/usuarios", { replace: true });
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
