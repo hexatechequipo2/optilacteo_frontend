@@ -28,6 +28,7 @@ export interface UpdateUsuarioDto {
 
 export interface LoginResponse {
   access_token: string;
+  refresh_token: string;
   user: {
     id: number;
     email: string;
@@ -35,4 +36,9 @@ export interface LoginResponse {
     rolNombre: string | null;
     empresa: string;
   };
+}
+
+export interface RefreshTokenResponse {
+  access_token: string;
+  refresh_token: string;
 }
