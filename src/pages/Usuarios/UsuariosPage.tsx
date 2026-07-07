@@ -30,16 +30,25 @@ export default function UsuariosPage() {
     unlockUsuario,
   } = useUsuarios();
 
-  const { empresas } = useEmpresas();
-  const { roles, updatePermiso } = useRoles(); // 👈 agregar updatePermiso
   const { user } = useAuth();
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-
-  const [usuarioEnEdicion, setUsuarioEnEdicion] = useState<UsuarioType | null>(null);
 
   // Un Gerente no puede asignar el rol Administrador a otro usuario
   // (el backend también lo valida en create/update de UserService).
   const esGerente = (user?.rolNombre ?? "").trim().toLowerCase() === "gerente";
+
+  // Administrador -> GET /empresa (todas). Gerente -> GET /empresa/me
+  // (solo la propia, envuelta en un array de un elemento) — mismo patrón
+  // que ProveedoresPage, necesario porque GET /empresa es solo-Admin.
+  const { empresas } = useEmpresas(esGerente);
+  const { roles, updatePermiso } = useRoles(); // 👈 agregar updatePermiso
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  const [usuarioEnEdicion, setUsuarioEnEdicion] = useState<UsuarioType | null>(null);
+
+  // Si es gerente, el selector de empresa del formulario se bloquea siempre
+  // en su propia empresa (viene como único elemento de /empresa/me).
+  const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
+
   const rolesAsignables = useMemo(
     () =>
       esGerente
@@ -125,6 +134,7 @@ export default function UsuariosPage() {
         isOpen={isCreateModalOpen}
         empresas={empresas}
         roles={rolesAsignables}
+        empresaIdBloqueada={empresaIdBloqueada}
         isSubmitting={isCreating}
         onClose={() => setIsCreateModalOpen(false)}
         onCreate={createUsuario}
@@ -134,6 +144,7 @@ export default function UsuariosPage() {
         usuario={usuarioEnEdicion}
         empresas={empresas}
         roles={rolesAsignables}
+        empresaIdBloqueada={empresaIdBloqueada}
         isSubmitting={isUpdating}
         onClose={() => setUsuarioEnEdicion(null)}
         onUpdate={updateUsuario}

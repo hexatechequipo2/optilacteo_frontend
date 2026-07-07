@@ -37,6 +37,7 @@ export interface LoginResponse {
     rolId: number | null;
     rolNombre: string | null;
     empresa: string;
+    empresaId: number | null;
   };
 }
 
