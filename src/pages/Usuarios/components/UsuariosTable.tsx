@@ -3,6 +3,7 @@ import type { UsuarioType } from "../../../types/usuario.types";
 interface UsuariosTableProps {
   usuarios: UsuarioType[];
   onEdit: (usuario: UsuarioType) => void;
+  onUnlock: (id: number) => void;
 }
 
 function getInitials(name: string): string {
@@ -14,7 +15,15 @@ function getInitials(name: string): string {
     .join("");
 }
 
-function EstadoBadge({ isActive }: { isActive: boolean }) {
+function EstadoBadge({ isActive, isLocked }: { isActive: boolean; isLocked: boolean }) {
+  if (isLocked) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+        Bloqueado
+      </span>
+    );
+  }
+
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
@@ -28,7 +37,7 @@ function EstadoBadge({ isActive }: { isActive: boolean }) {
   );
 }
 
-export function UsuariosTable({ usuarios, onEdit }: UsuariosTableProps) {
+export function UsuariosTable({ usuarios, onEdit, onUnlock }: UsuariosTableProps) {
   if (usuarios.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-8 text-center dark:border-slate-800 dark:bg-slate-900">
@@ -98,19 +107,33 @@ export function UsuariosTable({ usuarios, onEdit }: UsuariosTableProps) {
 
               {/* Estado */}
               <td className="px-4 py-3">
-                <EstadoBadge isActive={usuario.isActive} />
+                <EstadoBadge isActive={usuario.isActive} isLocked={usuario.isLocked} />
               </td>
 
               {/* Acciones */}
               <td className="px-4 py-3 text-right">
-                <button
-                  type="button"
-                  onClick={() => onEdit(usuario)}
-                  aria-label={`Editar ${usuario.name}`}
-                  className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                >
-                  ✎
-                </button>
+                <div className="flex items-center justify-end gap-1">
+                  {usuario.isLocked && (
+                    <button
+                      type="button"
+                      onClick={() => onUnlock(usuario.id)}
+                      aria-label={`Desbloquear ${usuario.name}`}
+                      title="Desbloquear cuenta"
+                      className="rounded-md px-2 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                    >
+                      Desbloquear
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => onEdit(usuario)}
+                    aria-label={`Editar ${usuario.name}`}
+                    className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                  >
+                    ✎
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

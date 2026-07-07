@@ -27,6 +27,8 @@ interface UseUsuariosResult {
     nuevoEstado: boolean,
   ) => Promise<void>;
   isUpdating: boolean;
+  unlockUsuario: (id: number) => Promise<void>;
+  isUnlocking: boolean;
   refetch: () => Promise<void>;
 }
 
@@ -38,6 +40,7 @@ export function useUsuarios(): UseUsuariosResult {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [empresaFiltro, setEmpresaFiltro] = useState(TODAS_LAS_EMPRESAS);
@@ -117,6 +120,19 @@ export function useUsuarios(): UseUsuariosResult {
     [usuarios, fetchUsuarios],
   );
 
+  const unlockUsuario = useCallback(
+    async (id: number) => {
+      setIsUnlocking(true);
+      try {
+        await usuariosService.unlock(id);
+        await fetchUsuarios();
+      } finally {
+        setIsUnlocking(false);
+      }
+    },
+    [fetchUsuarios],
+  );
+
   return {
     usuarios,
     filteredUsuarios,
@@ -130,6 +146,8 @@ export function useUsuarios(): UseUsuariosResult {
     isCreating,
     updateUsuario,
     isUpdating,
+    unlockUsuario,
+    isUnlocking,
     refetch: fetchUsuarios,
   };
 }

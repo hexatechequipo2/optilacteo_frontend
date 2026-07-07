@@ -57,8 +57,34 @@ export default function LoginPage() {
       await login(email, password, rememberMe);
       navigate("/usuarios", { replace: true });
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        setServerError("Email o contraseña incorrectos");
+      if (axios.isAxiosError(error)) {
+        if (!error.response) {
+          // No hubo respuesta del servidor -> problema real de conexión/red
+          setServerError(
+            "No se pudo conectar con el servidor. Intentá nuevamente.",
+          );
+        } else {
+          const { status, data } = error.response;
+
+          switch (status) {
+            case 401:
+              setServerError("Email o contraseña incorrectos");
+              break;
+            case 403:
+              // Cuenta bloqueada por intentos fallidos o usuario inactivo
+              setServerError(
+                data?.message ?? "No tenés permiso para iniciar sesión.",
+              );
+              break;
+            case 429:
+              setServerError(
+                "Demasiados intentos. Cuenta bloqueada. Solicitar ayuda con Administrador o Gerente.",
+              );
+              break;
+            default:
+              setServerError(data?.message ?? "Ocurrió un error inesperado.");
+          }
+        }
       } else {
         setServerError(
           "No se pudo conectar con el servidor. Intentá nuevamente.",
