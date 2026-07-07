@@ -34,4 +34,9 @@ export const usuariosService = {
     const { data } = await api.patch<UsuarioType>(`/user/${id}/desactivar`);
     return data;
   },
+
+  unlock: async (id: number): Promise<UsuarioType> => {
+    const { data } = await api.patch<UsuarioType>(`/user/${id}/desbloquear`);
+    return data;
+  },
 };

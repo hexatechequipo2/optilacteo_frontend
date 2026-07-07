@@ -26,6 +26,7 @@ export default function UsuariosPage() {
     isCreating,
     updateUsuario,
     isUpdating,
+    unlockUsuario,
   } = useUsuarios();
 
   const { empresas } = useEmpresas();
@@ -100,6 +101,7 @@ export default function UsuariosPage() {
         <UsuariosTable
           usuarios={filteredUsuarios}
           onEdit={(usuario: UsuarioType) => setUsuarioEnEdicion(usuario)}
+          onUnlock={unlockUsuario}
         />
       )}
 

@@ -5,6 +5,8 @@ export interface UsuarioType {
   rolId: number | null;
   rolNombre: string | null;
   isActive: boolean;
+  isLocked: boolean;
+  lockedUntil: string | null;
   empresa: {
     id: number;
     name: string;
