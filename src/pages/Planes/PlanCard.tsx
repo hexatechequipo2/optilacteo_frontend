@@ -31,10 +31,6 @@ function topBorderClass(nombre: string): string {
   return "border-t-[3px] border-t-slate-300 dark:border-t-slate-600";
 }
 
-function formatMrr(mrr: number): string {
-  return `${mrr.toFixed(1)}k`;
-}
-
 interface PlanCardProps {
   plan: Plan;
 }
@@ -61,24 +57,13 @@ export function PlanCard({ plan }: PlanCardProps) {
       </div>
 
       {/* Stats chip */}
-      <div className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3 dark:bg-slate-800">
-        <div>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white">
-            {plan.empresasAsignadas}
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {plan.empresasAsignadas === 1 ? "empresa" : "empresas"}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            US${" "}
-            <span className="text-lg font-bold text-slate-900 dark:text-white">
-              {formatMrr(plan.mrr)}
-            </span>
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">MRR</p>
-        </div>
+      <div className="flex flex-col items-center justify-center rounded-lg bg-slate-50 px-4 py-3 text-center dark:bg-slate-800">
+        <p className="text-2xl font-bold text-slate-900 dark:text-white">
+          {plan.empresasAsignadas}
+        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {plan.empresasAsignadas === 1 ? "empresa" : "empresas"}
+        </p>
       </div>
 
       {/* Límites */}

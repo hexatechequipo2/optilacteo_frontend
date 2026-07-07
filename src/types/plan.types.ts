@@ -14,7 +14,6 @@ export interface Plan {
   maxSensores: number;
   modulos: PlanModulo[];
   empresasAsignadas: number;
-  mrr: number;
 }
 
 export interface CreatePlanDto {
