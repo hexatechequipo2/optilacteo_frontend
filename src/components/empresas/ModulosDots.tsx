@@ -1,5 +1,4 @@
-import type { ModuloEnum } from "../../types/empresa.types";
-import type { Plan } from "../../types/plan.types";
+import type { EmpresaModulo, ModuloEnum } from "../../types/empresa.types";
 
 const TODOS_LOS_MODULOS: ModuloEnum[] = [
   "dashboard",
@@ -13,18 +12,15 @@ const TODOS_LOS_MODULOS: ModuloEnum[] = [
 ];
 
 interface ModulosDotsProps {
-  plan: string;
-  planes: Plan[];
+  modulos: EmpresaModulo[] | undefined;
 }
 
-export function ModulosDots({ plan, planes }: ModulosDotsProps) {
-  const planDeLaEmpresa = planes.find(
-    (p) => p.nombre.toLowerCase() === plan.toLowerCase(),
+export function ModulosDots({ modulos }: ModulosDotsProps) {
+  const modulosActivos = new Set(
+    (modulos ?? []).filter((m) => m.isActive).map((m) => m.modulo),
   );
-  const modulosDelPlan = new Set(
-    planDeLaEmpresa?.modulos.map((m) => m.codigo) ?? [],
-  );
-  const activosCount = modulosDelPlan.size;
+
+  const activosCount = modulosActivos.size;
 
   return (
     <div className="flex items-center gap-2">
@@ -34,7 +30,7 @@ export function ModulosDots({ plan, planes }: ModulosDotsProps) {
             key={modulo}
             title={modulo}
             className={`h-2 w-2 rounded-full ${
-              modulosDelPlan.has(modulo) ? "bg-blue-500" : "bg-slate-200 dark:bg-slate-700"
+              modulosActivos.has(modulo) ? "bg-blue-500" : "bg-slate-200 dark:bg-slate-700"
             }`}
           />
         ))}

@@ -3,7 +3,6 @@ import { Search } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { useEmpresas } from "../../hooks/useEmpresas";
-import { usePlanes } from "../../hooks/usePlanes";
 import { EmpresasTable } from "../../components/empresas/EmpresasTable";
 import { NuevaEmpresaModal } from "./components/NuevaEmpresaModal";
 import { EditarEmpresaModal } from "./components/EditarEmpresaModal";
@@ -15,7 +14,6 @@ const TABS: TabEstado[] = ["Todas", "Activas", "Trial", "Suspendidas"];
 
 export default function EmpresasPage() {
   const { empresas, isLoading, error, refetch, createEmpresa, isCreating, updateEmpresa, isUpdating } = useEmpresas();
-  const { planes, isLoading: isLoadingPlanes } = usePlanes();
   const [busqueda, setBusqueda] = useState("");
   const [tabActivo, setTabActivo] = useState<TabEstado>("Todas");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -111,14 +109,13 @@ export default function EmpresasPage() {
       )}
 
       {/* Contenido */}
-      {isLoading || isLoadingPlanes ? (
+      {isLoading ? (
         <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16 dark:border-slate-800 dark:bg-slate-900">
           <p className="text-sm text-slate-500 dark:text-slate-400">Cargando empresas...</p>
         </div>
       ) : (
         <EmpresasTable
           empresas={empresasFiltradas}
-          planes={planes}
           onEdit={(empresa) => setEmpresaEnEdicion(empresa)}
         />
       )}
