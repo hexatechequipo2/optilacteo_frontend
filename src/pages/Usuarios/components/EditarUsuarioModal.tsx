@@ -11,6 +11,8 @@ interface EditarUsuarioModalProps {
   usuario: UsuarioType | null;
   empresas: EmpresaType[];
   roles: RolType[];
+  /** Cuando viene definido (caso Gerente), el selector de empresa se bloquea en este id. */
+  empresaIdBloqueada?: number;
   isSubmitting: boolean;
   onClose: () => void;
   onUpdate: (
@@ -24,6 +26,7 @@ export function EditarUsuarioModal({
   usuario,
   empresas,
   roles,
+  empresaIdBloqueada,
   isSubmitting,
   onClose,
   onUpdate,
@@ -76,8 +79,9 @@ export function EditarUsuarioModal({
       <UsuarioForm
         id="usuario-form-edit" // ID único para este form
         usuario={usuario}
-        roles={roles} 
+        roles={roles}
         empresas={empresas}
+        empresaIdBloqueada={empresaIdBloqueada}
         onSubmit={handleSubmit}
       />
     </Modal>

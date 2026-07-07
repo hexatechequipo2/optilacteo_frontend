@@ -1,3 +1,4 @@
+import { useAuth } from "../../../hooks/useAuth";
 import type { RolType, ModuloSistema, UpdatePermisoDto } from "../../../types/rol.types";
 
 interface MatrizPermisosProps {
@@ -28,11 +29,11 @@ const NIVEL_CONFIG: Record<NivelAcceso, { label: string; swatchClass: string }> 
     swatchClass: "bg-slate-100 dark:bg-slate-800",
   },
   solo_lectura: {
-    label: "Solo lectura",
+    label: "Solo ver",
     swatchClass: "bg-blue-200 dark:bg-blue-300",
   },
   lectura_escritura: {
-    label: "Lectura y escritura",
+    label: "Ver y modificar",
     swatchClass: "bg-blue-600 dark:bg-blue-600",
   },
 };
@@ -58,13 +59,23 @@ function nivelAPermiso(nivel: NivelAcceso): { canRead: boolean; canWrite: boolea
 }
 
 export function MatrizPermisos({ roles, onTogglePermiso }: MatrizPermisosProps) {
+  const { user } = useAuth();
+  const esGerente = (user?.rolNombre ?? "").trim().toLowerCase() === "gerente";
+
   // El Administrador tiene acceso total implícito y no gestiona permisos
   // por módulo, así que no tiene sentido mostrarlo en esta matriz.
   const rolesVisibles = roles.filter(
     (rol) => rol.nombre.trim().toLowerCase() !== "administrador",
   );
 
+  // Un Gerente puede editar los permisos de roles de empleados, pero no los
+  // de Administrador ni los de su propio rol (el backend aplica la misma
+  // restricción en PATCH /rol/:id/permisos).
+  const esRolBloqueado = (rol: RolType) =>
+    esGerente && ["administrador", "gerente"].includes(rol.nombre.trim().toLowerCase());
+
   const handleClick = (rol: RolType, modulo: ModuloSistema) => {
+    if (esRolBloqueado(rol)) return;
     const nivelActual = getNivel(getPermiso(rol, modulo));
     const siguiente = CICLO[(CICLO.indexOf(nivelActual) + 1) % CICLO.length];
     onTogglePermiso(rol.id, { modulo, ...nivelAPermiso(siguiente) });
@@ -119,20 +130,27 @@ export function MatrizPermisos({ roles, onTogglePermiso }: MatrizPermisosProps) 
 
                 {rolesVisibles.map((rol) => {
                   const nivel = getNivel(getPermiso(rol, key));
+                  const bloqueado = esRolBloqueado(rol);
                   return (
                     <td key={rol.id} className="px-2 py-3">
                       <div className="group relative flex items-center justify-center">
                         <button
                           type="button"
                           onClick={() => handleClick(rol, key)}
-                          aria-label={`${label} · ${rol.nombre} · ${NIVEL_CONFIG[nivel].label}`}
-                          className={`h-8 w-8 rounded-md transition hover:ring-2 hover:ring-blue-500 hover:ring-offset-1 dark:hover:ring-offset-slate-900 ${NIVEL_CONFIG[nivel].swatchClass}`}
+                          disabled={bloqueado}
+                          aria-label={`${label} · ${rol.nombre} · ${NIVEL_CONFIG[nivel].label}${bloqueado ? " (no editable)" : ""}`}
+                          className={`h-8 w-8 rounded-md transition ${NIVEL_CONFIG[nivel].swatchClass} ${
+                            bloqueado
+                              ? "cursor-not-allowed opacity-50"
+                              : "hover:ring-2 hover:ring-blue-500 hover:ring-offset-1 dark:hover:ring-offset-slate-900"
+                          }`}
                         />
                         <span
                           role="tooltip"
                           className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition group-hover:opacity-100 dark:bg-slate-700"
                         >
                           {label} · {rol.nombre} · {NIVEL_CONFIG[nivel].label}
+                          {bloqueado ? " (no editable)" : ""}
                         </span>
                       </div>
                     </td>

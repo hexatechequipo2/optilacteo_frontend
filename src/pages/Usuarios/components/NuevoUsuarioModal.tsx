@@ -7,13 +7,15 @@ import { UsuarioForm, type UsuarioFormValues } from "./UsuarioForm";
 interface NuevoUsuarioModalProps {
   isOpen: boolean;
   empresas: EmpresaType[];
-  roles: RolType[]; 
+  roles: RolType[];
+  /** Cuando viene definido (caso Gerente), el selector de empresa se bloquea en este id. */
+  empresaIdBloqueada?: number;
   isSubmitting: boolean;
   onClose: () => void;
   onCreate: (payload: CreateUsuarioDto) => Promise<void>;
 }
 
-export function NuevoUsuarioModal({ isOpen, empresas, roles, isSubmitting, onClose, onCreate }: NuevoUsuarioModalProps) {
+export function NuevoUsuarioModal({ isOpen, empresas, roles, empresaIdBloqueada, isSubmitting, onClose, onCreate }: NuevoUsuarioModalProps) {
   
   const handleSubmit = async (values: UsuarioFormValues) => {
     await onCreate({
@@ -58,7 +60,8 @@ export function NuevoUsuarioModal({ isOpen, empresas, roles, isSubmitting, onClo
       <UsuarioForm
         id="usuario-form" // Este ID debe coincidir con el atributo 'form' del botón
         empresas={empresas}
-        roles={roles} 
+        roles={roles}
+        empresaIdBloqueada={empresaIdBloqueada}
         onCancel={onClose}
         onSubmit={handleSubmit}
       />

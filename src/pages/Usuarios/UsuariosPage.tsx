@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Layout } from "../../components/layout/Layout";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { useUsuarios, TODAS_LAS_EMPRESAS } from "../../hooks/useUsuarios";
 import { useEmpresas } from "../../hooks/useEmpresas";
 import { useRoles } from "../../hooks/useRoles";
+import { useAuth } from "../../hooks/useAuth";
 import type { UsuarioType } from "../../types/usuario.types";
 import { UsuariosTable } from "./components/UsuariosTable";
 import { NuevoUsuarioModal } from "./components/NuevoUsuarioModal";
@@ -29,11 +30,32 @@ export default function UsuariosPage() {
     unlockUsuario,
   } = useUsuarios();
 
-  const { empresas } = useEmpresas();
+  const { user } = useAuth();
+
+  // Un Gerente no puede asignar el rol Administrador a otro usuario
+  // (el backend también lo valida en create/update de UserService).
+  const esGerente = (user?.rolNombre ?? "").trim().toLowerCase() === "gerente";
+
+  // Administrador -> GET /empresa (todas). Gerente -> GET /empresa/me
+  // (solo la propia, envuelta en un array de un elemento) — mismo patrón
+  // que ProveedoresPage, necesario porque GET /empresa es solo-Admin.
+  const { empresas } = useEmpresas(esGerente);
   const { roles, updatePermiso } = useRoles(); // 👈 agregar updatePermiso
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const [usuarioEnEdicion, setUsuarioEnEdicion] = useState<UsuarioType | null>(null);
+
+  // Si es gerente, el selector de empresa del formulario se bloquea siempre
+  // en su propia empresa (viene como único elemento de /empresa/me).
+  const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
+
+  const rolesAsignables = useMemo(
+    () =>
+      esGerente
+        ? roles.filter((rol) => rol.nombre.trim().toLowerCase() !== "administrador")
+        : roles,
+    [roles, esGerente],
+  );
 
   const empresaOptions = [
     { value: TODAS_LAS_EMPRESAS, label: "Todas las empresas" },
@@ -111,7 +133,8 @@ export default function UsuariosPage() {
       <NuevoUsuarioModal
         isOpen={isCreateModalOpen}
         empresas={empresas}
-        roles={roles}
+        roles={rolesAsignables}
+        empresaIdBloqueada={empresaIdBloqueada}
         isSubmitting={isCreating}
         onClose={() => setIsCreateModalOpen(false)}
         onCreate={createUsuario}
@@ -120,7 +143,8 @@ export default function UsuariosPage() {
       <EditarUsuarioModal
         usuario={usuarioEnEdicion}
         empresas={empresas}
-        roles={roles}
+        roles={rolesAsignables}
+        empresaIdBloqueada={empresaIdBloqueada}
         isSubmitting={isUpdating}
         onClose={() => setUsuarioEnEdicion(null)}
         onUpdate={updateUsuario}

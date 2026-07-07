@@ -30,6 +30,8 @@ interface UsuarioFormProps {
   usuario?: UsuarioType;
   empresas: EmpresaType[];
   roles: RolType[];
+  /** Cuando viene definido (caso Gerente), el selector de empresa se bloquea en este id. */
+  empresaIdBloqueada?: number;
   onCancel?: () => void;
   onSubmit: (values: UsuarioFormValues) => Promise<void>;
 }
@@ -77,6 +79,7 @@ export function UsuarioForm({
   usuario,
   empresas,
   roles,
+  empresaIdBloqueada,
   onSubmit,
 }: UsuarioFormProps) {
   const isEditing = !!usuario;
@@ -85,7 +88,15 @@ export function UsuarioForm({
   const [email, setEmail] = useState(usuario?.email ?? "");
   const [password, setPassword] = useState("");
   const [rolId, setRolId] = useState<number>(usuario?.rolId ?? 0);
-  const [empresaId, setEmpresaId] = useState(usuario ? String(usuario.empresa?.id ?? "") : "");
+  // Si es Gerente (empresaIdBloqueada definido), su empresa siempre
+  // prevalece por sobre la que tuviera cargada el usuario.
+  const [empresaId, setEmpresaId] = useState(
+    empresaIdBloqueada
+      ? String(empresaIdBloqueada)
+      : usuario
+        ? String(usuario.empresa?.id ?? "")
+        : "",
+  );
   const [isActive, setIsActive] = useState(usuario?.isActive ?? true);
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState("");
@@ -149,6 +160,7 @@ export function UsuarioForm({
           value={empresaId}
           onChange={(e) => setEmpresaId(e.target.value)}
           error={errors.empresaId}
+          disabled={!!empresaIdBloqueada}
         />
       </div>
 
