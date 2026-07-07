@@ -13,7 +13,6 @@ export default function DashboardPage() {
     isLoading,
     error,
     empresas,
-    planes,
     totalEmpresas,
     empresasActivas,
     empresasEnTrial,
@@ -90,7 +89,7 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
-              <EmpresasListPanel empresas={empresas} planes={planes} />
+              <EmpresasListPanel empresas={empresas} />
             </div>
             <div className="flex flex-col gap-6">
               <DistribucionPlanPanel distribucion={distribucionPorPlan} />

@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { EmpresaType } from "../../../types/empresa.types";
-import type { Plan } from "../../../types/plan.types";
 import { EmpresaAvatar } from "../../../components/empresas/EmpresaAvatar";
 import { PlanBadge } from "../../../components/empresas/PlanBadge";
 import { EstadoBadge } from "../../../components/empresas/EstadoBadge";
@@ -12,10 +11,9 @@ const PAGE_SIZE = 5;
 
 interface EmpresasListPanelProps {
   empresas: EmpresaType[];
-  planes: Plan[];
 }
 
-export function EmpresasListPanel({ empresas, planes }: EmpresasListPanelProps) {
+export function EmpresasListPanel({ empresas }: EmpresasListPanelProps) {
   const navigate = useNavigate();
   const [page, setPage] = useState(0);
 
@@ -68,7 +66,7 @@ export function EmpresasListPanel({ empresas, planes }: EmpresasListPanelProps) 
                   {empresa.direccion ?? "Sin ubicación"}
                 </p>
                 <div className="mt-1.5">
-                  <ModulosDots plan={empresa.plan} planes={planes} />
+                  <ModulosDots modulos={empresa.modulos} />
                 </div>
               </div>
               <PlanBadge plan={empresa.plan} />
