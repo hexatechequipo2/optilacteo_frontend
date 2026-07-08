@@ -29,3 +29,8 @@ export interface CreateProveedorDto {
   localidad?: string | null;
   capacidad?: number | null;
 }
+
+export interface ProveedoresFilters {
+  tipo?: TipoProveedor;
+  search?: string;
+}
