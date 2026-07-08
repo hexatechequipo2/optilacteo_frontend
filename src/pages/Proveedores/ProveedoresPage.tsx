@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, Pencil } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
@@ -12,7 +12,7 @@ type TabTipo = "Todos" | "Tambo" | "Transporte" | "Insumos" | "Laboratorio";
 
 const TABS: TabTipo[] = ["Todos", "Tambo", "Transporte", "Insumos", "Laboratorio"];
 
-const TAB_TO_TIPO: Record<string, TipoProveedor> = {
+const TAB_TO_TIPO: Record<Exclude<TabTipo, "Todos">, TipoProveedor> = {
   Tambo: "tambo",
   Transporte: "transporte",
   Insumos: "insumos",
@@ -47,6 +47,8 @@ const ESTADO_DOT: Record<string, string> = {
 
 const HEADERS = ["PROVEEDOR", "TIPO", "EMPRESA", "CAPACIDAD", "UBICACIÓN", "ESTADO", ""];
 
+const SEARCH_DEBOUNCE_MS = 400;
+
 function getInitials(name: string): string {
   return name.trim().slice(0, 2).toUpperCase();
 }
@@ -59,6 +61,19 @@ function capacidadLabel(p: Proveedor): string {
 }
 
 export default function ProveedoresPage() {
+  const [busqueda, setBusqueda] = useState("");
+  const [debouncedBusqueda, setDebouncedBusqueda] = useState("");
+  const [tabActivo, setTabActivo] = useState<TabTipo>("Todos");
+
+  // Debounce: solo dispara el fetch al backend 400ms después de que el
+  // usuario deja de tipear, para no mandar un request por cada letra.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedBusqueda(busqueda), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [busqueda]);
+
+  const tipoFiltro = tabActivo === "Todos" ? undefined : TAB_TO_TIPO[tabActivo];
+
   const {
     proveedores,
     isLoading,
@@ -68,18 +83,15 @@ export default function ProveedoresPage() {
     isCreating,
     updateProveedor,
     isUpdating,
-  } = useProveedores();
+  } = useProveedores({ tipo: tipoFiltro, search: debouncedBusqueda });
+
   const { user } = useAuth();
 
   const esGerente =
     (user?.rolNombre ?? "").trim().toLowerCase() === "gerente";
 
-  // Administrador -> GET /empresa (todas). Gerente -> GET /empresa/me
-  // (solo la propia, envuelta en un array de un elemento).
   const { empresas } = useEmpresas(esGerente);
 
-  const [busqueda, setBusqueda] = useState("");
-  const [tabActivo, setTabActivo] = useState<TabTipo>("Todos");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [proveedorEnEdicion, setProveedorEnEdicion] = useState<Proveedor | null>(null);
 
@@ -88,9 +100,6 @@ export default function ProveedoresPage() {
     [empresas],
   );
 
-  // Si es gerente, `empresas` viene de /empresa/me y trae un solo elemento:
-  // su propia empresa. Si es administrador, queda undefined y el modal
-  // muestra el <select> completo con todas las empresas.
   const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
 
   const totalTambos = useMemo(
@@ -102,24 +111,6 @@ export default function ProveedoresPage() {
     () => proveedores.filter((p) => p.estado === "activa").length,
     [proveedores],
   );
-
-  const proveedoresFiltrados = useMemo(() => {
-    return proveedores
-      .filter((p) => {
-        if (tabActivo === "Todos") return true;
-        return p.tipo === TAB_TO_TIPO[tabActivo];
-      })
-      .filter((p) => {
-        const q = busqueda.toLowerCase();
-        if (!q) return true;
-        const nombreEmpresa = empresaMap.get(p.empresaId) ?? "";
-        return (
-          p.razonSocial.toLowerCase().includes(q) ||
-          p.cuit.includes(q) ||
-          nombreEmpresa.toLowerCase().includes(q)
-        );
-      });
-  }, [proveedores, tabActivo, busqueda, empresaMap]);
 
   return (
     <Layout breadcrumb="Consola > Proveedores">
@@ -149,7 +140,7 @@ export default function ProveedoresPage() {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             type="text"
-            placeholder="Buscar por nombre, CUIT o empresa..."
+            placeholder=" Buscar por nombre, CUIT, teléfono, email o ubicación.."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500"
@@ -198,7 +189,7 @@ export default function ProveedoresPage() {
             />
           ))}
         </div>
-      ) : proveedoresFiltrados.length === 0 ? (
+      ) : proveedores.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
           <p className="text-base font-medium text-slate-700 dark:text-slate-300">
             No se encontraron proveedores
@@ -223,12 +214,11 @@ export default function ProveedoresPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {proveedoresFiltrados.map((p) => {
+              {proveedores.map((p) => {
                 const nombreEmpresa =
                   empresaMap.get(p.empresaId) ?? `Empresa #${p.empresaId}`;
                 return (
                   <tr key={p.id} className="text-sm">
-                    {/* Proveedor */}
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
@@ -243,7 +233,6 @@ export default function ProveedoresPage() {
                       </div>
                     </td>
 
-                    {/* Tipo */}
                     <td className="px-5 py-3">
                       <span
                         className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${TIPO_CLASS[p.tipo]}`}
@@ -252,7 +241,6 @@ export default function ProveedoresPage() {
                       </span>
                     </td>
 
-                    {/* Empresa */}
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
@@ -262,30 +250,23 @@ export default function ProveedoresPage() {
                       </div>
                     </td>
 
-                    {/* Capacidad */}
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {capacidadLabel(p)}
                     </td>
 
-                    {/* Ubicación */}
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                      {[p.localidad, p.provincia].filter(Boolean).join(", ") ||
-                        "—"}
+                      {[p.localidad, p.provincia].filter(Boolean).join(", ") || "—"}
                     </td>
 
-                    {/* Estado */}
                     <td className="px-5 py-3">
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_CLASS[p.estado]}`}
                       >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${ESTADO_DOT[p.estado]}`}
-                        />
+                        <span className={`h-1.5 w-1.5 rounded-full ${ESTADO_DOT[p.estado]}`} />
                         {p.estado.charAt(0).toUpperCase() + p.estado.slice(1)}
                       </span>
                     </td>
 
-                    {/* Editar */}
                     <td className="px-5 py-3 text-right">
                       <button
                         type="button"
