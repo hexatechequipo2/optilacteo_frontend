@@ -7,10 +7,16 @@ import type {
 
 export const usuariosService = {
   /** Trae todos los usuarios de la plataforma (todas las empresas) */
-  getAll: async (): Promise<UsuarioType[]> => {
-    const { data } = await api.get<UsuarioType[]>("/user");
-    return data;
-  },
+  getAll: async (params: { 
+  page: number; 
+  limit: number; 
+  name?: string; 
+  email?: string; 
+  empresaId?: string | number 
+}) => {
+  const { data } = await api.get("/user", { params });
+  return data;
+},
 
   create: async (payload: CreateUsuarioDto): Promise<UsuarioType> => {
     const { data } = await api.post<UsuarioType>("/user", payload);

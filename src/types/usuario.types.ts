@@ -45,3 +45,12 @@ export interface RefreshTokenResponse {
   access_token: string;
   refresh_token: string;
 }
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: {
+    total: number;
+    page: number;
+    lastPage: number;
+  };
+}
