@@ -33,4 +33,16 @@ export interface CreateProveedorDto {
 export interface ProveedoresFilters {
   tipo?: TipoProveedor;
   search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 }

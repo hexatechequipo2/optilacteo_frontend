@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Pencil } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { useProveedores } from "../../hooks/useProveedores";
@@ -76,6 +76,9 @@ export default function ProveedoresPage() {
 
   const {
     proveedores,
+    meta,
+    page,
+    setPage,
     isLoading,
     error,
     fetchProveedores,
@@ -102,16 +105,6 @@ export default function ProveedoresPage() {
 
   const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
 
-  const totalTambos = useMemo(
-    () => proveedores.filter((p) => p.tipo === "tambo").length,
-    [proveedores],
-  );
-
-  const totalActivos = useMemo(
-    () => proveedores.filter((p) => p.estado === "activa").length,
-    [proveedores],
-  );
-
   return (
     <Layout breadcrumb="Consola > Proveedores">
       {/* Header */}
@@ -121,8 +114,7 @@ export default function ProveedoresPage() {
             Proveedores
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {proveedores.length} proveedores · {totalTambos} tambos ·{" "}
-            {totalActivos} activos
+            {meta.total} proveedores en la plataforma
           </p>
         </div>
         <Button
@@ -181,13 +173,8 @@ export default function ProveedoresPage() {
 
       {/* Contenido */}
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div
-              key={i}
-              className="h-14 animate-pulse rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-            />
-          ))}
+        <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16 dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-sm text-slate-500 dark:text-slate-400">Cargando proveedores...</p>
         </div>
       ) : proveedores.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
@@ -199,90 +186,119 @@ export default function ProveedoresPage() {
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800">
-                {HEADERS.map((h, i) => (
-                  <th
-                    key={`${h}-${i}`}
-                    className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {proveedores.map((p) => {
-                const nombreEmpresa =
-                  empresaMap.get(p.empresaId) ?? `Empresa #${p.empresaId}`;
-                return (
-                  <tr key={p.id} className="text-sm">
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                          {getInitials(p.razonSocial)}
+        <>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800">
+                  {HEADERS.map((h, i) => (
+                    <th
+                      key={`${h}-${i}`}
+                      className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {proveedores.map((p) => {
+                  const nombreEmpresa =
+                    empresaMap.get(p.empresaId) ?? `Empresa #${p.empresaId}`;
+                  return (
+                    <tr key={p.id} className="text-sm">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                            {getInitials(p.razonSocial)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-900 dark:text-white">
+                              {p.razonSocial}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{p.cuit}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-slate-900 dark:text-white">
-                            {p.razonSocial}
-                          </p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{p.cuit}</p>
+                      </td>
+
+                      <td className="px-5 py-3">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${TIPO_CLASS[p.tipo]}`}
+                        >
+                          {TIPO_LABEL[p.tipo]}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
+                            {getInitials(nombreEmpresa)}
+                          </div>
+                          <span className="text-slate-700 dark:text-slate-300">{nombreEmpresa}</span>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${TIPO_CLASS[p.tipo]}`}
-                      >
-                        {TIPO_LABEL[p.tipo]}
-                      </span>
-                    </td>
+                      <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                        {capacidadLabel(p)}
+                      </td>
 
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
-                          {getInitials(nombreEmpresa)}
-                        </div>
-                        <span className="text-slate-700 dark:text-slate-300">{nombreEmpresa}</span>
-                      </div>
-                    </td>
+                      <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                        {[p.localidad, p.provincia].filter(Boolean).join(", ") || "—"}
+                      </td>
 
-                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                      {capacidadLabel(p)}
-                    </td>
+                      <td className="px-5 py-3">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_CLASS[p.estado]}`}
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full ${ESTADO_DOT[p.estado]}`} />
+                          {p.estado.charAt(0).toUpperCase() + p.estado.slice(1)}
+                        </span>
+                      </td>
 
-                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                      {[p.localidad, p.provincia].filter(Boolean).join(", ") || "—"}
-                    </td>
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setProveedorEnEdicion(p)}
+                          aria-label={`Editar ${p.razonSocial}`}
+                          className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_CLASS[p.estado]}`}
-                      >
-                        <span className={`h-1.5 w-1.5 rounded-full ${ESTADO_DOT[p.estado]}`} />
-                        {p.estado.charAt(0).toUpperCase() + p.estado.slice(1)}
-                      </span>
-                    </td>
+          {/* Paginación */}
+          <div className="mt-6 flex items-center justify-end border-t border-slate-200 pt-4 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPage(page - 1)}
+                disabled={page === 1}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
 
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setProveedorEnEdicion(p)}
-                        aria-label={`Editar ${p.razonSocial}`}
-                        className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+              <span className="text-sm text-slate-600 dark:text-slate-300">
+                {page} de {meta.lastPage || 1}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setPage(page + 1)}
+                disabled={page >= (meta.lastPage || 1)}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       <ProveedorFormModal
