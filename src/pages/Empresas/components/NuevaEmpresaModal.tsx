@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import axios from "axios";
 import { Modal } from "../../../components/ui/Modal";
 import { Input } from "../../../components/ui/Input";
 import { RadioCard } from "../../../components/ui/RadioCard";
@@ -70,10 +71,12 @@ export function NuevaEmpresaModal({
 }: NuevaEmpresaModalProps) {
   const [values, setValues] = useState<FormValues>(INITIAL_VALUES);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [serverError, setServerError] = useState("");
 
   const handleClose = () => {
     setValues(INITIAL_VALUES);
     setErrors({});
+    setServerError("");
     onClose();
   };
 
@@ -88,16 +91,31 @@ export function NuevaEmpresaModal({
     if (Object.keys(validationErrors).length > 0) return;
 
     const direccion = buildDireccion(values.calle, values.localidad);
+    setServerError("");
 
-    await onCreate({
-      name: values.name.trim(),
-      ...(values.cuit.trim() && { cuit: values.cuit.trim() }),
-      ...(values.email.trim() && { email: values.email.trim() }),
-      ...(values.telefono.trim() && { telefono: values.telefono.trim() }),
-      ...(direccion && { direccion }),
-      plan: values.plan,
-    });
-    handleClose();
+    try {
+      await onCreate({
+        name: values.name.trim(),
+        ...(values.cuit.trim() && { cuit: values.cuit.trim() }),
+        ...(values.email.trim() && { email: values.email.trim() }),
+        ...(values.telefono.trim() && { telefono: values.telefono.trim() }),
+        ...(direccion && { direccion }),
+        plan: values.plan,
+      });
+      handleClose();
+    } catch (error) {
+      if (
+        axios.isAxiosError(error) &&
+        (error.response?.status === 409 || error.response?.status === 400)
+      ) {
+        setServerError(
+          error.response.data?.message ??
+            "No se pudo crear la empresa. Revisá los datos ingresados.",
+        );
+      } else {
+        setServerError("No se pudo crear la empresa. Intentá nuevamente.");
+      }
+    }
   };
 
   return (
@@ -204,6 +222,12 @@ export function NuevaEmpresaModal({
             ))}
           </div>
         </div>
+
+        {serverError && (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
+            {serverError}
+          </p>
+        )}
       </form>
     </Modal>
   );

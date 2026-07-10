@@ -141,9 +141,13 @@ export function EditarEmpresaModal({
       );
       onClose();
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 409) {
+      if (
+        axios.isAxiosError(error) &&
+        (error.response?.status === 409 || error.response?.status === 400)
+      ) {
         setServerError(
-          "No se puede suspender la empresa porque tiene usuarios activos asociados.",
+          error.response.data?.message ??
+            "No se pudo guardar los cambios. Revisá los datos ingresados.",
         );
       } else {
         setServerError("No se pudo guardar los cambios. Intentá nuevamente.");
