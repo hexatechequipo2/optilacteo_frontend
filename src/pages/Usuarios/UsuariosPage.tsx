@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Layout } from "../../components/layout/Layout";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
@@ -11,12 +11,15 @@ import type { UsuarioType } from "../../types/usuario.types";
 import { UsuariosTable } from "./components/UsuariosTable";
 import { NuevoUsuarioModal } from "./components/NuevoUsuarioModal";
 import { EditarUsuarioModal } from "./components/EditarUsuarioModal";
-import { MatrizPermisos } from "./components/MatrizPermisos"; // 👈 agregar
+import { MatrizPermisos } from "./components/MatrizPermisos";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function UsuariosPage() {
   const {
     usuarios,
-    filteredUsuarios,
+    meta,
+    page,
+    setPage,
     isLoading,
     error,
     search,
@@ -31,31 +34,19 @@ export default function UsuariosPage() {
   } = useUsuarios();
 
   const { user } = useAuth();
-
-  // Un Gerente no puede asignar el rol Administrador a otro usuario
-  // (el backend también lo valida en create/update de UserService).
   const esGerente = (user?.rolNombre ?? "").trim().toLowerCase() === "gerente";
 
-  // Administrador -> GET /empresa (todas). Gerente -> GET /empresa/me
-  // (solo la propia, envuelta en un array de un elemento) — mismo patrón
-  // que ProveedoresPage, necesario porque GET /empresa es solo-Admin.
   const { empresas } = useEmpresas(esGerente);
-  const { roles, updatePermiso } = useRoles(); // 👈 agregar updatePermiso
+  const { roles, updatePermiso } = useRoles();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-
   const [usuarioEnEdicion, setUsuarioEnEdicion] = useState<UsuarioType | null>(null);
 
-  // Si es gerente, el selector de empresa del formulario se bloquea siempre
-  // en su propia empresa (viene como único elemento de /empresa/me).
   const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
 
-  const rolesAsignables = useMemo(
-    () =>
-      esGerente
-        ? roles.filter((rol) => rol.nombre.trim().toLowerCase() !== "administrador")
-        : roles,
-    [roles, esGerente],
-  );
+  // Filtramos roles en el frontend para el modal (seguridad visual)
+  const rolesAsignables = esGerente 
+    ? roles.filter((rol) => rol.nombre.trim().toLowerCase() !== "administrador")
+    : roles;
 
   const empresaOptions = [
     { value: TODAS_LAS_EMPRESAS, label: "Todas las empresas" },
@@ -64,17 +55,15 @@ export default function UsuariosPage() {
       label: empresa.name,
     })),
   ];
-
-  const empresasUnicas = new Set(usuarios.map((usuario) => usuario.empresa?.id).filter(Boolean)).size;
+  console.log("Estado actual del meta:", meta);
 
   return (
     <Layout breadcrumb="Consola > Usuarios">
-      
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight font-sans dark:text-white">Usuarios y Roles</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {usuarios.length} usuarios en {empresasUnicas} empresas
+            {meta.total} usuarios registrados
           </p>
         </div>
         
@@ -91,9 +80,9 @@ export default function UsuariosPage() {
         <div className="w-full max-w-sm">
           <Input
             id="usuarios-search"
-            placeholder="Buscar por nombre, email o empresa..."
+            placeholder="Buscar por nombre o email..."
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
             className="!w-full !rounded-full !py-2 !px-5 !border-slate-300 dark:!border-slate-700"
           />
         </div>
@@ -103,7 +92,7 @@ export default function UsuariosPage() {
             id="usuarios-empresa-filtro"
             options={empresaOptions}
             value={empresaFiltro}
-            onChange={(event) => setEmpresaFiltro(event.target.value)}
+            onChange={(e) => setEmpresaFiltro(e.target.value)}
             className="!w-full !rounded-full !py-2 !px-4 !border-slate-300 !text-sm dark:!border-slate-700"
           />
         </div>
@@ -120,14 +109,44 @@ export default function UsuariosPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400">Cargando usuarios...</p>
         </div>
       ) : (
-        <UsuariosTable
-          usuarios={filteredUsuarios}
-          onEdit={(usuario: UsuarioType) => setUsuarioEnEdicion(usuario)}
-          onUnlock={unlockUsuario}
-        />
+        <>
+          <UsuariosTable
+            usuarios={usuarios}
+            onEdit={(usuario: UsuarioType) => setUsuarioEnEdicion(usuario)}
+            onUnlock={unlockUsuario}
+          />
+          
+          {/* Paginación */}
+          <div className="mt-6 flex items-center justify-end border-t border-slate-200 pt-4 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPage(page - 1)}
+                disabled={page === 1}
+                aria-label="Página anterior"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-500 dark:hover:bg-slate-800"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              <span className="text-sm text-slate-600 dark:text-slate-300">
+                {page} de {meta.lastPage || 1}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setPage(page + 1)}
+                disabled={page >= (meta.lastPage || 1)}
+                aria-label="Página siguiente"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-500 dark:hover:bg-slate-800"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
-      {/* 👇 Matriz de permisos, debajo de la tabla de usuarios */}
       <MatrizPermisos roles={roles} onTogglePermiso={updatePermiso} />
 
       <NuevoUsuarioModal

@@ -40,14 +40,14 @@ export function Sidebar() {
       try {
         const [empresas, usuarios, planes, proveedores] = await Promise.all([
           puedeVerEmpresas ? empresasService.getAll() : Promise.resolve([]),
-          puedeVerUsuarios ? usuariosService.getAll() : Promise.resolve([]),
+          puedeVerUsuarios ? usuariosService.getAll({ page: 1, limit: 1 }) : Promise.resolve({ data: [], meta: { total: 0 } }),
           puedeVerPlanes ? planesService.getAll() : Promise.resolve([]),
           puedeVerProveedores ? proveedoresService.getAll() : Promise.resolve([]),
         ]);
 
         setCounts({
           empresas: empresas.length,
-          usuarios: usuarios.length,
+          usuarios: usuarios.meta.total,
           planes: planes.length,
           proveedores: proveedores.length,
         });
