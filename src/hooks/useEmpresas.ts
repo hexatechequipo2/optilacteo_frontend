@@ -48,30 +48,39 @@ export function useEmpresas(soloMiEmpresa = false): UseEmpresasResult {
   const fetchEmpresas = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    
+
+    // Un gerente no tiene acceso al listado paginado (requiere admin):
+    // se le trae solo su propia empresa vía /empresa/me.
+    if (soloMiEmpresa) {
+      try {
+        const miEmpresa = await empresasService.getMine();
+        setEmpresas([miEmpresa]);
+        setMeta({ page: 1, limit: 1, total: 1, lastPage: 1 });
+      } catch (err) {
+        setError("No se pudo cargar la información de tu empresa.");
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     const planesValidos = ["starter", "pro", "enterprise"];
     const busquedaNormalizada = busqueda.trim();
-    
-    // Determinamos qué estamos buscando
     const esPlan = planesValidos.includes(busquedaNormalizada.toLowerCase());
-    const esCuit = /^\d{2}-\d{8}-\d{1}$/.test(busquedaNormalizada); // Ejemplo de validación simple de CUIT
+    const esCuit = /^\d{2}-\d{8}-\d{1}$/.test(busquedaNormalizada);
 
     try {
-      const response = await empresasService.getAll({ 
-        page, 
-        limit: 5, 
-        // Enviamos solo el parámetro que corresponde a la búsqueda
+      const response = await empresasService.getAll({
+        page,
+        limit: 5,
         name: (!esPlan && !esCuit) ? busquedaNormalizada || undefined : undefined,
         plan: esPlan ? busquedaNormalizada.toLowerCase() : undefined,
         cuit: esCuit ? busquedaNormalizada : undefined,
-        isActive: tabActivo === "Activas" ? true : tabActivo === "Suspendidas" ? false : undefined
+        isActive: tabActivo === "Activas" ? true : tabActivo === "Suspendidas" ? false : undefined,
       });
 
       setEmpresas(response.data);
-      setMeta({
-        ...response.meta,
-        lastPage: response.meta.totalPages 
-      });
+      setMeta({ ...response.meta, lastPage: response.meta.totalPages });
     } catch (err) {
       setError("No se pudieron cargar las empresas.");
     } finally {
