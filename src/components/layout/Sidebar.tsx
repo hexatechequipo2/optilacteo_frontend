@@ -44,7 +44,7 @@ export function Sidebar() {
           puedeVerUsuarios ? usuariosService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
           // Si planes/proveedores NO están paginados, devuelven array. Si lo están, ajusta a .meta.total
           puedeVerPlanes ? planesService.getAll() : [],
-          puedeVerProveedores ? proveedoresService.getAll() : [],
+          puedeVerProveedores ? proveedoresService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
         ]);
 
         setCounts({
@@ -53,7 +53,7 @@ export function Sidebar() {
           usuarios: usuariosRes.meta?.total ?? usuariosRes.data?.length ?? 0,
           // Si estos NO tienen paginación, siguen siendo arrays y usamos .length
           planes: (Array.isArray(planesRes) ? planesRes.length : 0),
-          proveedores: (Array.isArray(proveedoresRes) ? proveedoresRes.length : 0),
+          proveedores: proveedoresRes.meta?.total ?? 0,
         });
       } catch (error) {
         console.error("Error al cargar contadores:", error);

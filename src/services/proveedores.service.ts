@@ -2,26 +2,28 @@ import api from "./api";
 import type {
   Proveedor,
   CreateProveedorDto,
-  ProveedoresFilters,
+  PaginatedResponse,
 } from "../types/proveedor.types";
+import type { TipoProveedor } from "../types/proveedor.types";
+
+interface GetAllParams {
+  page: number;
+  limit: number;
+  tipo?: TipoProveedor;
+}
 
 export const proveedoresService = {
-  /**
-   * Límite fijo en 100 (el máximo permitido por PaginationQueryDto).
-   * Con filtro/búsqueda server-side esto pesa mucho menos: al reducirse
-   * el universo de resultados, es raro que se corten registros. Paginación
-   * real en la UI sigue pendiente para cuando eso no alcance.
-   */
-  getAll: async (filters: ProveedoresFilters = {}, limit = 100): Promise<Proveedor[]> => {
-    const { tipo, search } = filters;
-    const { data } = await api.get<{ data: Proveedor[] }>("/proveedores", {
+  // Llama directo al endpoint con los params que el backend realmente soporta
+  // (page, limit, tipo). No manda "search": eso se resuelve en el hook.
+  getAll: async ({ page, limit, tipo }: GetAllParams): Promise<PaginatedResponse<Proveedor>> => {
+    const { data } = await api.get<PaginatedResponse<Proveedor>>("/proveedores", {
       params: {
+        page,
         limit,
         ...(tipo && { tipo }),
-        ...(search?.trim() && { search: search.trim() }),
       },
     });
-    return data.data;
+    return data;
   },
 
   create: async (dto: CreateProveedorDto): Promise<Proveedor> => {
