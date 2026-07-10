@@ -10,6 +10,22 @@ export interface CreateEmpresaDto {
   plan: string;
 }
 
+export interface EmpresaFilters {
+  page?: number;
+  limit?: number;
+  name?: string;
+  cuit?: string;
+  isActive?: boolean;
+  plan?: string;
+}
+
+export interface Meta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export const empresasService = {
   /**
    * Trae todas las empresas registradas (solo Administrador).
@@ -18,11 +34,11 @@ export const empresasService = {
    * valor, van a faltar registros en la tabla de EmpresasPage.
    * Solución definitiva pendiente: implementar paginación real en la UI.
    */
-  getAll: async (limit = 100): Promise<EmpresaType[]> => {
-    const { data } = await api.get<{ data: EmpresaType[] }>("/empresa", {
-      params: { limit },
+  getAll: async (params: any): Promise<{ data: EmpresaType[], meta: Meta }> => {
+    const { data } = await api.get<{ data: EmpresaType[], meta: Meta }>("/empresa", {
+      params,
     });
-    return data.data;
+    return data;
   },
 
   /** Trae la empresa del usuario autenticado (Administrador o Gerente) */
