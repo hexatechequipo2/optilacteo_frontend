@@ -38,18 +38,22 @@ export function Sidebar() {
   useEffect(() => {
     async function loadCounts() {
       try {
-        const [empresas, usuarios, planes, proveedores] = await Promise.all([
-          puedeVerEmpresas ? empresasService.getAll() : Promise.resolve([]),
-          puedeVerUsuarios ? usuariosService.getAll({ page: 1, limit: 1 }) : Promise.resolve({ data: [], meta: { total: 0 } }),
-          puedeVerPlanes ? planesService.getAll() : Promise.resolve([]),
-          puedeVerProveedores ? proveedoresService.getAll() : Promise.resolve([]),
+        // Ejecutamos las llamadas
+        const [empresasRes, usuariosRes, planesRes, proveedoresRes] = await Promise.all([
+          puedeVerEmpresas ? empresasService.getAll({ limit: 1 }) : { data: [], meta: { total: 0 } },
+          puedeVerUsuarios ? usuariosService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
+          // Si planes/proveedores NO están paginados, devuelven array. Si lo están, ajusta a .meta.total
+          puedeVerPlanes ? planesService.getAll() : [],
+          puedeVerProveedores ? proveedoresService.getAll() : [],
         ]);
 
         setCounts({
-          empresas: empresas.length,
-          usuarios: usuarios.meta.total,
-          planes: planes.length,
-          proveedores: proveedores.length,
+          // Accedemos a meta.total si existe, sino al length del array de datos
+          empresas: empresasRes.meta?.total ?? empresasRes.data?.length ?? 0,
+          usuarios: usuariosRes.meta?.total ?? usuariosRes.data?.length ?? 0,
+          // Si estos NO tienen paginación, siguen siendo arrays y usamos .length
+          planes: (Array.isArray(planesRes) ? planesRes.length : 0),
+          proveedores: (Array.isArray(proveedoresRes) ? proveedoresRes.length : 0),
         });
       } catch (error) {
         console.error("Error al cargar contadores:", error);
@@ -58,7 +62,6 @@ export function Sidebar() {
 
     loadCounts();
   }, [puedeVerEmpresas, puedeVerUsuarios, puedeVerPlanes, puedeVerProveedores]);
-
   const navItems = [
     ...(puedeVerDashboard
       ? [{ label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" }]
