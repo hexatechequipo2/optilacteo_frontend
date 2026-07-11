@@ -7,6 +7,7 @@ import { SectionHeader } from "../../../components/ui/SectionHeader";
 import type { EmpresaType } from "../../../types/empresa.types";
 import type { UsuarioType } from "../../../types/usuario.types";
 import type { RolType } from "../../../types/rol.types";
+import axios from "axios";
 
 export interface UsuarioFormValues {
   rolId: number;
@@ -111,7 +112,24 @@ export function UsuarioForm({
 
     try {
       await onSubmit({ name, email, password, rolId, empresaId, isActive });
-    } catch {
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const data = error.response?.data;
+
+        if (error.response?.status === 409) {
+          if (data.field === "email") {
+            setErrors((prev) => ({
+              ...prev,
+              email: data.message,
+            }));
+            return;
+          }
+
+          setServerError(data.message);
+          return;
+        }
+      }
+
       setServerError("No se pudo guardar el usuario. Intentá nuevamente.");
     }
   };
