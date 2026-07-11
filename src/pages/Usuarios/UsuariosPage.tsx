@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Layout } from "../../components/layout/Layout";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
@@ -34,12 +34,23 @@ export default function UsuariosPage() {
   } = useUsuarios();
 
   const { user } = useAuth();
-  const esGerente = (user?.rolNombre ?? "").trim().toLowerCase() === "gerente";
+  
+  // Lógica de roles corregida
+  const rolActual = (user?.rolNombre ?? "").trim().toLowerCase();
+  const esAdministrador = rolActual === "administrador";
+  const esGerente = rolActual === "gerente";
 
   const { empresas } = useEmpresas(esGerente);
   const { roles, updatePermiso } = useRoles();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [usuarioEnEdicion, setUsuarioEnEdicion] = useState<UsuarioType | null>(null);
+
+  // Asegurar que el filtro sea el correcto para no administradores
+  useEffect(() => {
+    if (!esAdministrador && empresaFiltro !== TODAS_LAS_EMPRESAS) {
+      setEmpresaFiltro(TODAS_LAS_EMPRESAS);
+    }
+  }, [esAdministrador, empresaFiltro, setEmpresaFiltro]);
 
   const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
 
@@ -55,7 +66,6 @@ export default function UsuariosPage() {
       label: empresa.name,
     })),
   ];
-  console.log("Estado actual del meta:", meta);
 
   return (
     <Layout breadcrumb="Consola > Usuarios">
@@ -87,15 +97,18 @@ export default function UsuariosPage() {
           />
         </div>
         
-        <div className="w-52 flex-shrink-0">
-          <Select
-            id="usuarios-empresa-filtro"
-            options={empresaOptions}
-            value={empresaFiltro}
-            onChange={(e) => setEmpresaFiltro(e.target.value)}
-            className="!w-full !rounded-full !py-2 !px-4 !border-slate-300 !text-sm dark:!border-slate-700"
-          />
-        </div>
+        {/* Solo renderizamos el select si es administrador */}
+        {esAdministrador && (
+          <div className="w-52 flex-shrink-0">
+            <Select
+              id="usuarios-empresa-filtro"
+              options={empresaOptions}
+              value={empresaFiltro}
+              onChange={(e) => setEmpresaFiltro(e.target.value)}
+              className="!w-full !rounded-full !py-2 !px-4 !border-slate-300 !text-sm dark:!border-slate-700"
+            />
+          </div>
+        )}
       </div>
 
       {error && (
@@ -111,13 +124,12 @@ export default function UsuariosPage() {
       ) : (
         <>
           <UsuariosTable
-            // Filtramos aquí: excluimos el usuario logueado (user?.id)
+            // Filtramos al usuario logueado para que no aparezca en la lista
             usuarios={usuarios.filter((u) => u.id !== user?.id)}
             onEdit={(usuario: UsuarioType) => setUsuarioEnEdicion(usuario)}
             onUnlock={unlockUsuario}
           />
           
-          {/* Paginación */}
           <div className="mt-6 flex items-center justify-end border-t border-slate-200 pt-4 dark:border-slate-800">
             <div className="flex items-center gap-3">
               <button
