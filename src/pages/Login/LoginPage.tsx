@@ -67,20 +67,21 @@ export default function LoginPage() {
           const { status, data } = error.response;
 
           switch (status) {
-            case 401:
-              setServerError("Email o contraseña incorrectos");
+            case 401: {
+              const message = data?.message ?? "";
+              if (message.includes("inactivo")) {
+                setServerError(
+                  "Tu cuenta está inactiva. Contactá a tu Gerente o al equipo de OptiLácteo para reactivarla.",
+                );
+              } else if (message.includes("bloqueada")) {
+                setServerError(
+                  "Tu cuenta está bloqueada temporalmente por intentos fallidos. Contactá a tu Gerente o al Administrador para desbloquearla.",
+                );
+              } else {
+                setServerError("Email o contraseña incorrectos");
+              }
               break;
-            case 403:
-              // Cuenta bloqueada por intentos fallidos o usuario inactivo
-              setServerError(
-                data?.message ?? "No tenés permiso para iniciar sesión.",
-              );
-              break;
-            case 429:
-              setServerError(
-                "Demasiados intentos. Cuenta bloqueada. Solicitar ayuda con Administrador o Gerente.",
-              );
-              break;
+            }
             default:
               setServerError(data?.message ?? "Ocurrió un error inesperado.");
           }
