@@ -111,7 +111,8 @@ export default function UsuariosPage() {
       ) : (
         <>
           <UsuariosTable
-            usuarios={usuarios}
+            // Filtramos aquí: excluimos el usuario logueado (user?.id)
+            usuarios={usuarios.filter((u) => u.id !== user?.id)}
             onEdit={(usuario: UsuarioType) => setUsuarioEnEdicion(usuario)}
             onUnlock={unlockUsuario}
           />
