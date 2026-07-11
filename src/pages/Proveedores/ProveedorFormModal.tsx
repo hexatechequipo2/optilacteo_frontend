@@ -11,7 +11,11 @@ import type {
   EstadoProveedor,
   CreateProveedorDto,
 } from "../../types/proveedor.types";
-
+import {
+  PROVINCIAS,
+  LOCALIDADES_POR_PROVINCIA,
+} from "../../data/localidades-argentina";
+import { Combobox } from "../../components/ui/Combobox";
 // ─── Datos estáticos ────────────────────────────────────────────────────────
 
 const TIPOS = [
@@ -37,36 +41,12 @@ const ESTADO_SELECTED_CLASS: Record<EstadoProveedor, string> = {
   suspendida: "border-slate-400 bg-slate-100 text-slate-600 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-400",
 };
 
-const PROVINCIAS = [
-  "Buenos Aires",
-  "Catamarca",
-  "Chaco",
-  "Chubut",
-  "Ciudad Autónoma de Buenos Aires",
-  "Córdoba",
-  "Corrientes",
-  "Entre Ríos",
-  "Formosa",
-  "Jujuy",
-  "La Pampa",
-  "La Rioja",
-  "Mendoza",
-  "Misiones",
-  "Neuquén",
-  "Río Negro",
-  "Salta",
-  "San Juan",
-  "San Luis",
-  "Santa Cruz",
-  "Santa Fe",
-  "Santiago del Estero",
-  "Tierra del Fuego",
-  "Tucumán",
-];
-
 const PROVINCIA_OPTIONS = [
   { value: "", label: "Seleccioná una provincia" },
-  ...PROVINCIAS.map((p) => ({ value: p, label: p })),
+  ...PROVINCIAS.map((provincia) => ({
+    value: provincia,
+    label: provincia,
+  })),
 ];
 
 function capacidadLabel(tipo: TipoProveedor): string {
@@ -225,6 +205,14 @@ export function ProveedorFormModal({
 
   const showCapacidad =
     values.tipo === "tambo" || values.tipo === "transporte";
+
+  const localidadesDisponibles = values.provincia
+  ? Array.from(
+      (LOCALIDADES_POR_PROVINCIA as Record<string, readonly string[]>)[
+        values.provincia
+      ] ?? []
+    )
+  : [];
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -400,14 +388,26 @@ export function ProveedorFormModal({
                   label="Provincia"
                   options={PROVINCIA_OPTIONS}
                   value={values.provincia}
-                  onChange={set("provincia")}
+                  onChange={(e) =>
+                    setValues((prev) => ({
+                      ...prev,
+                      provincia: e.target.value,
+                      localidad: "",
+                    }))
+                  }
                 />
-                <Input
+                <Combobox
                   id="prov-localidad"
                   label="Localidad"
-                  placeholder="Ej: Villa María"
+                  placeholder="Buscar localidad..."
                   value={values.localidad}
-                  onChange={set("localidad")}
+                  onChange={(localidad) =>
+                    setValues((prev) => ({
+                      ...prev,
+                      localidad,
+                    }))
+                  }
+                  options={localidadesDisponibles}
                 />
               </div>
             </div>

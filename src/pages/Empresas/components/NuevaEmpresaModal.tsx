@@ -4,7 +4,7 @@ import { Modal } from "../../../components/ui/Modal";
 import { Input } from "../../../components/ui/Input";
 import { RadioCard } from "../../../components/ui/RadioCard";
 import { Combobox } from "../../../components/ui/Combobox";
-import { LOCALIDADES_CORDOBA } from "../../../data/localidades-cordoba";
+import { LOCALIDADES_POR_PROVINCIA } from "../../../data/localidades-argentina";
 import type { CreateEmpresaDto } from "../../../services/empresa.service";
 
 // Formato CUIT argentino: XX-XXXXXXXX-X
@@ -25,6 +25,7 @@ const PLANES = [
   { value: "pro", label: "Pro" },
   { value: "enterprise", label: "Enterprise" },
 ];
+
 
 interface FormValues {
   name: string;
@@ -179,7 +180,7 @@ export function NuevaEmpresaModal({
           placeholder="Buscar localidad..."
           value={values.localidad}
           onChange={(v) => setValues((prev) => ({ ...prev, localidad: v }))}
-          options={LOCALIDADES_CORDOBA}
+          options={[...LOCALIDADES_POR_PROVINCIA["Cordoba"]]}
         />
 
         <Input

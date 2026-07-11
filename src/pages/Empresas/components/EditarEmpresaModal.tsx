@@ -6,7 +6,7 @@ import { RadioCard } from "../../../components/ui/RadioCard";
 import { Toggle } from "../../../components/ui/Toggle";
 import { SectionHeader } from "../../../components/ui/SectionHeader";
 import { Combobox } from "../../../components/ui/Combobox";
-import { LOCALIDADES_CORDOBA } from "../../../data/localidades-cordoba";
+import { LOCALIDADES_POR_PROVINCIA } from "../../../data/localidades-argentina";
 import type { EmpresaType, UpdateEmpresaDto } from "../../../types/empresa.types";
 
 const PLANES = [
@@ -14,6 +14,9 @@ const PLANES = [
   { value: "pro", label: "Pro" },
   { value: "enterprise", label: "Enterprise" },
 ];
+
+const LOCALIDADES_CORDOBA =
+  LOCALIDADES_POR_PROVINCIA["Cordoba"] as readonly string[];
 
 // Formato CUIT argentino: XX-XXXXXXXX-X
 function formatCuit(value: string): string {
@@ -215,7 +218,7 @@ export function EditarEmpresaModal({
             placeholder="Buscar localidad..."
             value={values.localidad}
             onChange={(v) => setValues((prev) => ({ ...prev, localidad: v }))}
-            options={LOCALIDADES_CORDOBA}
+            options={[...LOCALIDADES_POR_PROVINCIA["Cordoba"]]}
           />
           <Input
             id="edit-empresa-calle"
