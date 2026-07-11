@@ -1,3 +1,4 @@
+import { Pencil } from "lucide-react";
 import type { UsuarioType } from "../../../types/usuario.types";
 
 interface UsuariosTableProps {
@@ -124,14 +125,13 @@ export function UsuariosTable({ usuarios, onEdit, onUnlock }: UsuariosTableProps
                       Desbloquear
                     </button>
                   )}
-
                   <button
                     type="button"
                     onClick={() => onEdit(usuario)}
                     aria-label={`Editar ${usuario.name}`}
                     className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
                   >
-                    ✎
+                    <Pencil className="h-4 w-4" />
                   </button>
                 </div>
               </td>
