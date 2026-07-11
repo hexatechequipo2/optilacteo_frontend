@@ -4,6 +4,7 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { SectionHeader } from "../../components/ui/SectionHeader";
 import type { EmpresaType } from "../../types/empresa.types";
+import axios from "axios";
 import type {
   Proveedor,
   TipoProveedor,
@@ -248,9 +249,35 @@ export function ProveedorFormModal({
         ...(values.capacidad && { capacidad: Number(values.capacidad) }),
       });
       onClose();
-    } catch {
-      setServerError("No se pudo guardar el proveedor. Intentá nuevamente.");
-    }
+    } catch (error) {
+        if (axios.isAxiosError(error)) {
+          const data = error.response?.data;
+
+          if (error.response?.status === 409) {
+
+            if (data.field === "cuit") {
+              setErrors(prev => ({
+                ...prev,
+                cuit: data.message,
+              }));
+              return;
+            }
+
+            if (data.field === "razonSocial") {
+              setErrors(prev => ({
+                ...prev,
+                razonSocial: data.message,
+              }));
+              return;
+            }
+
+            setServerError(data.message);
+            return;
+          }
+        }
+
+        setServerError("No se pudo guardar el proveedor. Intentá nuevamente.");
+      }
   };
 
   return (
