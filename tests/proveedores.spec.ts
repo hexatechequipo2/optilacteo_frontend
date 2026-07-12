@@ -19,7 +19,7 @@ const PROVEEDORES_MOCK = {
       empresaId: 1,
       capacidad: 5000,
       localidad: "Villa María",
-      provincia: "Córdoba",
+      provincia: "Cordoba",
       estado: "activa",
       telefono: "3534000000",
       emailContacto: "contacto@elroble.com",
@@ -136,4 +136,488 @@ test.describe("ProveedoresPage", () => {
     // ProveedorFormModal no está en el contexto que me pasaste — completar
     // según los campos reales una vez que lo compartas.
   });
+  test.describe("ProveedorFormModal", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await loginAsAdministrador(page);
+    await page.goto("/proveedores");
+  });
+
+  test("abre el modal para crear un proveedor", async ({ page }) => {
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await expect(
+      dialog.getByRole("heading", { name: "Nuevo proveedor" }),
+    ).toBeVisible();
+
+    await expect(dialog.getByLabel("Razón social *")).toBeVisible();
+    await expect(dialog.getByLabel("CUIT *")).toBeVisible();
+    await expect(dialog.getByLabel("Empresa asignada *")).toBeVisible();
+
+    await expect(
+      dialog.getByRole("button", { name: "Crear proveedor" }),
+    ).toBeVisible();
+  });
+
+  test("valida los campos obligatorios", async ({ page }) => {
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog
+      .getByRole("button", { name: "Crear proveedor" })
+      .click();
+
+    await expect(
+      dialog.getByText("La razón social es obligatoria"),
+    ).toBeVisible();
+
+    await expect(
+      dialog.getByText("El CUIT es obligatorio"),
+    ).toBeVisible();
+
+    await expect(
+      dialog.getByText("La empresa es obligatoria"),
+    ).toBeVisible();
+  });
+
+  test("valida el formato del CUIT", async ({ page }) => {
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog.getByLabel("Razón social *").fill("Proveedor Test");
+    await dialog.getByLabel("CUIT *").fill("30123");
+    await dialog.getByLabel("Empresa asignada *").selectOption("1");
+
+    await dialog
+      .getByRole("button", { name: "Crear proveedor" })
+      .click();
+
+    await expect(
+      dialog.getByText("El CUIT debe tener el formato XX-XXXXXXXX-X"),
+    ).toBeVisible();
+  });
+
+  test("formatea el CUIT mientras se escribe", async ({ page }) => {
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const cuit = page.getByRole("dialog").getByLabel("CUIT *");
+
+    await cuit.fill("30123456789");
+
+    await expect(cuit).toHaveValue("30-12345678-9");
+  });
+
+  test("Tambo muestra volumen de entrega como capacidad", async ({
+    page,
+  }) => {
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await expect(
+      dialog.getByLabel("Volumen de entrega (L/día)"),
+    ).toBeVisible();
+  });
+
+  test("Transporte muestra viajes por semana como capacidad", async ({
+    page,
+  }) => {
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog
+      .getByRole("button", { name: "Transporte", exact: true })
+      .click();
+
+    await expect(
+      dialog.getByLabel("Viajes por semana"),
+    ).toBeVisible();
+
+    await expect(
+      dialog.getByLabel("Volumen de entrega (L/día)"),
+    ).not.toBeVisible();
+  });
+
+  test("Insumos no muestra el campo capacidad", async ({ page }) => {
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog
+      .getByRole("button", { name: "Insumos", exact: true })
+      .click();
+
+    await expect(
+      dialog.getByText("CAPACIDAD", { exact: true }),
+    ).not.toBeVisible();
+  });
+
+  test("Laboratorio no muestra el campo capacidad", async ({ page }) => {
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog
+      .getByRole("button", { name: "Laboratorio", exact: true })
+      .click();
+
+    await expect(
+      dialog.getByText("CAPACIDAD", { exact: true }),
+    ).not.toBeVisible();
+  });
+
+  test("crea un proveedor enviando los datos correctos", async ({
+    page,
+  }) => {
+    let requestBody: Record<string, unknown> | undefined;
+
+    await page.route("**/proveedores", async (route) => {
+      if (route.request().method() !== "POST") {
+        return route.continue();
+      }
+
+      requestBody = route.request().postDataJSON();
+
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 3,
+          ...requestBody,
+        }),
+      });
+    });
+
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog
+      .getByLabel("Razón social *")
+      .fill("  Tambo Nuevo  ");
+
+    await dialog.getByLabel("CUIT *").fill("30333333333");
+
+    await dialog
+      .getByLabel("Teléfono")
+      .fill("  3534111111  ");
+
+    await dialog
+      .getByLabel("Email de contacto")
+      .fill("  contacto@nuevo.com  ");
+
+    await dialog
+      .getByLabel("Empresa asignada *")
+      .selectOption("1");
+
+    await dialog
+      .getByLabel("Provincia")
+      .selectOption({ label: "Cordoba" });
+
+    await dialog
+      .getByLabel("Volumen de entrega (L/día)")
+      .fill("6000");
+
+    await dialog
+      .getByRole("button", { name: "Trial", exact: true })
+      .click();
+
+    await dialog
+      .getByRole("button", { name: "Crear proveedor" })
+      .click();
+
+    await expect.poll(() => requestBody).toEqual({
+      tipo: "tambo",
+      razonSocial: "Tambo Nuevo",
+      cuit: "30-33333333-3",
+      empresaId: 1,
+      estado: "trial",
+      telefono: "3534111111",
+      emailContacto: "contacto@nuevo.com",
+      provincia: "Cordoba",
+      capacidad: 6000,
+    });
+  });
+
+  test("no envía campos opcionales vacíos", async ({ page }) => {
+    let requestBody: Record<string, unknown> | undefined;
+
+    await page.route("**/proveedores", async (route) => {
+      if (route.request().method() !== "POST") {
+        return route.continue();
+      }
+
+      requestBody = route.request().postDataJSON();
+
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 3,
+          ...requestBody,
+        }),
+      });
+    });
+
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog.getByLabel("Razón social *").fill("Proveedor Mínimo");
+    await dialog.getByLabel("CUIT *").fill("30333333333");
+
+    await dialog
+      .getByLabel("Empresa asignada *")
+      .selectOption("1");
+
+    await dialog
+      .getByRole("button", { name: "Insumos", exact: true })
+      .click();
+
+    await dialog
+      .getByRole("button", { name: "Crear proveedor" })
+      .click();
+
+    await expect.poll(() => requestBody).toEqual({
+      tipo: "insumos",
+      razonSocial: "Proveedor Mínimo",
+      cuit: "30-33333333-3",
+      empresaId: 1,
+      estado: "activa",
+    });
+  });
+
+  test("un error 409 de CUIT se muestra en el campo CUIT", async ({
+    page,
+  }) => {
+    await page.route("**/proveedores", async (route) => {
+      if (route.request().method() !== "POST") {
+        return route.continue();
+      }
+
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({
+          field: "cuit",
+          message: "Ya existe un proveedor con ese CUIT",
+        }),
+      });
+    });
+
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog.getByLabel("Razón social *").fill("Proveedor Test");
+    await dialog.getByLabel("CUIT *").fill("30111111111");
+
+    await dialog
+      .getByLabel("Empresa asignada *")
+      .selectOption("1");
+
+    await dialog
+      .getByRole("button", { name: "Crear proveedor" })
+      .click();
+
+    await expect(
+      dialog.getByText("Ya existe un proveedor con ese CUIT"),
+    ).toBeVisible();
+  });
+
+  test("un error 409 de razón social se muestra en el campo", async ({
+    page,
+  }) => {
+    await page.route("**/proveedores", async (route) => {
+      if (route.request().method() !== "POST") {
+        return route.continue();
+      }
+
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({
+          field: "razonSocial",
+          message: "Ya existe un proveedor con esa razón social",
+        }),
+      });
+    });
+
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog.getByLabel("Razón social *").fill("Tambo El Roble");
+    await dialog.getByLabel("CUIT *").fill("30333333333");
+
+    await dialog
+      .getByLabel("Empresa asignada *")
+      .selectOption("1");
+
+    await dialog
+      .getByRole("button", { name: "Crear proveedor" })
+      .click();
+
+    await expect(
+      dialog.getByText(
+        "Ya existe un proveedor con esa razón social",
+      ),
+    ).toBeVisible();
+  });
+
+  test("muestra error genérico ante un error inesperado", async ({
+    page,
+  }) => {
+    await page.route("**/proveedores", async (route) => {
+      if (route.request().method() !== "POST") {
+        return route.continue();
+      }
+
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({
+          message: "Internal Server Error",
+        }),
+      });
+    });
+
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog.getByLabel("Razón social *").fill("Proveedor Test");
+    await dialog.getByLabel("CUIT *").fill("30333333333");
+
+    await dialog
+      .getByLabel("Empresa asignada *")
+      .selectOption("1");
+
+    await dialog
+      .getByRole("button", { name: "Crear proveedor" })
+      .click();
+
+    await expect(
+      dialog.getByText(
+        "No se pudo guardar el proveedor. Intentá nuevamente.",
+      ),
+    ).toBeVisible();
+  });
+
+  test("Cancelar cierra el modal", async ({ page }) => {
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog
+      .getByRole("button", { name: "Cancelar" })
+      .click();
+
+    await expect(dialog).not.toBeVisible();
+  });
+
+  test("Escape cierra el modal", async ({ page }) => {
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await expect(dialog).toBeVisible();
+
+    await page.keyboard.press("Escape");
+
+    await expect(dialog).not.toBeVisible();
+  });
+
+  test("editar un proveedor carga sus datos actuales", async ({ page }) => {
+    await page
+      .getByRole("button", { name: "Editar Tambo El Roble" })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await expect(
+      dialog.getByRole("heading", { name: "Editar proveedor" }),
+    ).toBeVisible();
+
+    await expect(
+      dialog.getByLabel("Razón social *"),
+    ).toHaveValue("Tambo El Roble");
+
+    await expect(dialog.getByLabel("CUIT *")).toHaveValue(
+      "30-11111111-1",
+    );
+
+    await expect(dialog.getByLabel("Teléfono")).toHaveValue(
+      "3534000000",
+    );
+
+    await expect(
+      dialog.getByLabel("Email de contacto"),
+    ).toHaveValue("contacto@elroble.com");
+
+    await expect(
+      dialog.getByLabel("Empresa asignada *"),
+    ).toHaveValue("1");
+
+    await expect(
+      dialog.getByLabel("Volumen de entrega (L/día)"),
+    ).toHaveValue("5000");
+  });
+
+  test("editar un transporte carga viajes por semana", async ({ page }) => {
+    await page
+      .getByRole("button", {
+        name: "Editar Transportes Rápido SA",
+      })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await expect(
+      dialog.getByLabel("Viajes por semana"),
+    ).toHaveValue("12");
+
+    await expect(
+      dialog.getByRole("button", {
+        name: "Trial",
+        exact: true,
+      }),
+    ).toBeVisible();
+  });
+});
 });
