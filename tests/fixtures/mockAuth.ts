@@ -62,8 +62,8 @@ export async function loginAs(page: Page, user: MockUser) {
   await page.locator("#password").fill("password123");
   await page.getByRole("button", { name: "Ingresar a la consola" }).click();
 
-  // LoginPage navega a /usuarios con replace tras un login exitoso
-  await page.waitForURL("/usuarios");
+  // LoginPage navega a /dashboard con replace tras un login exitoso
+  await page.waitForURL("/dashboard");
 }
 
 export async function loginAsAdministrador(page: Page) {

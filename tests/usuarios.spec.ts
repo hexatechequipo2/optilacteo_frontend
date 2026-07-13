@@ -182,7 +182,7 @@ test.describe("NuevoUsuarioModal", () => {
     const form = page.locator("#usuario-form");
 
     await form
-      .getByPlaceholder("Ej. Lucía Fernández")
+      .getByPlaceholder("Ej: Lucía Fernández")
       .fill("Lucía Fernández");
 
     await form
@@ -224,7 +224,7 @@ test.describe("NuevoUsuarioModal", () => {
     const form = await abrirNuevoUsuario(page);
 
     await expect(
-      form.getByPlaceholder("Ej. Lucía Fernández"),
+      form.getByPlaceholder("Ej: Lucía Fernández"),
     ).toBeVisible();
 
     await expect(
@@ -292,7 +292,7 @@ test.describe("NuevoUsuarioModal", () => {
     const form = await abrirNuevoUsuario(page);
 
     await form
-      .getByPlaceholder("Ej. Lucía Fernández")
+      .getByPlaceholder("Ej: Lucía Fernández")
       .fill("Lucía Fernández");
 
     await form
@@ -324,7 +324,7 @@ test.describe("NuevoUsuarioModal", () => {
     const form = await abrirNuevoUsuario(page);
 
     await form
-      .getByPlaceholder("Ej. Lucía Fernández")
+      .getByPlaceholder("Ej: Lucía Fernández")
       .fill("Lucía Fernández");
 
     await form
