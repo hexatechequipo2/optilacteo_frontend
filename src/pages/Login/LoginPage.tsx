@@ -55,7 +55,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(email, password, rememberMe);
-      navigate("/usuarios", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (!error.response) {
