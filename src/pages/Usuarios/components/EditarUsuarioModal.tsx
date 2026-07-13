@@ -48,16 +48,17 @@ export function EditarUsuarioModal({
   };
 
   return (
-    <Modal 
-      isOpen={!!usuario} 
-      title="Editar usuario" 
+    <Modal
+      isOpen={!!usuario}
+      title="Editar usuario"
+      description="Editá la información del usuario y su estado."
       onClose={onClose}
       footer={
-        <div className="flex gap-3 justify-end">
+        <div className="flex justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-lg border border-slate-200 transition dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Cancelar
           </button>
@@ -65,17 +66,13 @@ export function EditarUsuarioModal({
             type="submit"
             form="usuario-form-edit" // Debe coincidir con el id del formulario abajo
             disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting ? "Guardando..." : "Guardar cambios"}
           </button>
         </div>
       }
     >
-      <p className="text-sm text-slate-500 mb-6 dark:text-slate-400">
-        Editá la información del usuario y su estado.
-      </p>
-
       <UsuarioForm
         id="usuario-form-edit" // ID único para este form
         usuario={usuario}
