@@ -455,6 +455,8 @@ test.describe("EmpresasPage", () => {
 
     await expect(page.getByText("Empresa duplicada")).not.toBeVisible();
   });
+  });
+
   async function abrirEditarEmpresa(page: Page, empresa = "Tambo San José") {
   const row = page.getByRole("row").filter({ hasText: empresa });
 
@@ -815,6 +817,5 @@ test.describe("EmpresasPage", () => {
         page.getByText("Editar empresa", { exact: true }),
       ).not.toBeVisible();
     });
-  });
   });
 });
