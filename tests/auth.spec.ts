@@ -20,7 +20,7 @@ test.describe("LoginPage", () => {
     await expect(page.getByText("El email no es válido")).toBeVisible();
   });
 
-  test("login exitoso redirige a /usuarios", async ({ page }) => {
+  test("login exitoso redirige a /dashboard", async ({ page }) => {
     await page.route("**/login", async (route) => {
       if (route.request().method() !== "POST") return route.continue();
       await route.fulfill({
@@ -39,7 +39,7 @@ test.describe("LoginPage", () => {
     await page.locator("#password").fill("password123");
     await page.getByRole("button", { name: "Ingresar a la consola" }).click();
 
-    await expect(page).toHaveURL("/usuarios");
+    await expect(page).toHaveURL("/dashboard");
   });
 
   test("credenciales incorrectas muestra mensaje genérico", async ({ page }) => {
