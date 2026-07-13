@@ -38,3 +38,5 @@ dist-ssr
 # Cobertura (Istanbul/nyc)
 /.nyc_output/
 /coverage/*.code-workspace
+coverage/
+*.code-workspace
