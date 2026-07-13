@@ -4,6 +4,7 @@ import { Modal } from "../../../components/ui/Modal";
 import { Input } from "../../../components/ui/Input";
 import { RadioCard } from "../../../components/ui/RadioCard";
 import { Combobox } from "../../../components/ui/Combobox";
+import { SectionHeader } from "../../../components/ui/SectionHeader";
 import { LOCALIDADES_POR_PROVINCIA } from "../../../data/localidades-argentina";
 import type { CreateEmpresaDto } from "../../../services/empresa.service";
 
@@ -123,6 +124,7 @@ export function NuevaEmpresaModal({
     <Modal
       isOpen={isOpen}
       title="Nueva empresa"
+      description="Completá los datos para registrar una nueva organización en la plataforma."
       onClose={handleClose}
       footer={
         <div className="flex justify-end gap-3">
@@ -144,72 +146,71 @@ export function NuevaEmpresaModal({
         </div>
       }
     >
-      <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
-        Completá los datos para registrar una nueva organización en la plataforma.
-      </p>
-
       <form
         id="empresa-form"
         onSubmit={handleSubmit}
         noValidate
-        className="flex flex-col gap-5"
+        className="flex flex-col gap-6"
       >
-        <Input
-          id="empresa-name"
-          label="Nombre *"
-          placeholder="Ej: Lácteos del Norte S.A."
-          value={values.name}
-          onChange={set("name")}
-          error={errors.name}
-          autoFocus
-        />
+        <div className="flex flex-col gap-3">
+          <SectionHeader>DATOS GENERALES</SectionHeader>
+          <Input
+            id="empresa-name"
+            label="Nombre *"
+            placeholder="Ej: Lácteos del Norte S.A."
+            value={values.name}
+            onChange={set("name")}
+            error={errors.name}
+            autoFocus
+          />
 
-        <Input
-          id="empresa-cuit"
-          label="CUIT"
-          placeholder="Ej: 30-12345678-9"
-          value={values.cuit}
-          onChange={(e) =>
-            setValues((prev) => ({ ...prev, cuit: formatCuit(e.target.value) }))
-          }
-        />
+          <Input
+            id="empresa-cuit"
+            label="CUIT"
+            placeholder="Ej: 30-12345678-9"
+            value={values.cuit}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, cuit: formatCuit(e.target.value) }))
+            }
+          />
 
-        <Combobox
-          id="empresa-localidad"
-          label="Localidad"
-          placeholder="Buscar localidad..."
-          value={values.localidad}
-          onChange={(v) => setValues((prev) => ({ ...prev, localidad: v }))}
-          options={[...LOCALIDADES_POR_PROVINCIA["Cordoba"]]}
-        />
+          <Combobox
+            id="empresa-localidad"
+            label="Localidad"
+            placeholder="Buscar localidad..."
+            value={values.localidad}
+            onChange={(v) => setValues((prev) => ({ ...prev, localidad: v }))}
+            options={[...LOCALIDADES_POR_PROVINCIA["Cordoba"]]}
+          />
 
-        <Input
-          id="empresa-calle"
-          label="Dirección"
-          placeholder="Ej: Av. Colón 1234"
-          value={values.calle}
-          onChange={set("calle")}
-        />
+          <Input
+            id="empresa-calle"
+            label="Dirección"
+            placeholder="Ej: Av. Colón 1234"
+            value={values.calle}
+            onChange={set("calle")}
+          />
 
-        <Input
-          id="empresa-email"
-          type="email"
-          label="Email de contacto"
-          placeholder="contacto@empresa.com"
-          value={values.email}
-          onChange={set("email")}
-        />
+          <Input
+            id="empresa-email"
+            type="email"
+            label="Email de contacto"
+            placeholder="contacto@empresa.com"
+            value={values.email}
+            onChange={set("email")}
+          />
 
-        <Input
-          id="empresa-telefono"
-          label="Teléfono"
-          placeholder="Ej: +54 351 1234567"
-          value={values.telefono}
-          onChange={set("telefono")}
-        />
+          <Input
+            id="empresa-telefono"
+            label="Teléfono"
+            placeholder="Ej: +54 351 1234567"
+            value={values.telefono}
+            onChange={set("telefono")}
+          />
+        </div>
 
-        <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Plan</p>
+        <div className="flex flex-col gap-3">
+          <SectionHeader>PLAN</SectionHeader>
           <div className="flex flex-col gap-2">
             {PLANES.map((plan) => (
               <RadioCard

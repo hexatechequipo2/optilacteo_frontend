@@ -140,19 +140,19 @@ export function UsuarioForm({
   ];
 
   return (
-    <form id={id} onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+    <form id={id} onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
       <div className="flex flex-col gap-3">
         <SectionHeader>IDENTIDAD</SectionHeader>
         <Input
-          label="Nombre y apellido"
-          placeholder="Ej. Lucía Fernández"
+          label="Nombre y apellido *"
+          placeholder="Ej: Lucía Fernández"
           value={name}
           onChange={(e) => setName(e.target.value)}
           error={errors.name}
         />
         <Input
           type="email"
-          label="Correo electrónico"
+          label="Correo electrónico *"
           placeholder="usuario@empresa.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -161,7 +161,7 @@ export function UsuarioForm({
         {!isEditing && (
           <Input
             type="password"
-            label="Contraseña"
+            label="Contraseña *"
             placeholder="Mínimo 8 caracteres"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -173,7 +173,7 @@ export function UsuarioForm({
       <div className="flex flex-col gap-3">
         <SectionHeader>EMPRESA ASIGNADA</SectionHeader>
         <Select
-          label="Organización"
+          label="Organización *"
           options={empresaOptions}
           value={empresaId}
           onChange={(e) => setEmpresaId(e.target.value)}

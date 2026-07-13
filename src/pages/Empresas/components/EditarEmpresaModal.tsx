@@ -162,6 +162,7 @@ export function EditarEmpresaModal({
     <Modal
       isOpen={!!empresa}
       title="Editar empresa"
+      description="Editá la información de la organización."
       onClose={onClose}
       footer={
         <div className="flex justify-end gap-3">
@@ -183,15 +184,11 @@ export function EditarEmpresaModal({
         </div>
       }
     >
-      <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
-        Editá la información de la organización.
-      </p>
-
       <form
         id="empresa-form-edit"
         onSubmit={handleSubmit}
         noValidate
-        className="flex flex-col gap-5"
+        className="flex flex-col gap-6"
       >
         <div className="flex flex-col gap-3">
           <SectionHeader>DATOS GENERALES</SectionHeader>

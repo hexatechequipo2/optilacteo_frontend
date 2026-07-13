@@ -29,16 +29,17 @@ export function NuevoUsuarioModal({ isOpen, empresas, roles, empresaIdBloqueada,
   };
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      title="Nuevo usuario" 
+    <Modal
+      isOpen={isOpen}
+      title="Nuevo usuario"
+      description="Asigna una empresa, un rol y sus permisos"
       onClose={onClose}
       footer={
-        <div className="flex gap-3 justify-end">
+        <div className="flex justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-lg border border-slate-200 transition dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Cancelar
           </button>
@@ -46,17 +47,13 @@ export function NuevoUsuarioModal({ isOpen, empresas, roles, empresaIdBloqueada,
             type="submit"
             form="usuario-form" // Esto es lo que conecta el botón con el form
             disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Crear usuario
           </button>
         </div>
       }
     >
-      <p className="text-sm text-slate-500 mb-6 dark:text-slate-400">
-        Asigna una empresa, un rol y sus permisos
-      </p>
-
       <UsuarioForm
         id="usuario-form" // Este ID debe coincidir con el atributo 'form' del botón
         empresas={empresas}
