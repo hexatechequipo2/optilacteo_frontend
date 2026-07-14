@@ -1,0 +1,25 @@
+import type { ModuloEnum } from "./empresa.types";
+
+export interface PlanModulo {
+  nombre: string;
+  codigo: ModuloEnum;
+  icono?: string;
+}
+
+export interface Plan {
+  id: number;
+  nombre: string;
+  precio: number;
+  maxUsuarios: number;
+  maxSensores: number;
+  modulos: PlanModulo[];
+  empresasAsignadas: number;
+}
+
+export interface CreatePlanDto {
+  nombre: string;
+  precio: number;
+  maxUsuarios: number;
+  maxSensores: number;
+  moduloIds: number[];
+}
