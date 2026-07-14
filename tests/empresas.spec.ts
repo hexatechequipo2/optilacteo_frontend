@@ -34,19 +34,19 @@ test.describe("EmpresasPage", () => {
     await expect(page.getByText("Lácteos del Sur")).toBeVisible();
   });
 
-  test.skip("un Gerente no puede acceder a Empresas", async ({ page }) => {
-    // SKIPPED: la primera corrida mostró que el Gerente SÍ llega a /empresas.
-    // Puede ser un bug real en ProtectedRoute, o que el mock de "user" en
-    // mockAuth.ts no tiene el shape que ProtectedRoute espera para
-    // determinar el rol. Necesito ProtectedRoute.tsx para confirmar cuál
-    // de las dos cosas es antes de re-habilitar este test.
+  test("un Gerente no puede acceder a Empresas", async ({ page }) => {
+    // ProtectedRoute bloquea por contenido in-place (no redirige), por eso
+    // la URL sigue siendo /empresas; se verifica el mensaje de bloqueo.
     await mockEmpresasGet(page);
     await loginAsGerente(page);
 
     await page.goto("/empresas");
-    // ProtectedRoute debería sacarlo de la página; ajustar según a dónde
-    // redirija realmente una vez que tenga ese archivo.
-    await expect(page).not.toHaveURL("/empresas");
+    await expect(page.getByText("Acceso no autorizado")).toBeVisible();
+    await expect(
+      page.getByText(
+        "No tenés el rol permitido para ingresar a la Administración de OptiLácteo.",
+      ),
+    ).toBeVisible();
   });
 
   test("buscar por CUIT manda el filtro cuit, no name", async ({ page }) => {
