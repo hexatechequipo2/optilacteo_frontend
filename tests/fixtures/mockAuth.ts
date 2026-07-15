@@ -62,8 +62,10 @@ export async function loginAs(page: Page, user: MockUser) {
   await page.locator("#password").fill("password123");
   await page.getByRole("button", { name: "Ingresar a la consola" }).click();
 
-  // LoginPage navega a /dashboard con replace tras un login exitoso
-  await page.waitForURL("/dashboard");
+  // LoginPage navega a /usuarios con replace si el rol es Gerente,
+  // y a /dashboard para el resto de los roles.
+  const destination = user.rolNombre === "Gerente" ? "/usuarios" : "/dashboard";
+  await page.waitForURL(destination);
 }
 
 export async function loginAsAdministrador(page: Page) {
