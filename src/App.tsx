@@ -11,6 +11,7 @@ import UsuariosPage from "./pages/Usuarios/UsuariosPage";
 import EmpresasPage from "./pages/Empresas/EmpresasPage";
 import PlanesPage from "./pages/Planes/PlanesPage";
 import ProveedoresPage from "./pages/Proveedores/ProveedoresPage";
+import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
 import { InactivityMonitor } from "./components/layout/InactivityMonitor";
 
@@ -27,11 +28,11 @@ function App() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
 
-          {/* DASHBOARD */}
+          {/* DASHBOARD (solo ADMINISTRADOR) */}
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["Administrador"]}>
                 <DashboardPage />
               </ProtectedRoute>
             }
@@ -73,6 +74,16 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={["Gerente", "Administrador"]}>
                 <ProveedoresPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* SIN FUNCIONALIDADES (roles sin implementación en este sprint) */}
+          <Route
+            path="/sin-funcionalidades"
+            element={
+              <ProtectedRoute>
+                <SinFuncionalidadesPage />
               </ProtectedRoute>
             }
           />
