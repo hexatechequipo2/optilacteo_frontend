@@ -8,23 +8,27 @@ import {
   Users,
   Package,
   Home,
+  Settings,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
 import { planesService } from "../../services/planes.service";
 import { proveedoresService } from "../../services/proveedores.service";
+import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import optilacteoLogo from "../../assets/images/optilacteo_logo.png";
 
 export function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { empresa, isLoading: isLoadingEmpresa } = useEmpresaActual();
 
   const esAdmin = user?.rolNombre === "Administrador";
   const esGerente = user?.rolNombre === "Gerente";
   const puedeVerDashboard = esAdmin;
   const puedeVerUsuarios = esAdmin || esGerente;
   const puedeVerEmpresas = esAdmin;
+  const puedeVerConfiguracion = esGerente;
   const puedeVerPlanes = esAdmin;
   const puedeVerProveedores = esAdmin || esGerente;
 
@@ -69,6 +73,9 @@ export function Sidebar() {
     ...(puedeVerEmpresas
       ? [{ label: "Empresas", icon: Building2, count: counts.empresas, path: "/empresas" }]
       : []),
+    ...(puedeVerConfiguracion
+      ? [{ label: "Configuración", icon: Settings, path: "/configuracion" }]
+      : []),
     ...(puedeVerUsuarios
       ? [{ label: "Usuarios", icon: Users, count: counts.usuarios, path: "/usuarios" }]
       : []),
@@ -83,10 +90,26 @@ export function Sidebar() {
   return (
     <aside className="flex h-screen w-70 flex-shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-all duration-300 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none">
       <div className="flex items-center gap-3 border-b border-slate-200 p-4 dark:border-slate-800">
-        <img src={optilacteoLogo} alt="OptiLácteo" className="h-10 w-10 object-contain flex-shrink-0" />
+        {isLoadingEmpresa ? (
+          <div className="h-10 w-10 flex-shrink-0 animate-pulse rounded-md bg-slate-100 dark:bg-slate-800" />
+        ) : (
+          <img
+            src={empresa?.logoUrl || optilacteoLogo}
+            alt={empresa?.name ?? "OptiLácteo"}
+            className="h-10 w-10 flex-shrink-0 rounded-md object-contain"
+          />
+        )}
+
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-bold text-slate-900 dark:text-white">OptiLácteo</h1>
+          {isLoadingEmpresa ? (
+            <div className="h-5 w-32 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+          ) : (
+            <h1 className="truncate text-xl font-bold text-slate-900 dark:text-white">
+              {empresa?.name ?? "OptiLácteo"}
+            </h1>
+          )}
         </div>
+
         <span className="flex-shrink-0 rounded-md bg-blue-100 px-3 py-1 text-xs font-semibold uppercase text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
           {user?.rolNombre ?? "Sin rol"}
         </span>
