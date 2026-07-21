@@ -54,8 +54,14 @@ export default function LoginPage() {
 
     setIsSubmitting(true);
     try {
-      await login(email, password, rememberMe);
-      navigate("/dashboard", { replace: true });
+      const user = await login(email, password, rememberMe);
+      const destination =
+        user.rolNombre === "Administrador"
+          ? "/dashboard"
+          : user.rolNombre === "Gerente"
+            ? "/usuarios"
+            : "/sin-funcionalidades";
+      navigate(destination, { replace: true });
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (!error.response) {

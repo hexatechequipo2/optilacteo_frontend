@@ -15,7 +15,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   isInitializing: boolean;
-  login: (email: string, password: string, rememberMe: boolean) => Promise<void>;
+  login: (email: string, password: string, rememberMe: boolean) => Promise<AuthUser>;
   logout: () => Promise<void>;
 }
 
@@ -119,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storeRefreshToken(data.refresh_token, rememberMe ? "local" : "session");
       setToken(data.access_token);
       setUser(data.user);
+      return data.user;
     } finally {
       setIsLoading(false);
     }

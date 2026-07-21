@@ -1,5 +1,32 @@
 /** Archivo generado automáticamente */
 
+export const PROVINCIAS = [
+  "Buenos Aires",
+  "Catamarca",
+  "Chaco",
+  "Chubut",
+  "Ciudad Autonoma de Buenos Aires",
+  "Cordoba",
+  "Corrientes",
+  "Entre Rios",
+  "Formosa",
+  "Jujuy",
+  "La Pampa",
+  "La Rioja",
+  "Mendoza",
+  "Misiones",
+  "Neuquen",
+  "Rio Negro",
+  "Salta",
+  "San Juan",
+  "San Luis",
+  "Santa Cruz",
+  "Santa Fe",
+  "Santiago del Estero",
+  "Tierra del Fuego",
+  "Tucuman"
+] as const;
+
 export const LOCALIDADES_POR_PROVINCIA = {
   "Buenos Aires": [
     "11 DE SEPTIEMBRE",
@@ -20593,8 +20620,3 @@ export const LOCALIDADES_POR_PROVINCIA = {
     "ZURITA"
   ]
 } as const;
-
-
-export const PROVINCIAS = Object.keys(LOCALIDADES_POR_PROVINCIA).sort(
-  (a, b) => a.localeCompare(b, "es")
-);
