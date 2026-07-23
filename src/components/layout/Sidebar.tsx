@@ -9,11 +9,13 @@ import {
   Package,
   Home,
   Settings,
+  ClipboardList,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
 import { planesService } from "../../services/planes.service";
 import { proveedoresService } from "../../services/proveedores.service";
+import { loteService } from "../../services/lote.service";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import optilacteoLogo from "../../assets/images/optilacteo_logo.png";
 
@@ -31,24 +33,27 @@ export function Sidebar() {
   const puedeVerConfiguracion = esGerente;
   const puedeVerPlanes = esAdmin;
   const puedeVerProveedores = esAdmin || esGerente;
+  const puedeVerLotes = esAdmin || esGerente || user?.rolNombre === "Responsable de calidad";
 
   const [counts, setCounts] = useState({
     empresas: 0,
     usuarios: 0,
     planes: 0,
     proveedores: 0,
+    lotes: 0,
   });
 
   useEffect(() => {
     async function loadCounts() {
       try {
         // Ejecutamos las llamadas
-        const [empresasRes, usuariosRes, planesRes, proveedoresRes] = await Promise.all([
+        const [empresasRes, usuariosRes, planesRes, proveedoresRes, lotesTotal] = await Promise.all([
           puedeVerEmpresas ? empresasService.getAll({ limit: 1 }) : { data: [], meta: { total: 0 } },
           puedeVerUsuarios ? usuariosService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
           // Si planes/proveedores NO están paginados, devuelven array. Si lo están, ajusta a .meta.total
           puedeVerPlanes ? planesService.getAll() : [],
           puedeVerProveedores ? proveedoresService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
+          puedeVerLotes ? loteService.count() : 0,
         ]);
 
         setCounts({
@@ -58,6 +63,7 @@ export function Sidebar() {
           // Si estos NO tienen paginación, siguen siendo arrays y usamos .length
           planes: (Array.isArray(planesRes) ? planesRes.length : 0),
           proveedores: proveedoresRes.meta?.total ?? 0,
+          lotes: lotesTotal,
         });
       } catch (error) {
         console.error("Error al cargar contadores:", error);
@@ -65,7 +71,7 @@ export function Sidebar() {
     }
 
     loadCounts();
-  }, [puedeVerEmpresas, puedeVerUsuarios, puedeVerPlanes, puedeVerProveedores]);
+  }, [puedeVerEmpresas, puedeVerUsuarios, puedeVerPlanes, puedeVerProveedores, puedeVerLotes]);
   const navItems = [
     ...(puedeVerDashboard
       ? [{ label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" }]
@@ -84,6 +90,9 @@ export function Sidebar() {
       : []),
     ...(puedeVerProveedores
       ? [{ label: "Proveedores", icon: Home, count: counts.proveedores, path: "/proveedores" }]
+      : []),
+    ...(puedeVerLotes
+      ? [{ label: "Lotes", icon: ClipboardList, count: counts.lotes, path: "/lotes" }]
       : []),
   ];
 

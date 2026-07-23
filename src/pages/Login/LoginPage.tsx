@@ -60,7 +60,9 @@ export default function LoginPage() {
           ? "/dashboard"
           : user.rolNombre === "Gerente"
             ? "/usuarios"
-            : "/sin-funcionalidades";
+            : user.rolNombre === "Responsable de calidad"
+              ? "/lotes"
+              : "/sin-funcionalidades";
       navigate(destination, { replace: true });
     } catch (error) {
       if (axios.isAxiosError(error)) {
