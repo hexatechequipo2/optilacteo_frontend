@@ -12,6 +12,7 @@ import EmpresasPage from "./pages/Empresas/EmpresasPage";
 import ConfiguracionPage from "./pages/Configuracion/ConfiguracionPage";
 import PlanesPage from "./pages/Planes/PlanesPage";
 import ProveedoresPage from "./pages/Proveedores/ProveedoresPage";
+import LotesPage from "./pages/Lotes/LotesPage";
 import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
 import { InactivityMonitor } from "./components/layout/InactivityMonitor";
@@ -89,6 +90,16 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={["Gerente", "Administrador"]}>
                   <ProveedoresPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* LOTES (HU-60: Responsable de calidad + Gerente/Administrador como supervisión) */}
+            <Route
+              path="/lotes"
+              element={
+                <ProtectedRoute allowedRoles={["Responsable de calidad", "Gerente", "Administrador"]}>
+                  <LotesPage />
                 </ProtectedRoute>
               }
             />

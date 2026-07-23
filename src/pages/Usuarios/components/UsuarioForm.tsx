@@ -128,6 +128,13 @@ export function UsuarioForm({
           setServerError(data.message);
           return;
         }
+
+        if (error.response?.status === 400 && data?.message?.includes("límite de usuarios")) {
+          setServerError(
+            "Esta empresa alcanzó el límite de usuarios de su plan actual. Para agregar más usuarios, contactate con OptiLácteo para ampliar el plan.",
+          );
+          return;
+        }
       }
 
       setServerError("No se pudo guardar el usuario. Intentá nuevamente.");
