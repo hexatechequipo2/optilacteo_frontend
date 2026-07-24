@@ -10,12 +10,14 @@ import {
   Home,
   Settings,
   ClipboardList,
+  Cpu,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
 import { planesService } from "../../services/planes.service";
 import { proveedoresService } from "../../services/proveedores.service";
 import { loteService } from "../../services/lote.service";
+import { sensorService } from "../../services/sensor.service";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import optilacteoLogo from "../../assets/images/optilacteo_logo.png";
 
@@ -34,6 +36,14 @@ export function Sidebar() {
   const puedeVerPlanes = esAdmin;
   const puedeVerProveedores = esAdmin || esGerente;
   const puedeVerLotes = esAdmin || esGerente || user?.rolNombre === "Responsable de calidad";
+  // GET /sensores (backend) habilita también a Responsable de producción y
+  // Operario de línea, ver sensor.controller.ts.
+  const puedeVerSensores =
+    esAdmin ||
+    esGerente ||
+    user?.rolNombre === "Responsable de calidad" ||
+    user?.rolNombre === "Responsable de producción" ||
+    user?.rolNombre === "Operario de línea";
 
   const [counts, setCounts] = useState({
     empresas: 0,
@@ -41,20 +51,24 @@ export function Sidebar() {
     planes: 0,
     proveedores: 0,
     lotes: 0,
+    sensores: 0,
   });
 
   useEffect(() => {
     async function loadCounts() {
       try {
         // Ejecutamos las llamadas
-        const [empresasRes, usuariosRes, planesRes, proveedoresRes, lotesTotal] = await Promise.all([
-          puedeVerEmpresas ? empresasService.getAll({ limit: 1 }) : { data: [], meta: { total: 0 } },
-          puedeVerUsuarios ? usuariosService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
-          // Si planes/proveedores NO están paginados, devuelven array. Si lo están, ajusta a .meta.total
-          puedeVerPlanes ? planesService.getAll() : [],
-          puedeVerProveedores ? proveedoresService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
-          puedeVerLotes ? loteService.count() : 0,
-        ]);
+        const [empresasRes, usuariosRes, planesRes, proveedoresRes, lotesTotal, sensoresRes] =
+          await Promise.all([
+            puedeVerEmpresas ? empresasService.getAll({ limit: 1 }) : { data: [], meta: { total: 0 } },
+            puedeVerUsuarios ? usuariosService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
+            // Si planes/proveedores NO están paginados, devuelven array. Si lo están, ajusta a .meta.total
+            puedeVerPlanes ? planesService.getAll() : [],
+            puedeVerProveedores ? proveedoresService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
+            puedeVerLotes ? loteService.count() : 0,
+            // No hay endpoint de conteo dedicado para sensores, se toma el length del getAll.
+            puedeVerSensores ? sensorService.getAll() : [],
+          ]);
 
         setCounts({
           // Accedemos a meta.total si existe, sino al length del array de datos
@@ -64,6 +78,7 @@ export function Sidebar() {
           planes: (Array.isArray(planesRes) ? planesRes.length : 0),
           proveedores: proveedoresRes.meta?.total ?? 0,
           lotes: lotesTotal,
+          sensores: sensoresRes.length,
         });
       } catch (error) {
         console.error("Error al cargar contadores:", error);
@@ -71,7 +86,14 @@ export function Sidebar() {
     }
 
     loadCounts();
-  }, [puedeVerEmpresas, puedeVerUsuarios, puedeVerPlanes, puedeVerProveedores, puedeVerLotes]);
+  }, [
+    puedeVerEmpresas,
+    puedeVerUsuarios,
+    puedeVerPlanes,
+    puedeVerProveedores,
+    puedeVerLotes,
+    puedeVerSensores,
+  ]);
   const navItems = [
     ...(puedeVerDashboard
       ? [{ label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" }]
@@ -93,6 +115,9 @@ export function Sidebar() {
       : []),
     ...(puedeVerLotes
       ? [{ label: "Lotes", icon: ClipboardList, count: counts.lotes, path: "/lotes" }]
+      : []),
+    ...(puedeVerSensores
+      ? [{ label: "Sensores", icon: Cpu, count: counts.sensores, path: "/sensores" }]
       : []),
   ];
 

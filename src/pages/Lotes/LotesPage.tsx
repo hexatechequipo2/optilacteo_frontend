@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { Pencil } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { useLotes } from "../../hooks/useLotes";
 import { useAuth } from "../../hooks/useAuth";
 import { proveedoresService } from "../../services/proveedores.service";
 import { TIPO_MATERIA_PRIMA_TABS } from "../Configuracion/constants/parametrosCalidad";
-import { ClasificacionLote, DestinoLote } from "../../types/lote.types";
+import { ClasificacionLote, DestinoLote, type Lote } from "../../types/lote.types";
 import type { Proveedor } from "../../types/proveedor.types";
 import { LoteFormModal } from "./LoteFormModal";
 
@@ -34,19 +35,37 @@ const DESTINO_LABEL: Record<DestinoLote, string> = {
   [DestinoLote.DESCARTE]: "Descarte",
 };
 
-const HEADERS = ["LOTE", "PROVEEDOR", "MATERIA PRIMA", "INGRESO", "CLASIFICACIÓN", "DESTINO"];
+const HEADERS = ["LOTE", "PROVEEDOR", "MATERIA PRIMA", "INGRESO", "CLASIFICACIÓN", "DESTINO", ""];
 
 const TIPO_MATERIA_PRIMA_LABEL = new Map(TIPO_MATERIA_PRIMA_TABS.map((t) => [t.value, t.label]));
 
 export default function LotesPage() {
-  const { lotes, isLoading, error, refetch, createLote, isCreating } = useLotes();
+  const { lotes, isLoading, error, refetch, createLote, isCreating, updateLote, isUpdating } =
+    useLotes();
   const { user } = useAuth();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingLote, setEditingLote] = useState<Lote | null>(null);
 
-  // Solo Responsable de calidad puede registrar lotes (POST /lotes en el
-  // backend); Gerente/Administrador acceden a esta pantalla en modo lectura.
+  // Solo Responsable de calidad puede registrar/editar lotes (POST y PATCH
+  // /lotes en el backend); Gerente/Administrador acceden a esta pantalla en
+  // modo lectura.
   const puedeCrearLote = user?.rolNombre === "Responsable de calidad";
+
+  const abrirAlta = () => {
+    setEditingLote(null);
+    setIsModalOpen(true);
+  };
+
+  const abrirEdicion = (lote: Lote) => {
+    setEditingLote(lote);
+    setIsModalOpen(true);
+  };
+
+  const cerrarModal = () => {
+    setIsModalOpen(false);
+    setEditingLote(null);
+  };
 
   useEffect(() => {
     proveedoresService
@@ -69,7 +88,7 @@ export default function LotesPage() {
           </p>
         </div>
         {puedeCrearLote && (
-          <Button type="button" className="!w-auto px-6" onClick={() => setIsModalOpen(true)}>
+          <Button type="button" className="!w-auto px-6" onClick={abrirAlta}>
             + Nuevo lote
           </Button>
         )}
@@ -147,6 +166,20 @@ export default function LotesPage() {
                   <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                     {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
                   </td>
+                  <td className="px-5 py-3">
+                    {puedeCrearLote && (
+                      <div className="flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => abrirEdicion(lote)}
+                          className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                          title="Editar lote"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -158,9 +191,11 @@ export default function LotesPage() {
         <LoteFormModal
           isOpen={isModalOpen}
           proveedores={proveedores}
-          isSubmitting={isCreating}
-          onClose={() => setIsModalOpen(false)}
-          onSubmit={createLote}
+          lote={editingLote ?? undefined}
+          isSubmitting={editingLote ? isUpdating : isCreating}
+          onClose={cerrarModal}
+          onCreate={createLote}
+          onUpdate={updateLote}
         />
       )}
     </Layout>

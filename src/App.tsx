@@ -13,6 +13,7 @@ import ConfiguracionPage from "./pages/Configuracion/ConfiguracionPage";
 import PlanesPage from "./pages/Planes/PlanesPage";
 import ProveedoresPage from "./pages/Proveedores/ProveedoresPage";
 import LotesPage from "./pages/Lotes/LotesPage";
+import SensoresPage from "./pages/Sensores/SensoresPage";
 import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
 import { InactivityMonitor } from "./components/layout/InactivityMonitor";
@@ -100,6 +101,26 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={["Responsable de calidad", "Gerente", "Administrador"]}>
                   <LotesPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* SENSORES: alta/edición (HU-17) para Responsable de producción/calidad,
+                asociación a lote (HU-33) para Operario de línea/Responsable de calidad,
+                Gerente/Administrador acceden en modo lectura (ver sensor.controller.ts) */}
+            <Route
+              path="/sensores"
+              element={
+                <ProtectedRoute
+                  allowedRoles={[
+                    "Responsable de producción",
+                    "Responsable de calidad",
+                    "Operario de línea",
+                    "Gerente",
+                    "Administrador",
+                  ]}
+                >
+                  <SensoresPage />
                 </ProtectedRoute>
               }
             />

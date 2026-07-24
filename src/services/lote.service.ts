@@ -3,8 +3,10 @@ import api from "./api";
 import type {
   CreateLoteDto,
   Lote,
+  LoteCreateResponse,
   LoteFilterQuery,
   PaginatedLotes,
+  UpdateLoteDto,
 } from "../types/lote.types";
 
 // El backend valida existencia del proveedor, rangos de parámetros y unicidad
@@ -29,8 +31,16 @@ export const loteService = {
     return data.total;
   },
 
-  create: async (dto: CreateLoteDto): Promise<Lote> => {
-    const { data } = await api.post<Lote>("/lotes", dto);
+  // Devuelve { lote, sensoresDisponibles }: los sensores activos ya
+  // filtrados por la ubicacionInicial del lote, para ofrecer como
+  // candidatos a asociar (ver LoteFormModal.tsx).
+  create: async (dto: CreateLoteDto): Promise<LoteCreateResponse> => {
+    const { data } = await api.post<LoteCreateResponse>("/lotes", dto);
+    return data;
+  },
+
+  update: async (id: number, dto: UpdateLoteDto): Promise<Lote> => {
+    const { data } = await api.patch<Lote>(`/lotes/${id}`, dto);
     return data;
   },
 };

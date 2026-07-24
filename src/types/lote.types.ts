@@ -1,6 +1,7 @@
 // Espeja el módulo real de Lotes en optilacteo-backend
 // (src/module/lote: entities, DTOs y mapper), mergeado en develop (HU-60).
 import type { Parametro, TipoMateriaPrima } from "./configParametro.types";
+import type { Sensor, Ubicacion } from "./sensor.types";
 
 export enum ClasificacionLote {
   PRIMERA = "primera",
@@ -37,6 +38,7 @@ export interface Lote {
   fechaIngreso: string; // ISO datetime
   clasificacion: ClasificacionLote | null;
   destinoInicial: DestinoLote | null;
+  ubicacionInicial?: Ubicacion | null;
   estado: EstadoLote;
   parametros: LoteParametro[];
   createdAt: string;
@@ -49,7 +51,27 @@ export interface CreateLoteDto {
   fechaIngreso: string;
   clasificacion?: ClasificacionLote;
   destinoInicial?: DestinoLote;
+  ubicacionInicial?: Ubicacion;
   parametros: LoteParametro[];
+}
+
+// PATCH /lotes/:id (LoteService.update en el backend) solo aplica estos 4
+// campos aunque UpdateLoteDto sea un PartialType completo de CreateLoteDto:
+// no se puede editar código, proveedor, ubicacionInicial ni parametros de un
+// lote ya registrado.
+export interface UpdateLoteDto {
+  materiaPrima?: TipoMateriaPrima;
+  fechaIngreso?: string;
+  clasificacion?: ClasificacionLote;
+  destinoInicial?: DestinoLote;
+}
+
+// POST /lotes ahora devuelve esta forma en vez de solo el Lote:
+// sensoresDisponibles son los sensores activos ya filtrados por la
+// ubicacionInicial del lote, para ofrecerlos como candidatos a asociar.
+export interface LoteCreateResponse {
+  lote: Lote;
+  sensoresDisponibles: Sensor[];
 }
 
 export interface LoteFilterQuery {
