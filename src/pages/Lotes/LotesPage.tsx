@@ -69,7 +69,7 @@ export default function LotesPage() {
 
   useEffect(() => {
     proveedoresService
-      .getAll({ page: 1, limit: PROVEEDORES_SELECT_LIMIT })
+      .getAll({ page: 1, limit: PROVEEDORES_SELECT_LIMIT, estado: "activa" })
       .then((result) => setProveedores(result.data))
       .catch(() => setProveedores([]));
   }, []);
