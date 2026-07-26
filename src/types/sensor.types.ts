@@ -77,3 +77,22 @@ export interface SensorLoteHistorial {
   userId: number;
   fecha: string; // ISO datetime
 }
+
+// Payloads del WS /sensores (HU-13, LecturasGateway en el backend).
+// No son parte del modelo Sensor: solo llegan en vivo, nunca por REST.
+export interface LecturaNuevaEvent {
+  id: number;
+  sensorId: number;
+  loteId: number;
+  valor: number;
+  timestampLectura: string;
+  empresaId: number;
+  createdAt: string;
+}
+
+export interface SensorFallaEvent {
+  sensorId: number;
+  nombre: string;
+}
+
+export type SensorRecuperadoEvent = SensorFallaEvent;

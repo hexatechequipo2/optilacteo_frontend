@@ -14,6 +14,19 @@ export const PARAMETRO_LABEL: Record<Parametro, string> = {
   [Parametro.CONDUCTIVIDAD]: "Conductividad",
 };
 
+// Unidad de presentación por parámetro medido. El backend no modela esto
+// (una lectura es solo { valor: number }) — es puramente de UI, para la
+// pestaña "Estado y diagnóstico".
+export const UNIDAD_POR_PARAMETRO: Record<Parametro, string | undefined> = {
+  [Parametro.PH]: undefined,
+  [Parametro.TEMPERATURA]: "°C",
+  [Parametro.DENSIDAD]: "g/mL",
+  [Parametro.GRASA]: "%",
+  [Parametro.PROTEINA]: "%",
+  [Parametro.ACIDEZ]: "°D",
+  [Parametro.CONDUCTIVIDAD]: "mS/cm",
+};
+
 export const TIPO_SENSOR_LABEL: Record<TipoSensor, string> = {
   [TipoSensor.DIGITAL]: "Digital",
   [TipoSensor.ANALOGICO]: "Analógico",
