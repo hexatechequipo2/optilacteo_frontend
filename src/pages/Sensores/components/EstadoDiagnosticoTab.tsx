@@ -1,39 +1,19 @@
 import { Activity, Droplet, Gauge, Grid2x2, Radar, Target, Thermometer, type LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useSensoresRealtime } from "../../../hooks/useSensoresRealtime";
+import { Parametro } from "../../../types/configParametro.types";
 import { EstadoSensor } from "../../../types/sensor.types";
+import { PARAMETRO_LABEL, UNIDAD_POR_PARAMETRO } from "../constants/parametroSensor";
 
-// ============================================================================
-// EJEMPLO VISUAL — pendiente de implementación real.
-// ============================================================================
-// Esta pestaña todavía no lee datos reales: no hay módulo de mediciones IoT
-// (HU-13) que alimente lecturas en vivo, así que por ahora solo se arma la
-// estética con datos de ejemplo hardcodeados. Cuando ese módulo exista, esto
-// se reemplaza por un hook (useDiagnosticoSensores o similar) que resuelva
-// estado + última lectura por sensor real.
-// ============================================================================
-
-interface LecturaEjemplo {
-  id: number;
-  nombre: string;
-  icon: LucideIcon;
-  estado: EstadoSensor;
-  valor: string | null;
-  unidad?: string;
-  parametroLabel: string;
-  loteCodigo: string;
-  hace: string;
-}
-
-const LECTURAS_EJEMPLO: LecturaEjemplo[] = [
-  { id: 1, nombre: "Sensor pH — Línea 1", icon: Target, estado: EstadoSensor.FALLA, valor: null, parametroLabel: "pH", loteCodigo: "L-2026-2210", hace: "ahora" },
-  { id: 2, nombre: "Sensor Temperatura — Pasteurizador", icon: Thermometer, estado: EstadoSensor.ACTIVO, valor: "4.3", unidad: "°C", parametroLabel: "Temperatura", loteCodigo: "L-2026-2210", hace: "hace 4 s" },
-  { id: 3, nombre: "Densímetro — Recepción L1", icon: Grid2x2, estado: EstadoSensor.ACTIVO, valor: "1.031", unidad: "g/mL", parametroLabel: "Caudal", loteCodigo: "L-2026-2210", hace: "hace 6 s" },
-  { id: 4, nombre: "Sensor Conductividad — CIP", icon: Radar, estado: EstadoSensor.FALLA, valor: null, parametroLabel: "Conductividad", loteCodigo: "L-2026-2210", hace: "hace 6 min" },
-  { id: 5, nombre: "Sensor Grasa — Descremadora", icon: Droplet, estado: EstadoSensor.ACTIVO, valor: "34.8", unidad: "%", parametroLabel: "Caudal", loteCodigo: "L-2026-2211", hace: "hace 3 s" },
-  { id: 6, nombre: "Sensor pH — Línea 2", icon: Target, estado: EstadoSensor.ACTIVO, valor: "6.52", parametroLabel: "pH", loteCodigo: "L-2026-2211", hace: "hace 5 s" },
-  { id: 7, nombre: "Sensor Temperatura — Tanque suero", icon: Thermometer, estado: EstadoSensor.INACTIVO, valor: null, parametroLabel: "Temperatura", loteCodigo: "L-2026-2212", hace: "—" },
-  { id: 8, nombre: "Sensor Acidez — Línea 3", icon: Activity, estado: EstadoSensor.ACTIVO, valor: "18.2", unidad: "°D", parametroLabel: "Acidez", loteCodigo: "L-2026-2212", hace: "hace 2 s" },
-  { id: 9, nombre: "Sensor Proteínas — Línea 2", icon: Gauge, estado: EstadoSensor.FALLA, valor: null, parametroLabel: "Proteínas", loteCodigo: "L-2026-2211", hace: "hace 2 min" },
-];
+const PARAMETRO_ICON: Record<Parametro, LucideIcon> = {
+  [Parametro.PH]: Target,
+  [Parametro.TEMPERATURA]: Thermometer,
+  [Parametro.DENSIDAD]: Grid2x2,
+  [Parametro.GRASA]: Droplet,
+  [Parametro.PROTEINA]: Gauge,
+  [Parametro.ACIDEZ]: Activity,
+  [Parametro.CONDUCTIVIDAD]: Radar,
+};
 
 const ESTADO_LABEL: Record<EstadoSensor, string> = {
   [EstadoSensor.ACTIVO]: "Activo",
@@ -53,12 +33,41 @@ const CARD_CLASS: Record<EstadoSensor, string> = {
   [EstadoSensor.FALLA]: "border-red-200 bg-red-50/60 dark:border-red-500/30 dark:bg-red-500/5",
 };
 
-const activos = LECTURAS_EJEMPLO.filter((l) => l.estado === EstadoSensor.ACTIVO).length;
-const conFalla = LECTURAS_EJEMPLO.filter((l) => l.estado === EstadoSensor.FALLA).length;
-const inactivos = LECTURAS_EJEMPLO.filter((l) => l.estado === EstadoSensor.INACTIVO).length;
-const conectados = activos + conFalla;
+function formatearHace(timestamp: string | null | undefined, ahora: number): string {
+  if (!timestamp) return "—";
+  const diffSeg = Math.floor((ahora - new Date(timestamp).getTime()) / 1000);
+  if (diffSeg < 1) return "ahora";
+  if (diffSeg < 60) return `hace ${diffSeg} s`;
+  if (diffSeg < 3600) return `hace ${Math.floor(diffSeg / 60)} min`;
+  return `hace ${Math.floor(diffSeg / 3600)} h`;
+}
 
 export function EstadoDiagnosticoTab() {
+  const { sensores, lecturas, isLoading, error, isRealtimeConnected } = useSensoresRealtime();
+
+  // Un solo intervalo para todo el grid: recalcula los "hace X s" en vivo
+  // sin depender de ninguna librería de fechas (el proyecto no tiene una).
+  const [ahora, setAhora] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setAhora(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const { activos, conFalla, inactivos, conectados } = useMemo(() => {
+    const activos = sensores.filter((s) => s.estado === EstadoSensor.ACTIVO).length;
+    const conFalla = sensores.filter((s) => s.estado === EstadoSensor.FALLA).length;
+    const inactivos = sensores.filter((s) => s.estado === EstadoSensor.INACTIVO).length;
+    return { activos, conFalla, inactivos, conectados: activos + conFalla };
+  }, [sensores]);
+
+  if (isLoading) {
+    return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando sensores...</p>;
+  }
+
+  if (error) {
+    return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-blue-50/60 to-transparent p-5 dark:border-slate-800 dark:from-blue-500/5">
@@ -71,13 +80,19 @@ export function EstadoDiagnosticoTab() {
               <span className="text-base font-semibold text-slate-900 dark:text-white">
                 Sensores IoT
               </span>
-              <span className="flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> EN VIVO
-              </span>
+              {isRealtimeConnected ? (
+                <span className="flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> EN VIVO
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Reconectando...
+                </span>
+              )}
             </div>
           </div>
           <span className="font-mono text-sm text-slate-500 dark:text-slate-400">
-            {conectados} de {LECTURAS_EJEMPLO.length} conectados
+            {conectados} de {sensores.length} conectados
           </span>
         </div>
 
@@ -94,46 +109,52 @@ export function EstadoDiagnosticoTab() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {LECTURAS_EJEMPLO.map((lectura) => {
-          const Icon = lectura.icon;
-          return (
-            <div
-              key={lectura.id}
-              className={`rounded-xl border p-4 ${CARD_CLASS[lectura.estado]}`}
-            >
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400">
-                  <Icon className="h-4 w-4" />
-                </div>
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_BADGE_CLASS[lectura.estado]}`}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                  {ESTADO_LABEL[lectura.estado]}
-                </span>
-              </div>
+      {sensores.length === 0 ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">No hay sensores registrados.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {sensores.map((sensor) => {
+            const Icon = PARAMETRO_ICON[sensor.parametro];
+            const lectura = lecturas[sensor.id];
+            const unidad = UNIDAD_POR_PARAMETRO[sensor.parametro];
+            const loteId = sensor.loteActualId ?? lectura?.loteId ?? null;
 
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                {lectura.nombre}
-              </p>
-
-              <p className="my-2 text-2xl font-bold text-slate-900 dark:text-white">
-                {lectura.valor ?? "—"}
-                {lectura.valor && lectura.unidad && (
-                  <span className="ml-1 text-sm font-medium text-slate-400 dark:text-slate-500">
-                    {lectura.unidad}
+            return (
+              <div key={sensor.id} className={`rounded-xl border p-4 ${CARD_CLASS[sensor.estado]}`}>
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_BADGE_CLASS[sensor.estado]}`}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    {ESTADO_LABEL[sensor.estado]}
                   </span>
-                )}
-              </p>
+                </div>
 
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {lectura.parametroLabel} · {lectura.loteCodigo} · {lectura.hace}
-              </p>
-            </div>
-          );
-        })}
-      </div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {sensor.nombre}
+                </p>
+
+                <p className="my-2 text-2xl font-bold text-slate-900 dark:text-white">
+                  {lectura ? lectura.valorActual : "—"}
+                  {lectura && unidad && (
+                    <span className="ml-1 text-sm font-medium text-slate-400 dark:text-slate-500">
+                      {unidad}
+                    </span>
+                  )}
+                </p>
+
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {PARAMETRO_LABEL[sensor.parametro]} · {loteId != null ? `Lote #${loteId}` : "Sin lote asociado"} ·{" "}
+                  {formatearHace(lectura?.timestampLectura ?? sensor.ultimaLectura, ahora)}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
