@@ -1,6 +1,7 @@
 import { Activity, Droplet, Gauge, Grid2x2, Radar, Target, Thermometer, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSensoresRealtime } from "../../../hooks/useSensoresRealtime";
+import { SensorEstadoBadge } from "../../../components/SensorEstadoBadge";
 import { Parametro } from "../../../types/configParametro.types";
 import { EstadoSensor } from "../../../types/sensor.types";
 import { PARAMETRO_LABEL, UNIDAD_POR_PARAMETRO } from "../constants/parametroSensor";
@@ -13,18 +14,6 @@ const PARAMETRO_ICON: Record<Parametro, LucideIcon> = {
   [Parametro.PROTEINA]: Gauge,
   [Parametro.ACIDEZ]: Activity,
   [Parametro.CONDUCTIVIDAD]: Radar,
-};
-
-const ESTADO_LABEL: Record<EstadoSensor, string> = {
-  [EstadoSensor.ACTIVO]: "Activo",
-  [EstadoSensor.INACTIVO]: "Inactivo",
-  [EstadoSensor.FALLA]: "Con falla",
-};
-
-const ESTADO_BADGE_CLASS: Record<EstadoSensor, string> = {
-  [EstadoSensor.ACTIVO]: "bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-400",
-  [EstadoSensor.INACTIVO]: "bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-400",
-  [EstadoSensor.FALLA]: "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400",
 };
 
 const CARD_CLASS: Record<EstadoSensor, string> = {
@@ -125,12 +114,7 @@ export function EstadoDiagnosticoTab() {
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400">
                     <Icon className="h-4 w-4" />
                   </div>
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_BADGE_CLASS[sensor.estado]}`}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                    {ESTADO_LABEL[sensor.estado]}
-                  </span>
+                  <SensorEstadoBadge estado={sensor.estado} />
                 </div>
 
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">

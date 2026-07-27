@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Pencil, Link2 } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Select } from "../../../components/ui/Select";
+import { SensorEstadoBadge } from "../../../components/SensorEstadoBadge";
 import {
   EstadoSensor,
   Ubicacion,
@@ -18,12 +19,6 @@ const ESTADO_LABEL: Record<EstadoSensor, string> = {
   [EstadoSensor.ACTIVO]: "Activo",
   [EstadoSensor.INACTIVO]: "Inactivo",
   [EstadoSensor.FALLA]: "Con falla",
-};
-
-const ESTADO_CLASS: Record<EstadoSensor, string> = {
-  [EstadoSensor.ACTIVO]: "bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-400",
-  [EstadoSensor.INACTIVO]: "bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-400",
-  [EstadoSensor.FALLA]: "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400",
 };
 
 const ESTADO_FILTER_OPTIONS = [
@@ -187,11 +182,7 @@ export function RegistroSensoresTab({
                     {sensor.rangoMinFavor} – {sensor.rangoMaxFavor}
                   </td>
                   <td className="px-5 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_CLASS[sensor.estado]}`}
-                    >
-                      {ESTADO_LABEL[sensor.estado]}
-                    </span>
+                    <SensorEstadoBadge estado={sensor.estado} />
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-end gap-2">
