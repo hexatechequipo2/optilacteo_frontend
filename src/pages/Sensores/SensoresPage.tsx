@@ -7,13 +7,19 @@ import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import type { SensorFilterQuery } from "../../types/sensor.types";
 import { RegistroSensoresTab } from "./components/RegistroSensoresTab";
 import { EstadoDiagnosticoTab } from "./components/EstadoDiagnosticoTab";
+import { HistorialMedicionesTab } from "./components/HistorialMedicionesTab";
 
-type TabSensores = "estado" | "registro";
+type TabSensores = "estado" | "registro" | "historial";
 
-const TABS: { value: TabSensores; label: string }[] = [
+const TABS_BASE: { value: TabSensores; label: string }[] = [
   { value: "estado", label: "Estado y diagnóstico" },
   { value: "registro", label: "Registro (alta / edición)" },
 ];
+
+const TAB_HISTORIAL: { value: TabSensores; label: string } = {
+  value: "historial",
+  label: "Historial de mediciones",
+};
 
 export default function SensoresPage() {
   const [filtros, setFiltros] = useState<SensorFilterQuery>({});
@@ -37,6 +43,21 @@ export default function SensoresPage() {
     [user?.rolNombre],
   );
 
+  // GET /sensores/lecturas/historial-mediciones (HU-19, backend): @Roles
+  // solo permite Responsable de producción, Gerente y Administrador. Ni
+  // Responsable de calidad ni Operario de línea están habilitados ahí,
+  // aunque sí ven el resto de Sensores (ver lectura-sensor.controller.ts).
+  // Comparación normalizada (trim + lowercase) por posibles inconsistencias
+  // de casing/espacios en rolNombre, mismo criterio que ProveedoresPage.
+  const puedeVerHistorial = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return (
+      rol === "responsable de producción" || rol === "gerente" || rol === "administrador"
+    );
+  }, [user?.rolNombre]);
+
+  const tabs = puedeVerHistorial ? [...TABS_BASE, TAB_HISTORIAL] : TABS_BASE;
+
   return (
     <Layout breadcrumb="Consola > Sensores">
       <div className="mb-6">
@@ -49,11 +70,13 @@ export default function SensoresPage() {
       </div>
 
       <div className="mb-6">
-        <Tabs tabs={TABS} value={tabActiva} onChange={setTabActiva} />
+        <Tabs tabs={tabs} value={tabActiva} onChange={setTabActiva} />
       </div>
 
       {tabActiva === "estado" ? (
         <EstadoDiagnosticoTab />
+      ) : tabActiva === "historial" ? (
+        puedeVerHistorial ? <HistorialMedicionesTab /> : null
       ) : (
         <RegistroSensoresTab
           sensores={sensores}
