@@ -1,6 +1,7 @@
 import { Activity, Droplet, Gauge, Grid2x2, Radar, Target, Thermometer, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSensoresRealtime } from "../../../hooks/useSensoresRealtime";
+import { ValorConUnidad } from "../../../components/ValorConUnidad";
 import { Parametro } from "../../../types/configParametro.types";
 import { EstadoSensor } from "../../../types/sensor.types";
 import { PARAMETRO_LABEL, UNIDAD_POR_PARAMETRO } from "../constants/parametroSensor";
@@ -137,13 +138,12 @@ export function EstadoDiagnosticoTab() {
                   {sensor.nombre}
                 </p>
 
-                <p className="my-2 text-2xl font-bold text-slate-900 dark:text-white">
-                  {lectura ? lectura.valorActual : "—"}
-                  {lectura && unidad && (
-                    <span className="ml-1 text-sm font-medium text-slate-400 dark:text-slate-500">
-                      {unidad}
-                    </span>
-                  )}
+                <p className="my-2">
+                  <ValorConUnidad
+                    valor={lectura ? lectura.valorActual : "—"}
+                    unidad={lectura ? unidad : undefined}
+                    size="lg"
+                  />
                 </p>
 
                 <p className="text-xs text-slate-500 dark:text-slate-400">

@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Download, Search } from "lucide-react";
 import { Input } from "../../../components/ui/Input";
 import { Button } from "../../../components/ui/Button";
 import { Badge } from "../../../components/ui/Badge";
+import { ValorConUnidad } from "../../../components/ValorConUnidad";
 import { useHistorialMediciones } from "../../../hooks/useHistorialMediciones";
 import { EstadoLectura } from "../../../types/historialMediciones.types";
 
@@ -178,9 +179,8 @@ export function HistorialMedicionesTab() {
                     </td>
                     <td className="px-5 py-3 text-slate-700 dark:text-slate-300">{item.sensorNombre}</td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">{item.parametro}</td>
-                    <td className="px-5 py-3 text-slate-900 dark:text-white">
-                      {item.valor}{" "}
-                      <span className="text-slate-400 dark:text-slate-500">{item.unidad}</span>
+                    <td className="px-5 py-3">
+                      <ValorConUnidad valor={item.valor} unidad={item.unidad} />
                     </td>
                     <td className="px-5 py-3">
                       <Badge variant={ESTADO_VARIANT[item.estado]}>{ESTADO_LABEL[item.estado]}</Badge>
