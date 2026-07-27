@@ -7,6 +7,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { ChevronDown, X } from "lucide-react";
+import { FieldError } from "./FieldError";
 
 interface ComboboxProps {
   id?: string;
@@ -183,7 +184,7 @@ export function Combobox({
         )}
       </div>
 
-      {error && <span className="text-sm text-red-600">{error}</span>}
+      {error && <FieldError message={error} />}
     </div>
   );
 }
