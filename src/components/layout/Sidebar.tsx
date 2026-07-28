@@ -35,7 +35,18 @@ export function Sidebar() {
   const puedeVerConfiguracion = esGerente;
   const puedeVerPlanes = esAdmin;
   const puedeVerProveedores = esAdmin || esGerente;
-  const puedeVerLotes = esAdmin || esGerente || user?.rolNombre === "Responsable de calidad";
+  // HU-20 suma Operario de línea (carga manual) y Responsable de producción
+  // (historial) además de Responsable de calidad/Gerente/Administrador
+  // (HU-60).
+  // TODO(backend): GET /lotes todavía no habilita esos dos roles nuevos
+  // (ver comentario en App.tsx) — la pantalla les va a quedar vacía/con
+  // error 403 hasta que se actualice ese lado.
+  const puedeVerLotes =
+    esAdmin ||
+    esGerente ||
+    user?.rolNombre === "Responsable de calidad" ||
+    user?.rolNombre === "Operario de línea" ||
+    user?.rolNombre === "Responsable de producción";
   // GET /sensores (backend) habilita también a Responsable de producción y
   // Operario de línea, ver sensor.controller.ts.
   const puedeVerSensores =
@@ -65,7 +76,11 @@ export function Sidebar() {
             // Si planes/proveedores NO están paginados, devuelven array. Si lo están, ajusta a .meta.total
             puedeVerPlanes ? planesService.getAll() : [],
             puedeVerProveedores ? proveedoresService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
-            puedeVerLotes ? loteService.count() : 0,
+            // .catch(() => 0): GET /lotes todavía no habilita Operario de
+            // línea/Responsable de producción (ver comentario en
+            // puedeVerLotes) — que ese 403 no tire abajo el resto de los
+            // contadores del Promise.all.
+            puedeVerLotes ? loteService.count().catch(() => 0) : 0,
             // No hay endpoint de conteo dedicado para sensores, se toma el length del getAll.
             puedeVerSensores ? sensorService.getAll() : [],
           ]);

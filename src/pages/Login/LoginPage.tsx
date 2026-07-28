@@ -55,6 +55,11 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       const user = await login(email, password, rememberMe);
+      // Operario de línea y Responsable de producción ya tenían Sensores
+      // habilitado (HU-17/33/19) pero caían igual acá por no estar en este
+      // mapa: quedaban en un callejón sin salida (SinFuncionalidadesPage no
+      // tiene Layout/Sidebar). HU-20 les suma además /lotes (carga manual e
+      // historial), accesible por Sidebar una vez adentro.
       const destination =
         user.rolNombre === "Administrador"
           ? "/dashboard"
@@ -62,7 +67,10 @@ export default function LoginPage() {
             ? "/usuarios"
             : user.rolNombre === "Responsable de calidad"
               ? "/lotes"
-              : "/sin-funcionalidades";
+              : user.rolNombre === "Operario de línea" ||
+                  user.rolNombre === "Responsable de producción"
+                ? "/sensores"
+                : "/sin-funcionalidades";
       navigate(destination, { replace: true });
     } catch (error) {
       if (axios.isAxiosError(error)) {
