@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { FlaskConical, Pencil } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
+import { ClasificacionLoteBadge } from "../../components/ClasificacionLoteBadge";
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
+import { useConfigParametros } from "../../hooks/useConfigParametros";
+import { calcularClasificacionLote } from "../../hooks/useClasificacionLote";
 import { proveedoresService } from "../../services/proveedores.service";
 import { TIPO_MATERIA_PRIMA_TABS } from "../Configuracion/constants/parametrosCalidad";
 import { ClasificacionLote, DestinoLote, type Lote } from "../../types/lote.types";
@@ -37,7 +40,7 @@ const DESTINO_LABEL: Record<DestinoLote, string> = {
   [DestinoLote.DESCARTE]: "Descarte",
 };
 
-const HEADERS = ["LOTE", "PROVEEDOR", "MATERIA PRIMA", "INGRESO", "CLASIFICACIÓN", "DESTINO", ""];
+const HEADERS_BASE = ["LOTE", "PROVEEDOR", "MATERIA PRIMA", "INGRESO", "CLASIFICACIÓN", "DESTINO"];
 
 const TIPO_MATERIA_PRIMA_LABEL = new Map(TIPO_MATERIA_PRIMA_TABS.map((t) => [t.value, t.label]));
 
@@ -46,6 +49,7 @@ export default function LotesPage() {
     useLotes();
   const { user } = useAuth();
   const { sensores } = useSensores();
+  const { configs: configsUmbrales } = useConfigParametros();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
@@ -55,6 +59,11 @@ export default function LotesPage() {
   // /lotes en el backend); Gerente/Administrador acceden a esta pantalla en
   // modo lectura.
   const puedeCrearLote = user?.rolNombre === "Responsable de calidad";
+
+  // HU-21: la clasificación automática es del mismo rol dueño de la pantalla
+  // de lotes (Responsable de calidad) — nombre propio para dejar claro por
+  // qué se usa en cada lugar, aunque hoy sea el mismo booleano.
+  const puedeVerClasificacion = puedeCrearLote;
 
   // POST /lotes/:id/mediciones-manuales (HU-20, backend): solo Operario de
   // línea. Es respaldo TOTAL: el back rechaza con 400 si el lote ya tiene
@@ -110,6 +119,13 @@ export default function LotesPage() {
 
   const proveedorMap = new Map(proveedores.map((p) => [p.id, p.razonSocial]));
 
+  const headers = useMemo(() => {
+    const list = [...HEADERS_BASE];
+    if (puedeVerClasificacion) list.push("CLASIF. AUTOMÁTICA");
+    list.push("");
+    return list;
+  }, [puedeVerClasificacion]);
+
   return (
     <Layout breadcrumb="Consola > Lotes">
       <div className="mb-6 flex items-center justify-between">
@@ -161,7 +177,7 @@ export default function LotesPage() {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800">
-                {HEADERS.map((h) => (
+                {headers.map((h) => (
                   <th
                     key={h}
                     className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
@@ -200,6 +216,13 @@ export default function LotesPage() {
                   <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                     {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
                   </td>
+                  {puedeVerClasificacion && (
+                    <td className="px-5 py-3">
+                      <ClasificacionLoteBadge
+                        resultado={calcularClasificacionLote(lote, configsUmbrales).resultado}
+                      />
+                    </td>
+                  )}
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-end gap-2">
                       {puedeAbrirMediciones && (
@@ -252,6 +275,7 @@ export default function LotesPage() {
           !lotesConSensorAsociado.has(loteMediciones.id)
         }
         puedeVerHistorialManual={puedeVerHistorialManual}
+        puedeVerClasificacion={puedeVerClasificacion}
         onClose={() => setLoteMediciones(null)}
       />
     </Layout>
