@@ -95,11 +95,26 @@ function App() {
               }
             />
 
-            {/* LOTES (HU-60: Responsable de calidad + Gerente/Administrador como supervisión) */}
+            {/* LOTES (HU-60: Responsable de calidad + Gerente/Administrador como supervisión;
+                HU-20 suma Operario de línea -carga manual- y Responsable de producción
+                -historial-.
+                TODO(backend): GET /lotes y GET /lotes/:id en lote.controller.ts todavía
+                solo tienen @Roles(RESPONSABLE_CALIDAD, GERENTE, ADMINISTRADOR) — hasta que
+                se sume OPERARIO_LINEA/RESPONSABLE_PRODUCCION ahí, a esos dos roles la
+                pantalla les va a quedar vacía/con error 403 (probado con curl, no es bug
+                de frontend). El allowedRoles de acá ya está listo para cuando se resuelva. */}
             <Route
               path="/lotes"
               element={
-                <ProtectedRoute allowedRoles={["Responsable de calidad", "Gerente", "Administrador"]}>
+                <ProtectedRoute
+                  allowedRoles={[
+                    "Responsable de calidad",
+                    "Gerente",
+                    "Administrador",
+                    "Operario de línea",
+                    "Responsable de producción",
+                  ]}
+                >
                   <LotesPage />
                 </ProtectedRoute>
               }
