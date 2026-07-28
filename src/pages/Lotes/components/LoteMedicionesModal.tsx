@@ -60,11 +60,23 @@ export function LoteMedicionesModal({
 
   if (!isOpen || !lote) return null;
 
+  // Si el único acceso disponible es HU-21, el título/descripción de HU-20
+  // (mediciones manuales) queda engañoso — se ajusta al contenido real.
+  const soloClasificacion = tabs.length === 1 && tabs[0].value === "clasificacion";
+
   return (
     <Modal
       isOpen={isOpen}
-      title={`Mediciones manuales — ${lote.codigo}`}
-      description="Respaldo total cuando el lote no tiene sensores asociados (HU-20)"
+      title={
+        soloClasificacion
+          ? `Clasificación automática — ${lote.codigo}`
+          : `Mediciones manuales — ${lote.codigo}`
+      }
+      description={
+        soloClasificacion
+          ? "Resultado calculado a partir de los parámetros registrados (HU-21)"
+          : "Respaldo total cuando el lote no tiene sensores asociados (HU-20)"
+      }
       onClose={onClose}
     >
       <div className="flex flex-col gap-6">

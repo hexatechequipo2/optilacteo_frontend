@@ -90,10 +90,12 @@ export default function LotesPage() {
     );
   }, [user?.rolNombre]);
 
-  // El ícono de la acción se ofrece si hay al menos una de las dos
-  // capacidades (escribir o ver historial); qué pestañas quedan habilitadas
-  // adentro del modal se resuelve por lote en el render de la fila.
-  const puedeAbrirMediciones = puedeCargarMedicionManualBase || puedeVerHistorialManual;
+  // El ícono de la acción se ofrece si hay al menos una de las tres
+  // capacidades (escribir, ver historial o ver clasificación automática);
+  // qué pestañas quedan habilitadas adentro del modal se resuelve por lote
+  // en el render de la fila.
+  const puedeAbrirMediciones =
+    puedeCargarMedicionManualBase || puedeVerHistorialManual || puedeVerClasificacion;
 
   const abrirAlta = () => {
     setEditingLote(null);
@@ -230,7 +232,11 @@ export default function LotesPage() {
                           type="button"
                           onClick={() => setLoteMediciones(lote)}
                           className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                          title="Mediciones manuales"
+                          title={
+                            puedeCargarMedicionManualBase || puedeVerHistorialManual
+                              ? "Mediciones manuales"
+                              : "Clasificación automática"
+                          }
                         >
                           <FlaskConical className="h-4 w-4" />
                         </button>
