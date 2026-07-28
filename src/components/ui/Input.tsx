@@ -1,4 +1,5 @@
 import { forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
+import { FieldError } from "./FieldError";
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -31,7 +32,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             </div>
           )}
         </div>
-        {error && <span className="text-sm text-red-600">{error}</span>}
+        {error && <FieldError message={error} />}
       </div>
     );
   },

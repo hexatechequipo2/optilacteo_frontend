@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Settings } from "lucide-react";
-import { Tabs } from "../../../components/ui/Tabs";
+import { TipoMateriaPrimaSelector } from "../../../components/TipoMateriaPrimaSelector";
 import { useConfigParametros } from "../../../hooks/useConfigParametros";
-import { ORDEN_PARAMETROS, TIPO_MATERIA_PRIMA_TABS } from "../constants/parametrosCalidad";
+import { ORDEN_PARAMETROS } from "../constants/parametrosCalidad";
 import { TipoMateriaPrima } from "../../../types/configParametro.types";
 import { ParametroCard } from "./ParametroCard";
 
@@ -25,7 +25,7 @@ export function UmbralesCalidadTab() {
           </span>
         </div>
 
-        <Tabs tabs={TIPO_MATERIA_PRIMA_TABS} value={tipoSeleccionado} onChange={setTipoSeleccionado} />
+        <TipoMateriaPrimaSelector value={tipoSeleccionado} onChange={setTipoSeleccionado} />
       </div>
 
       {isLoading ? (

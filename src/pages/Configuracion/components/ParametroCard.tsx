@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { RangoFisicoBadge } from "../../../components/RangoFisicoBadge";
 import { extraerMensajeError } from "../../../services/configParametro.service";
 import type { ConfigParametro, Parametro, TipoMateriaPrima } from "../../../types/configParametro.types";
 import type { ParametroVisible } from "../constants/parametrosCalidad";
@@ -88,6 +89,8 @@ export function ParametroCard({ parametro, tipoMateriaPrima, config, onSave }: P
         {meta.label}
       </h3>
 
+      <RangoFisicoBadge label={meta.label} min={meta.rangoFisico.min} max={meta.rangoFisico.max} />
+
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Mínimo</label>
@@ -123,11 +126,7 @@ export function ParametroCard({ parametro, tipoMateriaPrima, config, onSave }: P
         <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
       ) : isSaving ? (
         <p className="text-xs text-slate-400 dark:text-slate-500">Guardando...</p>
-      ) : (
-        <p className="text-xs text-slate-400 dark:text-slate-500">
-          rango físico {meta.rangoFisico.min} — {meta.rangoFisico.max}
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }
