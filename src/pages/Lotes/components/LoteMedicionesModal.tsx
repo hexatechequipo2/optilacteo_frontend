@@ -74,8 +74,8 @@ export function LoteMedicionesModal({
       }
       description={
         soloClasificacion
-          ? "Resultado calculado a partir de los parámetros registrados (HU-21)"
-          : "Respaldo total cuando el lote no tiene sensores asociados (HU-20)"
+          ? "Resultado calculado a partir de los parámetros registrados."
+          : "Respaldo total cuando el lote no tiene sensores asociados."
       }
       onClose={onClose}
     >

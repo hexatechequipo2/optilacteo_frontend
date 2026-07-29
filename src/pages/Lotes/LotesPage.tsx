@@ -6,11 +6,9 @@ import { ClasificacionLoteBadge } from "../../components/ClasificacionLoteBadge"
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
-import { useConfigParametros } from "../../hooks/useConfigParametros";
-import { calcularClasificacionLote } from "../../hooks/useClasificacionLote";
 import { proveedoresService } from "../../services/proveedores.service";
 import { TIPO_MATERIA_PRIMA_TABS } from "../Configuracion/constants/parametrosCalidad";
-import { ClasificacionLote, DestinoLote, type Lote } from "../../types/lote.types";
+import { DestinoLote, type Lote } from "../../types/lote.types";
 import type { Proveedor } from "../../types/proveedor.types";
 import { LoteFormModal } from "./LoteFormModal";
 import { LoteMedicionesModal } from "./components/LoteMedicionesModal";
@@ -19,20 +17,6 @@ import { LoteMedicionesModal } from "./components/LoteMedicionesModal";
 // (no es una tabla paginada: acá se necesita el catálogo completo).
 const PROVEEDORES_SELECT_LIMIT = 100;
 
-const CLASIFICACION_LABEL: Record<ClasificacionLote, string> = {
-  [ClasificacionLote.PRIMERA]: "Primera",
-  [ClasificacionLote.SEGUNDA]: "Segunda",
-  [ClasificacionLote.TERCERA]: "Tercera",
-  [ClasificacionLote.RECHAZADO]: "Rechazado",
-};
-
-const CLASIFICACION_CLASS: Record<ClasificacionLote, string> = {
-  [ClasificacionLote.PRIMERA]: "bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-400",
-  [ClasificacionLote.SEGUNDA]: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400",
-  [ClasificacionLote.TERCERA]: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
-  [ClasificacionLote.RECHAZADO]: "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400",
-};
-
 const DESTINO_LABEL: Record<DestinoLote, string> = {
   [DestinoLote.PRODUCCION]: "Producción",
   [DestinoLote.ALMACENAMIENTO]: "Almacenamiento",
@@ -40,7 +24,7 @@ const DESTINO_LABEL: Record<DestinoLote, string> = {
   [DestinoLote.DESCARTE]: "Descarte",
 };
 
-const HEADERS_BASE = ["LOTE", "PROVEEDOR", "MATERIA PRIMA", "INGRESO", "CLASIFICACIÓN", "DESTINO"];
+const HEADERS_BASE = ["LOTE", "PROVEEDOR", "MATERIA PRIMA", "INGRESO", "DESTINO"];
 
 const TIPO_MATERIA_PRIMA_LABEL = new Map(TIPO_MATERIA_PRIMA_TABS.map((t) => [t.value, t.label]));
 
@@ -49,7 +33,6 @@ export default function LotesPage() {
     useLotes();
   const { user } = useAuth();
   const { sensores } = useSensores();
-  const { configs: configsUmbrales } = useConfigParametros();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
@@ -204,25 +187,16 @@ export default function LotesPage() {
                   <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                     {new Date(lote.fechaIngreso).toLocaleDateString("es-AR")}
                   </td>
-                  <td className="px-5 py-3">
-                    {lote.clasificacion ? (
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${CLASIFICACION_CLASS[lote.clasificacion]}`}
-                      >
-                        {CLASIFICACION_LABEL[lote.clasificacion]}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 dark:text-slate-500">—</span>
-                    )}
-                  </td>
                   <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                     {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
                   </td>
                   {puedeVerClasificacion && (
                     <td className="px-5 py-3">
-                      <ClasificacionLoteBadge
-                        resultado={calcularClasificacionLote(lote, configsUmbrales).resultado}
-                      />
+                      {lote.clasificacion ? (
+                        <ClasificacionLoteBadge resultado={lote.clasificacion} />
+                      ) : (
+                        <span className="text-slate-400 dark:text-slate-500">—</span>
+                      )}
                     </td>
                   )}
                   <td className="px-5 py-3">
