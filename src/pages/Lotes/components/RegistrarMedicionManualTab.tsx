@@ -106,7 +106,7 @@ export function RegistrarMedicionManualTab({ lote }: RegistrarMedicionManualTabP
           Completá los parámetros que hayas medido manualmente. Los que sean obligatorios para
           este tipo de materia prima se validan al guardar.
         </p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {Object.values(Parametro).map((parametro) => {
             const info = infoPorParametro[parametro];
             const unidad = UNIDAD_POR_PARAMETRO[parametro];

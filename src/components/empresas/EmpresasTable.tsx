@@ -1,5 +1,6 @@
 import type { EmpresaType } from "../../types/empresa.types";
 import { EmpresaRow } from "./EmpresaRow";
+import { EmpresaCard } from "./EmpresaCard";
 
 const HEADERS = [
   "EMPRESA",
@@ -31,30 +32,40 @@ export function EmpresasTable({ empresas, onEdit }: EmpresasTableProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      <table className="w-full text-left">
-        <thead>
-          <tr className="border-b border-slate-200 dark:border-slate-800">
-            {HEADERS.map((header, index) => (
-              <th
-                key={`${header}-${index}`}
-                className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
-              >
-                {header}
-              </th>
+    <>
+      {/* Tabla (md+) */}
+      <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-slate-200 dark:border-slate-800">
+              {HEADERS.map((header, index) => (
+                <th
+                  key={`${header}-${index}`}
+                  className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
+                >
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {empresas.map((empresa) => (
+              <EmpresaRow
+                key={empresa.id}
+                empresa={empresa}
+                onEdit={onEdit}
+              />
             ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-          {empresas.map((empresa) => (
-            <EmpresaRow
-              key={empresa.id}
-              empresa={empresa}
-              onEdit={onEdit}
-            />
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Cards (mobile) */}
+      <div className="flex flex-col gap-3 md:hidden">
+        {empresas.map((empresa) => (
+          <EmpresaCard key={empresa.id} empresa={empresa} onEdit={onEdit} />
+        ))}
+      </div>
+    </>
   );
 }

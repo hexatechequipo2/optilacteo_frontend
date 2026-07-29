@@ -35,7 +35,7 @@ export default function EmpresasPage() {
   return (
     <Layout breadcrumb="Consola > Empresas">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             Empresas

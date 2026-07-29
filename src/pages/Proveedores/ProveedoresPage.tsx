@@ -108,7 +108,7 @@ export default function ProveedoresPage() {
   return (
     <Layout breadcrumb="Consola > Proveedores">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             Proveedores
@@ -187,7 +187,8 @@ export default function ProveedoresPage() {
         </div>
       ) : (
         <>
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          {/* Tabla (md+) */}
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800">
@@ -270,6 +271,73 @@ export default function ProveedoresPage() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Cards (mobile) */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {proveedores.map((p) => {
+              const nombreEmpresa =
+                empresaMap.get(p.empresaId) ?? `Empresa #${p.empresaId}`;
+              return (
+                <div
+                  key={p.id}
+                  className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                        {getInitials(p.razonSocial)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-slate-900 dark:text-white">
+                          {p.razonSocial}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{p.cuit}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProveedorEnEdicion(p)}
+                      aria-label={`Editar ${p.razonSocial}`}
+                      className="flex-shrink-0 rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${TIPO_CLASS[p.tipo]}`}
+                    >
+                      {TIPO_LABEL[p.tipo]}
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_CLASS[p.estado]}`}
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full ${ESTADO_DOT[p.estado]}`} />
+                      {p.estado.charAt(0).toUpperCase() + p.estado.slice(1)}
+                    </span>
+                  </div>
+
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                    <div className="min-w-0">
+                      <dt className="text-slate-400 dark:text-slate-500">Empresa</dt>
+                      <dd className="truncate text-slate-600 dark:text-slate-400">{nombreEmpresa}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-400 dark:text-slate-500">Capacidad</dt>
+                      <dd className="text-slate-600 dark:text-slate-400">{capacidadLabel(p)}</dd>
+                    </div>
+                    <div className="col-span-2 min-w-0">
+                      <dt className="text-slate-400 dark:text-slate-500">Ubicación</dt>
+                      <dd className="truncate text-slate-600 dark:text-slate-400">
+                        {[p.localidad, p.provincia].filter(Boolean).join(", ") || "—"}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              );
+            })}
           </div>
 
           {/* Paginación */}

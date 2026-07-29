@@ -91,7 +91,7 @@ export function ParametroCard({ parametro, tipoMateriaPrima, config, onSave }: P
 
       <RangoFisicoBadge label={meta.label} min={meta.rangoFisico.min} max={meta.rangoFisico.max} />
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Mínimo</label>
           <input

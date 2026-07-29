@@ -130,7 +130,8 @@ export function HistorialMedicionesManualesTab({ lote }: HistorialMedicionesManu
         </div>
       ) : (
         <>
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          {/* Tabla (md+) */}
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800">
@@ -166,6 +167,34 @@ export function HistorialMedicionesManualesTab({ lote }: HistorialMedicionesManu
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Cards (mobile) */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    {new Date(item.createdAt).toLocaleString("es-AR")}
+                  </span>
+                  <Badge variant={ESTADO_VARIANT[item.estado]}>{ESTADO_LABEL[item.estado]}</Badge>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-slate-700 dark:text-slate-300">
+                    {PARAMETRO_LABEL[item.parametro] ?? item.parametro}
+                  </span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {item.valor}
+                    {UNIDAD_POR_PARAMETRO[item.parametro]
+                      ? ` ${UNIDAD_POR_PARAMETRO[item.parametro]}`
+                      : ""}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="flex items-center justify-end border-t border-slate-200 pt-4 dark:border-slate-800">

@@ -154,7 +154,8 @@ export function HistorialMedicionesTab() {
         </div>
       ) : (
         <>
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          {/* Tabla (md+) */}
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800">
@@ -189,6 +190,45 @@ export function HistorialMedicionesTab() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Cards (mobile) */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-xs font-medium text-slate-900 dark:text-white">
+                      {item.loteCodigo}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {new Date(item.timestampLectura).toLocaleString("es-AR")}
+                    </p>
+                  </div>
+                  <Badge variant={ESTADO_VARIANT[item.estado]}>{ESTADO_LABEL[item.estado]}</Badge>
+                </div>
+
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                  <div className="min-w-0">
+                    <dt className="text-slate-400 dark:text-slate-500">Sensor</dt>
+                    <dd className="truncate text-slate-600 dark:text-slate-400">{item.sensorNombre}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-400 dark:text-slate-500">Parámetro</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">{item.parametro}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-slate-400 dark:text-slate-500">Valor</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">
+                      <ValorConUnidad valor={item.valor} unidad={item.unidad} />
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            ))}
           </div>
 
           <div className="flex items-center justify-end border-t border-slate-200 pt-4 dark:border-slate-800">
