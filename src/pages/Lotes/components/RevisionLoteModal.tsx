@@ -157,7 +157,7 @@ function RevisionLoteModalBody({ isOpen, lote, onClose, onRevisado }: RevisionLo
                 return (
                   <li
                     key={p.parametro}
-                    className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-4 py-2 text-sm dark:border-slate-800"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 px-4 py-2 text-sm dark:border-slate-800"
                   >
                     <span className="text-slate-700 dark:text-slate-300">
                       {PARAMETRO_LABEL[p.parametro] ?? p.parametro}: {p.valor}

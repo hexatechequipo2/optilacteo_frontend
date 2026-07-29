@@ -69,7 +69,7 @@ export default function UsuariosPage() {
 
   return (
     <Layout breadcrumb="Consola > Usuarios">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight font-sans dark:text-white">Usuarios y Roles</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -86,7 +86,7 @@ export default function UsuariosPage() {
         </Button>
       </div>
 
-      <div className="mb-6 flex gap-4">
+      <div className="mb-6 flex flex-wrap gap-4">
         <div className="w-full max-w-sm">
           <Input
             id="usuarios-search"

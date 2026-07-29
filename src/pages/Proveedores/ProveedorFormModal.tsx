@@ -305,7 +305,7 @@ export function ProveedorFormModal({
             {/* Tipo */}
             <div className="flex flex-col gap-3">
               <SectionHeader>TIPO DE PROVEEDOR</SectionHeader>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {TIPOS.map(({ value, label, icon: Icon }) => (
                   <button
                     key={value}
@@ -338,7 +338,7 @@ export function ProveedorFormModal({
                 error={errors.razonSocial}
                 autoFocus
               />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Input
                   id="prov-cuit"
                   label="CUIT *"
@@ -382,7 +382,7 @@ export function ProveedorFormModal({
                 error={errors.empresaId}
                 disabled={!!empresaIdBloqueada}
               />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Select
                   id="prov-provincia"
                   label="Provincia"

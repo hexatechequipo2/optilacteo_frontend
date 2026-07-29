@@ -225,7 +225,7 @@ export function SensorFormModal({
 
         <div className="flex flex-col gap-3">
           <SectionHeader>RANGO FAVORABLE</SectionHeader>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
               id="sensor-rangoMin"
               type="number"

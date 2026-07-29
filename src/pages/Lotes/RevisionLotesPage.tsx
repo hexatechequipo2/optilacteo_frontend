@@ -118,52 +118,99 @@ export default function RevisionLotesPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800">
-                    {HEADERS_PENDIENTES.map((h) => (
-                      <th
-                        key={h}
-                        className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {lotes.map((lote) => (
-                    <tr key={lote.id} className="text-sm">
-                      <td className="px-5 py-3 font-mono text-xs font-medium text-slate-900 dark:text-white">
-                        {lote.codigo}
-                      </td>
-                      <td className="px-5 py-3 text-slate-700 dark:text-slate-300">
-                        {proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`}
-                      </td>
-                      <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                        {TIPO_MATERIA_PRIMA_LABEL.get(lote.materiaPrima) ?? lote.materiaPrima}
-                      </td>
-                      <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                        {new Date(lote.fechaIngreso).toLocaleDateString("es-AR")}
-                      </td>
-                      <td className="px-5 py-3">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setLoteEnRevision(lote)}
-                            className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                            title="Aprobar o rechazar lote"
-                          >
-                            <ClipboardCheck className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
+            <>
+              {/* Tabla (md+) */}
+              <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800">
+                      {HEADERS_PENDIENTES.map((h) => (
+                        <th
+                          key={h}
+                          className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
+                        >
+                          {h}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {lotes.map((lote) => (
+                      <tr key={lote.id} className="text-sm">
+                        <td className="px-5 py-3 font-mono text-xs font-medium text-slate-900 dark:text-white">
+                          {lote.codigo}
+                        </td>
+                        <td className="px-5 py-3 text-slate-700 dark:text-slate-300">
+                          {proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`}
+                        </td>
+                        <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                          {TIPO_MATERIA_PRIMA_LABEL.get(lote.materiaPrima) ?? lote.materiaPrima}
+                        </td>
+                        <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                          {new Date(lote.fechaIngreso).toLocaleDateString("es-AR")}
+                        </td>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setLoteEnRevision(lote)}
+                              className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                              title="Aprobar o rechazar lote"
+                            >
+                              <ClipboardCheck className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Cards (mobile) */}
+              <div className="flex flex-col gap-3 md:hidden">
+                {lotes.map((lote) => (
+                  <div
+                    key={lote.id}
+                    className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-xs font-medium text-slate-900 dark:text-white">
+                          {lote.codigo}
+                        </p>
+                        <p className="truncate text-sm text-slate-700 dark:text-slate-300">
+                          {proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setLoteEnRevision(lote)}
+                        className="flex-shrink-0 rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                        title="Aprobar o rechazar lote"
+                      >
+                        <ClipboardCheck className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                      <div>
+                        <dt className="text-slate-400 dark:text-slate-500">Materia prima</dt>
+                        <dd className="text-slate-600 dark:text-slate-400">
+                          {TIPO_MATERIA_PRIMA_LABEL.get(lote.materiaPrima) ?? lote.materiaPrima}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-400 dark:text-slate-500">Ingreso</dt>
+                        <dd className="text-slate-600 dark:text-slate-400">
+                          {new Date(lote.fechaIngreso).toLocaleDateString("es-AR")}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </>
       ) : (
@@ -195,45 +242,76 @@ export default function RevisionLotesPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800">
-                    {HEADERS_HISTORIAL.map((h) => (
-                      <th
-                        key={h}
-                        className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {decisiones.map(({ revision, lote }) => (
-                    <tr key={revision.id} className="text-sm">
-                      <td className="px-5 py-3 font-mono text-xs font-medium text-slate-900 dark:text-white">
-                        {lote.codigo}
-                      </td>
-                      <td className="px-5 py-3">
-                        <Badge variant={DECISION_VARIANT[revision.decision]}>
-                          {DECISION_LABEL[revision.decision] ?? revision.decision}
-                        </Badge>
-                      </td>
-                      <td className="max-w-xs px-5 py-3 text-slate-600 dark:text-slate-400">
-                        {revision.justificacion}
-                      </td>
-                      <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                        {resolverUsuarioRevision(revision.usuarioId, user)}
-                      </td>
-                      <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                        {new Date(revision.createdAt).toLocaleString("es-AR")}
-                      </td>
+            <>
+              {/* Tabla (md+) */}
+              <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800">
+                      {HEADERS_HISTORIAL.map((h) => (
+                        <th
+                          key={h}
+                          className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
+                        >
+                          {h}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {decisiones.map(({ revision, lote }) => (
+                      <tr key={revision.id} className="text-sm">
+                        <td className="px-5 py-3 font-mono text-xs font-medium text-slate-900 dark:text-white">
+                          {lote.codigo}
+                        </td>
+                        <td className="px-5 py-3">
+                          <Badge variant={DECISION_VARIANT[revision.decision]}>
+                            {DECISION_LABEL[revision.decision] ?? revision.decision}
+                          </Badge>
+                        </td>
+                        <td className="max-w-xs px-5 py-3 text-slate-600 dark:text-slate-400">
+                          {revision.justificacion}
+                        </td>
+                        <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                          {resolverUsuarioRevision(revision.usuarioId, user)}
+                        </td>
+                        <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                          {new Date(revision.createdAt).toLocaleString("es-AR")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Cards (mobile) */}
+              <div className="flex flex-col gap-3 md:hidden">
+                {decisiones.map(({ revision, lote }) => (
+                  <div
+                    key={revision.id}
+                    className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="truncate font-mono text-xs font-medium text-slate-900 dark:text-white">
+                        {lote.codigo}
+                      </p>
+                      <Badge variant={DECISION_VARIANT[revision.decision]}>
+                        {DECISION_LABEL[revision.decision] ?? revision.decision}
+                      </Badge>
+                    </div>
+
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      {revision.justificacion}
+                    </p>
+
+                    <div className="flex items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+                      <span>{resolverUsuarioRevision(revision.usuarioId, user)}</span>
+                      <span>{new Date(revision.createdAt).toLocaleString("es-AR")}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </>
       )}

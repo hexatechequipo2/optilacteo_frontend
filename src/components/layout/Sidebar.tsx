@@ -12,6 +12,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   Cpu,
+  X,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
@@ -22,7 +23,12 @@ import { sensorService } from "../../services/sensor.service";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import optilacteoLogo from "../../assets/images/optilacteo_logo.png";
 
-export function Sidebar() {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -165,7 +171,11 @@ export function Sidebar() {
   ];
 
   return (
-    <aside className="flex h-screen w-70 flex-shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-all duration-300 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none">
+    <aside
+      className={`fixed inset-y-0 left-0 z-40 flex h-screen w-70 flex-shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-transform duration-300 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none lg:static lg:translate-x-0 ${
+        isOpen ? "translate-x-0" : "-translate-x-full"
+      }`}
+    >
       <div className="flex items-center gap-3 border-b border-slate-200 p-4 dark:border-slate-800">
         {isLoadingEmpresa ? (
           <div className="h-10 w-10 flex-shrink-0 animate-pulse rounded-md bg-slate-100 dark:bg-slate-800" />
@@ -190,6 +200,16 @@ export function Sidebar() {
         <span className="flex-shrink-0 rounded-md bg-blue-100 px-3 py-1 text-xs font-semibold uppercase text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
           {user?.rolNombre ?? "Sin rol"}
         </span>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className={`flex-shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 lg:hidden ${
+            isOpen ? "" : "hidden"
+          }`}
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">

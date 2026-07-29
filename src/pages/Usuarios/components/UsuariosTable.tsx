@@ -53,92 +53,162 @@ export function UsuariosTable({ usuarios, onEdit, onUnlock }: UsuariosTableProps
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      <table className="w-full text-left">
-        <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
-          <tr>
-            <th className="px-4 py-3">Usuario</th>
-            <th className="px-4 py-3">Empresa</th>
-            <th className="px-4 py-3">Rol</th>
-            <th className="px-4 py-3">Estado</th>
-            <th className="px-4 py-3 text-right">Acciones</th>
-          </tr>
-        </thead>
+    <>
+      {/* Tabla (md+) */}
+      <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
+        <table className="w-full text-left">
+          <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
+            <tr>
+              <th className="px-4 py-3">Usuario</th>
+              <th className="px-4 py-3">Empresa</th>
+              <th className="px-4 py-3">Rol</th>
+              <th className="px-4 py-3">Estado</th>
+              <th className="px-4 py-3 text-right">Acciones</th>
+            </tr>
+          </thead>
 
-        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-          {usuarios.map((usuario) => (
-            <tr key={usuario.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-              
-              {/* Usuario */}
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-xs font-semibold text-white">
-                    {getInitials(usuario.name)}
-                  </div>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {usuarios.map((usuario) => (
+              <tr key={usuario.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
 
-                  <div>
-                    <p className="text-sm font-medium text-slate-900 dark:text-white">
-                      {usuario.name}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {usuario.email}
-                    </p>
-                  </div>
-                </div>
-              </td>
-
-              {/* Empresa */}
-              <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
-                {usuario.empresa ? (
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded bg-slate-200 text-xs font-medium dark:bg-slate-700">
-                      {usuario.empresa.name.slice(0, 2).toUpperCase()}
+                {/* Usuario */}
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-xs font-semibold text-white">
+                      {getInitials(usuario.name)}
                     </div>
-                    {usuario.empresa.name}
+
+                    <div>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">
+                        {usuario.name}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {usuario.email}
+                      </p>
+                    </div>
                   </div>
-                ) : (
-                  <span className="text-slate-400">—</span>
-                )}
-              </td>
+                </td>
 
-              {/* Rol */}
-              <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
-                {usuario?.rolNombre ?? "Sin rol"}
-              </td>
+                {/* Empresa */}
+                <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
+                  {usuario.empresa ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded bg-slate-200 text-xs font-medium dark:bg-slate-700">
+                        {usuario.empresa.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      {usuario.empresa.name}
+                    </div>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </td>
 
-              {/* Estado */}
-              <td className="px-4 py-3">
-                <EstadoBadge isActive={usuario.isActive} isLocked={usuario.isLocked} />
-              </td>
+                {/* Rol */}
+                <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
+                  {usuario?.rolNombre ?? "Sin rol"}
+                </td>
 
-              {/* Acciones */}
-              <td className="px-4 py-3 text-right">
-                <div className="flex items-center justify-end gap-1">
-                  {usuario.isLocked && (
+                {/* Estado */}
+                <td className="px-4 py-3">
+                  <EstadoBadge isActive={usuario.isActive} isLocked={usuario.isLocked} />
+                </td>
+
+                {/* Acciones */}
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    {usuario.isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => onUnlock(usuario.id)}
+                        aria-label={`Desbloquear ${usuario.name}`}
+                        title="Desbloquear cuenta"
+                        className="rounded-md px-2 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                      >
+                        Desbloquear
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => onUnlock(usuario.id)}
-                      aria-label={`Desbloquear ${usuario.name}`}
-                      title="Desbloquear cuenta"
-                      className="rounded-md px-2 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                      onClick={() => onEdit(usuario)}
+                      aria-label={`Editar ${usuario.name}`}
+                      className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
                     >
-                      Desbloquear
+                      <Pencil className="h-4 w-4" />
                     </button>
-                  )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Cards (mobile) */}
+      <div className="flex flex-col gap-3 md:hidden">
+        {usuarios.map((usuario) => (
+          <div
+            key={usuario.id}
+            className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-blue-600 text-xs font-semibold text-white">
+                  {getInitials(usuario.name)}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
+                    {usuario.name}
+                  </p>
+                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                    {usuario.email}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-shrink-0 items-center gap-1">
+                {usuario.isLocked && (
                   <button
                     type="button"
-                    onClick={() => onEdit(usuario)}
-                    aria-label={`Editar ${usuario.name}`}
-                    className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                    onClick={() => onUnlock(usuario.id)}
+                    aria-label={`Desbloquear ${usuario.name}`}
+                    title="Desbloquear cuenta"
+                    className="rounded-md px-2 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-500/10"
                   >
-                    <Pencil className="h-4 w-4" />
+                    Desbloquear
                   </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onEdit(usuario)}
+                  aria-label={`Editar ${usuario.name}`}
+                  className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <EstadoBadge isActive={usuario.isActive} isLocked={usuario.isLocked} />
+            </div>
+
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+              <div className="min-w-0">
+                <dt className="text-slate-400 dark:text-slate-500">Empresa</dt>
+                <dd className="truncate text-slate-600 dark:text-slate-400">
+                  {usuario.empresa ? usuario.empresa.name : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-400 dark:text-slate-500">Rol</dt>
+                <dd className="text-slate-600 dark:text-slate-400">
+                  {usuario?.rolNombre ?? "Sin rol"}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

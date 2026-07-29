@@ -149,68 +149,137 @@ export function RegistroSensoresTab({
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50">
-                {HEADERS.map((h) => (
-                  <th
-                    key={h}
-                    className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {sensores.map((sensor) => (
-                <tr key={sensor.id} className="text-sm">
-                  <td className="px-5 py-3 font-medium text-slate-900 dark:text-white">
-                    {sensor.nombre}
-                  </td>
-                  <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                    {TIPO_SENSOR_LABEL[sensor.tipo]}
-                  </td>
-                  <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                    {PARAMETRO_LABEL[sensor.parametro] ?? sensor.parametro}
-                  </td>
-                  <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                    {UBICACION_LABEL[sensor.ubicacion]}
-                  </td>
-                  <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                    {sensor.rangoMinFavor} – {sensor.rangoMaxFavor}
-                  </td>
-                  <td className="px-5 py-3">
-                    <SensorEstadoBadge estado={sensor.estado} />
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSensorHistorial(sensor)}
-                        className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                        title="Asociación a lote / historial"
-                      >
-                        <Link2 className="h-4 w-4" />
-                      </button>
-                      {puedeGestionar && (
+        <>
+          {/* Tabla (md+) */}
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50">
+                  {HEADERS.map((h) => (
+                    <th
+                      key={h}
+                      className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {sensores.map((sensor) => (
+                  <tr key={sensor.id} className="text-sm">
+                    <td className="px-5 py-3 font-medium text-slate-900 dark:text-white">
+                      {sensor.nombre}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {TIPO_SENSOR_LABEL[sensor.tipo]}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {PARAMETRO_LABEL[sensor.parametro] ?? sensor.parametro}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {UBICACION_LABEL[sensor.ubicacion]}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {sensor.rangoMinFavor} – {sensor.rangoMaxFavor}
+                    </td>
+                    <td className="px-5 py-3">
+                      <SensorEstadoBadge estado={sensor.estado} />
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => abrirEdicion(sensor)}
+                          onClick={() => setSensorHistorial(sensor)}
                           className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                          title="Editar sensor"
+                          title="Asociación a lote / historial"
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Link2 className="h-4 w-4" />
                         </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                        {puedeGestionar && (
+                          <button
+                            type="button"
+                            onClick={() => abrirEdicion(sensor)}
+                            className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                            title="Editar sensor"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Cards (mobile) */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {sensores.map((sensor) => (
+              <div
+                key={sensor.id}
+                className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-slate-900 dark:text-white">
+                      {sensor.nombre}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {TIPO_SENSOR_LABEL[sensor.tipo]}
+                    </p>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSensorHistorial(sensor)}
+                      className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                      title="Asociación a lote / historial"
+                    >
+                      <Link2 className="h-4 w-4" />
+                    </button>
+                    {puedeGestionar && (
+                      <button
+                        type="button"
+                        onClick={() => abrirEdicion(sensor)}
+                        className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                        title="Editar sensor"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <SensorEstadoBadge estado={sensor.estado} />
+                </div>
+
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                  <div>
+                    <dt className="text-slate-400 dark:text-slate-500">Parámetro</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">
+                      {PARAMETRO_LABEL[sensor.parametro] ?? sensor.parametro}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-400 dark:text-slate-500">Ubicación</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">
+                      {UBICACION_LABEL[sensor.ubicacion]}
+                    </dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-slate-400 dark:text-slate-500">Rango favorable</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">
+                      {sensor.rangoMinFavor} – {sensor.rangoMaxFavor}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {puedeGestionar && (
