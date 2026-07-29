@@ -10,6 +10,7 @@ import {
   Home,
   Settings,
   ClipboardList,
+  ClipboardCheck,
   Cpu,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
@@ -47,6 +48,10 @@ export function Sidebar() {
     user?.rolNombre === "Responsable de calidad" ||
     user?.rolNombre === "Operario de línea" ||
     user?.rolNombre === "Responsable de producción";
+  // HU-22: GET /lotes/no-aptos y POST /lotes/:id/revision son exclusivos de
+  // Responsable de Calidad en el backend (lote.controller.ts) — a diferencia
+  // de /lotes, ningún otro rol tiene acceso de lectura acá.
+  const puedeVerRevisionCalidad = user?.rolNombre === "Responsable de calidad";
   // GET /sensores (backend) habilita también a Responsable de producción y
   // Operario de línea, ver sensor.controller.ts.
   const puedeVerSensores =
@@ -63,14 +68,22 @@ export function Sidebar() {
     proveedores: 0,
     lotes: 0,
     sensores: 0,
+    revisionCalidad: 0,
   });
 
   useEffect(() => {
     async function loadCounts() {
       try {
         // Ejecutamos las llamadas
-        const [empresasRes, usuariosRes, planesRes, proveedoresRes, lotesTotal, sensoresRes] =
-          await Promise.all([
+        const [
+          empresasRes,
+          usuariosRes,
+          planesRes,
+          proveedoresRes,
+          lotesTotal,
+          sensoresRes,
+          revisionCalidadRes,
+        ] = await Promise.all([
             puedeVerEmpresas ? empresasService.getAll({ limit: 1 }) : { data: [], meta: { total: 0 } },
             puedeVerUsuarios ? usuariosService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
             // Si planes/proveedores NO están paginados, devuelven array. Si lo están, ajusta a .meta.total
@@ -83,6 +96,9 @@ export function Sidebar() {
             puedeVerLotes ? loteService.count().catch(() => 0) : 0,
             // No hay endpoint de conteo dedicado para sensores, se toma el length del getAll.
             puedeVerSensores ? sensorService.getAll() : [],
+            // HU-22: no hay endpoint de conteo dedicado, se toma el length de
+            // GET /lotes/no-aptos.
+            puedeVerRevisionCalidad ? loteService.getNoAptos().catch(() => []) : [],
           ]);
 
         setCounts({
@@ -94,6 +110,7 @@ export function Sidebar() {
           proveedores: proveedoresRes.meta?.total ?? 0,
           lotes: lotesTotal,
           sensores: sensoresRes.length,
+          revisionCalidad: revisionCalidadRes.length,
         });
       } catch (error) {
         console.error("Error al cargar contadores:", error);
@@ -108,6 +125,7 @@ export function Sidebar() {
     puedeVerProveedores,
     puedeVerLotes,
     puedeVerSensores,
+    puedeVerRevisionCalidad,
   ]);
   const navItems = [
     ...(puedeVerDashboard
@@ -130,6 +148,16 @@ export function Sidebar() {
       : []),
     ...(puedeVerLotes
       ? [{ label: "Lotes", icon: ClipboardList, count: counts.lotes, path: "/lotes" }]
+      : []),
+    ...(puedeVerRevisionCalidad
+      ? [
+          {
+            label: "Revisión de calidad",
+            icon: ClipboardCheck,
+            count: counts.revisionCalidad,
+            path: "/lotes/revision",
+          },
+        ]
       : []),
     ...(puedeVerSensores
       ? [{ label: "Sensores", icon: Cpu, count: counts.sensores, path: "/sensores" }]
@@ -172,7 +200,15 @@ export function Sidebar() {
         <ul className="flex flex-col gap-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname.startsWith(item.path);
+            // Match por prefijo más largo: /lotes/revision no puede activar
+            // también "Lotes" (/lotes) solo porque comparte el prefijo.
+            const rutaActivaMasEspecifica = navItems
+              .map((i) => i.path)
+              .filter(
+                (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
+              )
+              .sort((a, b) => b.length - a.length)[0];
+            const isActive = item.path === rutaActivaMasEspecifica;
 
             return (
               <li key={item.label}>

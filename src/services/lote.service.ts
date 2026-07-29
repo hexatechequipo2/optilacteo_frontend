@@ -5,7 +5,9 @@ import type {
   Lote,
   LoteCreateResponse,
   LoteFilterQuery,
+  LoteRevision,
   PaginatedLotes,
+  RevisarLoteDto,
   UpdateLoteDto,
 } from "../types/lote.types";
 
@@ -41,6 +43,28 @@ export const loteService = {
 
   update: async (id: number, dto: UpdateLoteDto): Promise<Lote> => {
     const { data } = await api.patch<Lote>(`/lotes/${id}`, dto);
+    return data;
+  },
+
+  // HU-22: bandeja dedicada de lotes No Apto sin revisión vigente (el
+  // backend ya excluye acá los que ya fueron decididos y no se
+  // reclasificaron de nuevo). No está paginado.
+  getNoAptos: async (): Promise<Lote[]> => {
+    const { data } = await api.get<Lote[]>("/lotes/no-aptos");
+    return data;
+  },
+
+  // POST /lotes/:id/revision devuelve el lote actualizado completo (no solo
+  // la decisión). El backend responde 400 si el lote ya no está en No Apto
+  // y 409 si ya tiene una revisión vigente (justificaciones se muestran tal
+  // cual vía extraerMensajeError).
+  revisar: async (id: number, dto: RevisarLoteDto): Promise<Lote> => {
+    const { data } = await api.post<Lote>(`/lotes/${id}/revision`, dto);
+    return data;
+  },
+
+  getHistorialRevisiones: async (id: number): Promise<LoteRevision[]> => {
+    const { data } = await api.get<LoteRevision[]>(`/lotes/${id}/revisiones`);
     return data;
   },
 };

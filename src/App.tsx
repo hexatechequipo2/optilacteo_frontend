@@ -13,6 +13,7 @@ import ConfiguracionPage from "./pages/Configuracion/ConfiguracionPage";
 import PlanesPage from "./pages/Planes/PlanesPage";
 import ProveedoresPage from "./pages/Proveedores/ProveedoresPage";
 import LotesPage from "./pages/Lotes/LotesPage";
+import RevisionLotesPage from "./pages/Lotes/RevisionLotesPage";
 import SensoresPage from "./pages/Sensores/SensoresPage";
 import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
@@ -116,6 +117,19 @@ function App() {
                   ]}
                 >
                   <LotesPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* REVISIÓN DE CALIDAD (HU-22: aprobación/rechazo manual de lotes No
+                Apto). Solo Responsable de Calidad — mismo rol único que
+                @Roles(RESPONSABLE_CALIDAD) en GET /lotes/no-aptos,
+                POST /lotes/:id/revision en lote.controller.ts. */}
+            <Route
+              path="/lotes/revision"
+              element={
+                <ProtectedRoute allowedRoles={["Responsable de calidad"]}>
+                  <RevisionLotesPage />
                 </ProtectedRoute>
               }
             />
