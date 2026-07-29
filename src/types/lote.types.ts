@@ -98,3 +98,33 @@ export interface PaginatedLotes {
   page: number;
   limit: number;
 }
+
+// HU-22: aprobación o rechazo manual de un lote No Apto. Espeja
+// RevisarLoteDto / DecisionRevision / LoteRevisionCalidad del backend
+// (src/module/lote), mergeado en develop (PR #68).
+export const DecisionRevision = {
+  APROBADO: "aprobado",
+  RECHAZADO: "rechazado",
+} as const;
+
+export type DecisionRevision = (typeof DecisionRevision)[keyof typeof DecisionRevision];
+
+export interface RevisarLoteDto {
+  decision: DecisionRevision;
+  justificacion: string;
+}
+
+// GET /lotes/:id/revisiones devuelve la entidad tal cual (sin mapper a DTO),
+// no trae el usuario resuelto (la relación no es eager y el endpoint no la
+// selecciona) — solo usuarioId. TODO(backend): GET /users hoy es exclusivo
+// de Gerente/Administrador, así que Responsable de Calidad no puede resolver
+// ese id a un nombre; se muestra como "Usuario #<id>" hasta que se habilite.
+export interface LoteRevision {
+  id: number;
+  loteId: number;
+  decision: DecisionRevision;
+  justificacion: string;
+  usuarioId: number;
+  empresaId: number;
+  createdAt: string;
+}
