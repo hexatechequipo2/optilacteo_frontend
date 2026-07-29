@@ -19,7 +19,6 @@ import { TipoMateriaPrima } from "../../types/configParametro.types";
 import type { ConfigParametro } from "../../types/configParametro.types";
 import { Ubicacion, type Sensor } from "../../types/sensor.types";
 import {
-  ClasificacionLote,
   DestinoLote,
   type CreateLoteDto,
   type Lote,
@@ -32,14 +31,6 @@ import type { Proveedor } from "../../types/proveedor.types";
 const UBICACION_OPTIONS = [
   { value: "", label: "Sin definir" },
   ...Object.values(Ubicacion).map((u) => ({ value: u, label: UBICACION_LABEL[u] })),
-];
-
-const CLASIFICACION_OPTIONS = [
-  { value: "", label: "Seleccioná una clasificación" },
-  { value: ClasificacionLote.PRIMERA, label: "Primera" },
-  { value: ClasificacionLote.SEGUNDA, label: "Segunda" },
-  { value: ClasificacionLote.TERCERA, label: "Tercera" },
-  { value: ClasificacionLote.RECHAZADO, label: "Rechazado" },
 ];
 
 const DESTINO_OPTIONS = [
@@ -55,7 +46,6 @@ interface FormValues {
   materiaPrima: TipoMateriaPrima;
   fechaIngreso: string;
   parametros: Record<ParametroVisible, string>;
-  clasificacion: ClasificacionLote | "";
   destinoInicial: DestinoLote | "";
   ubicacionInicial: Ubicacion | "";
 }
@@ -63,7 +53,6 @@ interface FormValues {
 interface FormErrors {
   proveedorId?: string;
   fechaIngreso?: string;
-  clasificacion?: string;
   destinoInicial?: string;
   parametros?: Partial<Record<ParametroVisible, string>>;
   parametrosGeneral?: string;
@@ -83,7 +72,6 @@ function buildInitialValues(lote?: Lote): FormValues {
       materiaPrima: TipoMateriaPrima.LECHE_CRUDA,
       fechaIngreso: new Date().toISOString().slice(0, 10),
       parametros: buildParametrosVacios(),
-      clasificacion: "",
       destinoInicial: "",
       ubicacionInicial: "",
     };
@@ -93,7 +81,6 @@ function buildInitialValues(lote?: Lote): FormValues {
     materiaPrima: lote.materiaPrima,
     fechaIngreso: lote.fechaIngreso.slice(0, 10),
     parametros: buildParametrosVacios(),
-    clasificacion: lote.clasificacion ?? "",
     destinoInicial: lote.destinoInicial ?? "",
     ubicacionInicial: lote.ubicacionInicial ?? "",
   };
@@ -115,7 +102,6 @@ function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boo
 
   if (!values.proveedorId) errors.proveedorId = "El proveedor es obligatorio";
   if (!values.fechaIngreso) errors.fechaIngreso = "La fecha de ingreso es obligatoria";
-  if (!values.clasificacion) errors.clasificacion = "La clasificación es obligatoria";
   if (!values.destinoInicial) errors.destinoInicial = "El destino inicial es obligatorio";
 
   // PATCH /lotes/:id no acepta parametros (ver UpdateLoteDto / LoteService.update
@@ -165,7 +151,7 @@ interface LoteFormModalProps {
   onUpdate: (id: number, dto: UpdateLoteDto) => Promise<Lote>;
 }
 
-type Paso = "form" | "asociar";
+type Paso = "form" | "asociar" | "warnings";
 
 export function LoteFormModal({
   isOpen,
@@ -192,6 +178,11 @@ export function LoteFormModal({
   const [isAsociando, setIsAsociando] = useState(false);
   const [asociarError, setAsociarError] = useState("");
 
+  // Advertencias no bloqueantes de POST /lotes (ej. parámetro fuera de rango
+  // o sin config de umbral): el lote se guarda igual, pero no queremos que
+  // se pierdan silenciosamente cerrando el modal solo.
+  const [warnings, setWarnings] = useState<string[]>([]);
+
   useEffect(() => {
     if (!isOpen) return;
     setValues(buildInitialValues(lote));
@@ -202,6 +193,7 @@ export function LoteFormModal({
     setSensoresDisponibles([]);
     setSensoresSeleccionados(new Set());
     setAsociarError("");
+    setWarnings([]);
   }, [isOpen, lote]);
 
   if (!isOpen) return null;
@@ -229,7 +221,6 @@ export function LoteFormModal({
         await onUpdate(lote!.id, {
           materiaPrima: values.materiaPrima,
           fechaIngreso: new Date(values.fechaIngreso).toISOString(),
-          clasificacion: values.clasificacion as ClasificacionLote,
           destinoInicial: values.destinoInicial as DestinoLote,
         });
         onClose();
@@ -251,16 +242,19 @@ export function LoteFormModal({
         proveedorId: Number(values.proveedorId),
         materiaPrima: values.materiaPrima,
         fechaIngreso: new Date(values.fechaIngreso).toISOString(),
-        clasificacion: values.clasificacion as ClasificacionLote,
         destinoInicial: values.destinoInicial as DestinoLote,
         ubicacionInicial: values.ubicacionInicial || undefined,
         parametros,
       });
 
+      setWarnings(respuesta.warnings ?? []);
+
       if (respuesta.sensoresDisponibles.length > 0) {
         setLoteCreadoId(respuesta.lote.id);
         setSensoresDisponibles(respuesta.sensoresDisponibles);
         setPaso("asociar");
+      } else if ((respuesta.warnings ?? []).length > 0) {
+        setPaso("warnings");
       } else {
         onClose();
       }
@@ -298,6 +292,35 @@ export function LoteFormModal({
     }
   };
 
+  if (paso === "warnings") {
+    return (
+      <Modal
+        isOpen={isOpen}
+        title="Lote registrado"
+        description="El lote se guardó correctamente, pero hay advertencias para revisar"
+        onClose={onClose}
+        footer={
+          <div className="flex justify-end">
+            <Button type="button" className="!w-auto px-6" onClick={onClose}>
+              Entendido, cerrar
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          {warnings.map((w, i) => (
+            <div
+              key={i}
+              className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
+            >
+              {w}
+            </div>
+          ))}
+        </div>
+      </Modal>
+    );
+  }
+
   if (paso === "asociar") {
     return (
       <Modal
@@ -326,6 +349,14 @@ export function LoteFormModal({
         }
       >
         <div className="flex flex-col gap-3">
+          {warnings.map((w, i) => (
+            <div
+              key={i}
+              className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
+            >
+              {w}
+            </div>
+          ))}
           {sensoresDisponibles.map((sensor) => (
             <label
               key={sensor.id}
@@ -483,31 +514,19 @@ export function LoteFormModal({
           )}
         </div>
 
-        {/* Clasificación y destino */}
+        {/* Destino */}
         <div className="flex flex-col gap-3">
-          <SectionHeader>CLASIFICACIÓN Y DESTINO</SectionHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <Select
-              id="lote-clasificacion"
-              label="Clasificación *"
-              options={CLASIFICACION_OPTIONS}
-              value={values.clasificacion}
-              onChange={(e) =>
-                setValues((prev) => ({ ...prev, clasificacion: e.target.value as ClasificacionLote }))
-              }
-              error={errors.clasificacion}
-            />
-            <Select
-              id="lote-destino"
-              label="Destino inicial *"
-              options={DESTINO_OPTIONS}
-              value={values.destinoInicial}
-              onChange={(e) =>
-                setValues((prev) => ({ ...prev, destinoInicial: e.target.value as DestinoLote }))
-              }
-              error={errors.destinoInicial}
-            />
-          </div>
+          <SectionHeader>DESTINO</SectionHeader>
+          <Select
+            id="lote-destino"
+            label="Destino inicial *"
+            options={DESTINO_OPTIONS}
+            value={values.destinoInicial}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, destinoInicial: e.target.value as DestinoLote }))
+            }
+            error={errors.destinoInicial}
+          />
           <Select
             id="lote-ubicacionInicial"
             label="Ubicación inicial (opcional)"
