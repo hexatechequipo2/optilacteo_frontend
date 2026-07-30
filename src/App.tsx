@@ -7,6 +7,7 @@ import ForgotPasswordPage from "./pages/Login/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/Login/ResetPasswordPage";
 
 import DashboardPage from "./pages/Dashboard/DashboardPage";
+import DashboardProduccionPage from "./pages/DashboardProduccion/DashboardProduccionPage";
 import UsuariosPage from "./pages/Usuarios/UsuariosPage";
 import EmpresasPage from "./pages/Empresas/EmpresasPage";
 import ConfiguracionPage from "./pages/Configuracion/ConfiguracionPage";
@@ -42,6 +43,19 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={["Administrador"]}>
                   <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* DASHBOARD PRODUCCIÓN (HU-38: pantalla de inicio del rol
+                Responsable de producción — "jefe de producción" en el
+                backlog). Distinto del /dashboard de arriba, que es el
+                resumen de plataforma exclusivo de Administrador. */}
+            <Route
+              path="/dashboard-produccion"
+              element={
+                <ProtectedRoute allowedRoles={["Responsable de producción"]}>
+                  <DashboardProduccionPage />
                 </ProtectedRoute>
               }
             />

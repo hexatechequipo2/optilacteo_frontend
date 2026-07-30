@@ -36,7 +36,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   const esAdmin = user?.rolNombre === "Administrador";
   const esGerente = user?.rolNombre === "Gerente";
+  const esResponsableProduccion = user?.rolNombre === "Responsable de producción";
   const puedeVerDashboard = esAdmin;
+  // HU-38: dashboard operativo propio del Responsable de producción — no es
+  // el mismo /dashboard de plataforma que ve el Administrador.
+  const puedeVerDashboardProduccion = esResponsableProduccion;
   const puedeVerUsuarios = esAdmin || esGerente;
   const puedeVerEmpresas = esAdmin;
   const puedeVerConfiguracion = esGerente;
@@ -136,6 +140,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const navItems = [
     ...(puedeVerDashboard
       ? [{ label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" }]
+      : []),
+    ...(puedeVerDashboardProduccion
+      ? [{ label: "Dashboard", icon: LayoutDashboard, path: "/dashboard-produccion" }]
       : []),
     ...(puedeVerEmpresas
       ? [{ label: "Empresas", icon: Building2, count: counts.empresas, path: "/empresas" }]

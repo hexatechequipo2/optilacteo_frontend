@@ -55,11 +55,14 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       const user = await login(email, password, rememberMe);
-      // Operario de línea y Responsable de producción ya tenían Sensores
-      // habilitado (HU-17/33/19) pero caían igual acá por no estar en este
-      // mapa: quedaban en un callejón sin salida (SinFuncionalidadesPage no
-      // tiene Layout/Sidebar). HU-20 les suma además /lotes (carga manual e
-      // historial), accesible por Sidebar una vez adentro.
+      // Operario de línea ya tenía Sensores habilitado (HU-17/33/19) pero
+      // caía igual acá por no estar en este mapa: quedaba en un callejón sin
+      // salida (SinFuncionalidadesPage no tiene Layout/Sidebar). HU-20 le
+      // suma además /lotes (carga manual e historial), accesible por Sidebar
+      // una vez adentro.
+      // HU-38 (AC4): el dashboard operativo es la pantalla de inicio del
+      // Responsable de producción — antes caía en /sensores como Operario de
+      // línea, ahora tiene su propia landing.
       const destination =
         user.rolNombre === "Administrador"
           ? "/dashboard"
@@ -67,10 +70,11 @@ export default function LoginPage() {
             ? "/usuarios"
             : user.rolNombre === "Responsable de calidad"
               ? "/lotes"
-              : user.rolNombre === "Operario de línea" ||
-                  user.rolNombre === "Responsable de producción"
-                ? "/sensores"
-                : "/sin-funcionalidades";
+              : user.rolNombre === "Responsable de producción"
+                ? "/dashboard-produccion"
+                : user.rolNombre === "Operario de línea"
+                  ? "/sensores"
+                  : "/sin-funcionalidades";
       navigate(destination, { replace: true });
     } catch (error) {
       if (axios.isAxiosError(error)) {
