@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlaskConical, Pencil } from "lucide-react";
+import { CheckCircle2, FlaskConical, Pencil } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { ClasificacionLoteBadge } from "../../components/ClasificacionLoteBadge";
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
+import { extraerMensajeError } from "../../services/lote.service";
 import { proveedoresService } from "../../services/proveedores.service";
 import { TIPO_MATERIA_PRIMA_TABS } from "../Configuracion/constants/parametrosCalidad";
-import { DestinoLote, type Lote } from "../../types/lote.types";
+import { DestinoLote, EstadoLote, type Lote } from "../../types/lote.types";
 import type { Proveedor } from "../../types/proveedor.types";
 import { LoteFormModal } from "./LoteFormModal";
 import { LoteMedicionesModal } from "./components/LoteMedicionesModal";
@@ -29,24 +30,54 @@ const HEADERS_BASE = ["LOTE", "PROVEEDOR", "MATERIA PRIMA", "INGRESO", "DESTINO"
 const TIPO_MATERIA_PRIMA_LABEL = new Map(TIPO_MATERIA_PRIMA_TABS.map((t) => [t.value, t.label]));
 
 export default function LotesPage() {
-  const { lotes, isLoading, error, refetch, createLote, isCreating, updateLote, isUpdating } =
-    useLotes();
+  const {
+    lotes,
+    isLoading,
+    error,
+    refetch,
+    createLote,
+    isCreating,
+    updateLote,
+    isUpdating,
+    finalizarLote,
+    finalizandoId,
+  } = useLotes();
   const { user } = useAuth();
   const { sensores } = useSensores();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
   const [loteMediciones, setLoteMediciones] = useState<Lote | null>(null);
+  const [finalizarError, setFinalizarError] = useState("");
 
   // Solo Responsable de calidad puede registrar/editar lotes (POST y PATCH
   // /lotes en el backend); Gerente/Administrador acceden a esta pantalla en
   // modo lectura.
   const puedeCrearLote = user?.rolNombre === "Responsable de calidad";
 
-  // HU-21: la clasificación automática es del mismo rol dueño de la pantalla
-  // de lotes (Responsable de calidad) — nombre propio para dejar claro por
-  // qué se usa en cada lugar, aunque hoy sea el mismo booleano.
-  const puedeVerClasificacion = puedeCrearLote;
+  // PATCH /lotes/:id/finalizar (backend): exclusivo Responsable de calidad,
+  // mismo rol que puedeCrearLote. Solo tiene sentido ofrecerla mientras el
+  // lote no llegó todavía a un estado terminal (finalizado/rechazado, este
+  // último decidido por HU-22 vía revisión de calidad).
+  const puedeFinalizarLote = puedeCrearLote;
+
+  const handleFinalizar = async (lote: Lote) => {
+    setFinalizarError("");
+    try {
+      await finalizarLote(lote.id);
+    } catch (err) {
+      setFinalizarError(extraerMensajeError(err, "No se pudo finalizar el lote. Intentá nuevamente."));
+    }
+  };
+
+  // HU-21: GET /lotes/:id/clasificaciones (backend, lote.controller.ts)
+  // permite Responsable de calidad, Gerente y Administrador — no es
+  // exclusivo de quien puede crear lotes. Comparación normalizada, mismo
+  // criterio que puedeVerComparacionHistorica.
+  const puedeVerClasificacion = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return rol === "responsable de calidad" || rol === "gerente" || rol === "administrador";
+  }, [user?.rolNombre]);
 
   // HU-24: comparación histórica — @Roles del backend (lote.controller.ts)
   // permite Responsable de calidad, Gerente y Administrador (más amplio que
@@ -153,6 +184,12 @@ export default function LotesPage() {
         </div>
       )}
 
+      {finalizarError && (
+        <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
+          {finalizarError}
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16 dark:border-slate-800 dark:bg-slate-900">
           <p className="text-sm text-slate-500 dark:text-slate-400">Cargando lotes...</p>
@@ -238,6 +275,18 @@ export default function LotesPage() {
                             <Pencil className="h-4 w-4" />
                           </button>
                         )}
+                        {puedeFinalizarLote &&
+                          (lote.estado === EstadoLote.REGISTRADO || lote.estado === EstadoLote.EN_PROCESO) && (
+                            <button
+                              type="button"
+                              onClick={() => void handleFinalizar(lote)}
+                              disabled={finalizandoId === lote.id}
+                              className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400"
+                              title="Finalizar lote"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                            </button>
+                          )}
                       </div>
                     </td>
                   </tr>
@@ -287,6 +336,18 @@ export default function LotesPage() {
                         <Pencil className="h-4 w-4" />
                       </button>
                     )}
+                    {puedeFinalizarLote &&
+                      (lote.estado === EstadoLote.REGISTRADO || lote.estado === EstadoLote.EN_PROCESO) && (
+                        <button
+                          type="button"
+                          onClick={() => void handleFinalizar(lote)}
+                          disabled={finalizandoId === lote.id}
+                          className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400"
+                          title="Finalizar lote"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                        </button>
+                      )}
                   </div>
                 </div>
 

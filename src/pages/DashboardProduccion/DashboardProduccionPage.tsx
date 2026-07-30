@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import { Printer } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
+import { Button } from "../../components/ui/Button";
 import { useDashboardProduccion } from "../../hooks/useDashboardProduccion";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import { MetricaCard } from "./components/MetricaCard";
 import { LotesProcesadosChart } from "./components/LotesProcesadosChart";
 import { LineaCalidadPanel } from "./components/LineaCalidadPanel";
+import { ReporteProduccionPDF } from "./components/ReporteProduccionPDF";
 
 const HOY = new Date().toLocaleDateString("es-AR", {
   weekday: "long",
@@ -45,11 +48,21 @@ export default function DashboardProduccionPage() {
           </p>
         </div>
 
-        {resumen && (
-          <span className="text-xs text-slate-400 dark:text-slate-500">
-            actualizado hace {segundosDesde(resumen.actualizadoEn)} s
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {resumen && (
+            <span className="text-xs text-slate-400 dark:text-slate-500">
+              actualizado hace {segundosDesde(resumen.actualizadoEn)} s
+            </span>
+          )}
+          <Button
+            type="button"
+            className="!w-auto px-4 print:hidden"
+            onClick={() => window.print()}
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            Exportar PDF
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -73,20 +86,29 @@ export default function DashboardProduccionPage() {
         </div>
       ) : resumen ? (
         <>
-          <LineaCalidadPanel resumen={resumen.lineaCalidad} />
+          <div className="print:hidden">
+            <LineaCalidadPanel resumen={resumen.lineaCalidad} />
 
-          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <MetricaCard label="Lotes procesados hoy" metrica={resumen.lotesProcesados} />
-            <MetricaCard label="Alertas activas" metrica={resumen.alertasActivas} />
-            <MetricaCard label="Parámetros críticos" metrica={resumen.parametrosCriticos} />
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <MetricaCard label="Lotes procesados hoy" metrica={resumen.lotesProcesados} />
+              <MetricaCard label="Alertas activas" metrica={resumen.alertasActivas} />
+              <MetricaCard label="Parámetros críticos" metrica={resumen.parametrosCriticos} />
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900">
+              <p className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                Lotes procesados · últimos 7 días
+              </p>
+              <LotesProcesadosChart datos={historico?.puntos ?? []} />
+            </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900">
-            <p className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-300">
-              Lotes procesados · últimos 7 días
-            </p>
-            <LotesProcesadosChart datos={historico?.puntos ?? []} />
-          </div>
+          <ReporteProduccionPDF
+            empresaNombre={empresa?.name ?? "OptiLácteo"}
+            fecha={HOY}
+            resumen={resumen}
+            historico={historico}
+          />
         </>
       ) : null}
     </Layout>

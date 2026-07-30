@@ -17,3 +17,12 @@ export interface Notificacion {
   leida: boolean;
   createdAt: string;
 }
+
+// GET /notificaciones ahora pagina (NotificacionPaginadaResponseDto en el
+// backend) en vez de devolver un array plano.
+export interface NotificacionPaginada {
+  data: Notificacion[];
+  total: number;
+  page: number;
+  limit: number;
+}
