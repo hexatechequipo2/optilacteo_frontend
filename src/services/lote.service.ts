@@ -10,6 +10,7 @@ import type {
   RevisarLoteDto,
   UpdateLoteDto,
 } from "../types/lote.types";
+import type { ComparacionHistoricaLote } from "../types/comparacionHistorica.types";
 
 // El backend valida existencia del proveedor, rangos de parámetros y unicidad
 // del código directamente (404/400/409 con mensaje); no hace falta duplicar
@@ -65,6 +66,15 @@ export const loteService = {
 
   getHistorialRevisiones: async (id: number): Promise<LoteRevision[]> => {
     const { data } = await api.get<LoteRevision[]>(`/lotes/${id}/revisiones`);
+    return data;
+  },
+
+  // HU-24: comparación del lote contra el histórico de parámetros de la
+  // empresa (ComparacionHistoricaResponseDto real en el backend).
+  getComparacionHistorica: async (id: number): Promise<ComparacionHistoricaLote> => {
+    const { data } = await api.get<ComparacionHistoricaLote>(
+      `/lotes/${id}/comparacion-historica`,
+    );
     return data;
   },
 };
