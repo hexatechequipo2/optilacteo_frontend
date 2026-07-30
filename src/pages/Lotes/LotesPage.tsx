@@ -48,6 +48,14 @@ export default function LotesPage() {
   // qué se usa en cada lugar, aunque hoy sea el mismo booleano.
   const puedeVerClasificacion = puedeCrearLote;
 
+  // HU-24: comparación histórica — @Roles del backend (lote.controller.ts)
+  // permite Responsable de calidad, Gerente y Administrador (más amplio que
+  // HU-21). Comparación normalizada, mismo criterio que puedeVerHistorialManual.
+  const puedeVerComparacionHistorica = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return rol === "responsable de calidad" || rol === "gerente" || rol === "administrador";
+  }, [user?.rolNombre]);
+
   // POST /lotes/:id/mediciones-manuales (HU-20, backend): solo Operario de
   // línea. Es respaldo TOTAL: el back rechaza con 400 si el lote ya tiene
   // algún sensor asociado (corresponde HU-15 en ese caso), así que la acción
@@ -78,7 +86,10 @@ export default function LotesPage() {
   // qué pestañas quedan habilitadas adentro del modal se resuelve por lote
   // en el render de la fila.
   const puedeAbrirMediciones =
-    puedeCargarMedicionManualBase || puedeVerHistorialManual || puedeVerClasificacion;
+    puedeCargarMedicionManualBase ||
+    puedeVerHistorialManual ||
+    puedeVerClasificacion ||
+    puedeVerComparacionHistorica;
 
   const abrirAlta = () => {
     setEditingLote(null);
@@ -339,6 +350,7 @@ export default function LotesPage() {
         }
         puedeVerHistorialManual={puedeVerHistorialManual}
         puedeVerClasificacion={puedeVerClasificacion}
+        puedeVerComparacionHistorica={puedeVerComparacionHistorica}
         onClose={() => setLoteMediciones(null)}
       />
     </Layout>

@@ -5,8 +5,9 @@ import type { Lote } from "../../../types/lote.types";
 import { RegistrarMedicionManualTab } from "./RegistrarMedicionManualTab";
 import { HistorialMedicionesManualesTab } from "./HistorialMedicionesManualesTab";
 import { ClasificacionAutomaticaTab } from "./ClasificacionAutomaticaTab";
+import { ComparacionHistoricaTab } from "./ComparacionHistoricaTab";
 
-type TabMediciones = "registro" | "historial" | "clasificacion";
+type TabMediciones = "registro" | "historial" | "clasificacion" | "historico";
 
 const TAB_REGISTRO: { value: TabMediciones; label: string } = {
   value: "registro",
@@ -23,6 +24,11 @@ const TAB_CLASIFICACION: { value: TabMediciones; label: string } = {
   label: "Clasificación automática",
 };
 
+const TAB_HISTORICO: { value: TabMediciones; label: string } = {
+  value: "historico",
+  label: "Comparación histórica",
+};
+
 interface LoteMedicionesModalProps {
   isOpen: boolean;
   lote: Lote | null;
@@ -33,6 +39,8 @@ interface LoteMedicionesModalProps {
   puedeVerHistorialManual: boolean;
   // HU-21: solo Responsable de Calidad accede a la clasificación automática.
   puedeVerClasificacion: boolean;
+  // HU-24: solo Responsable de Calidad accede a la comparación histórica.
+  puedeVerComparacionHistorica: boolean;
   onClose: () => void;
 }
 
@@ -42,6 +50,7 @@ export function LoteMedicionesModal({
   puedeCargarMedicionManual,
   puedeVerHistorialManual,
   puedeVerClasificacion,
+  puedeVerComparacionHistorica,
   onClose,
 }: LoteMedicionesModalProps) {
   const tabs = useMemo(() => {
@@ -49,8 +58,14 @@ export function LoteMedicionesModal({
     if (puedeCargarMedicionManual) disponibles.push(TAB_REGISTRO);
     if (puedeVerHistorialManual) disponibles.push(TAB_HISTORIAL);
     if (puedeVerClasificacion) disponibles.push(TAB_CLASIFICACION);
+    if (puedeVerComparacionHistorica) disponibles.push(TAB_HISTORICO);
     return disponibles;
-  }, [puedeCargarMedicionManual, puedeVerHistorialManual, puedeVerClasificacion]);
+  }, [
+    puedeCargarMedicionManual,
+    puedeVerHistorialManual,
+    puedeVerClasificacion,
+    puedeVerComparacionHistorica,
+  ]);
 
   const [tabActiva, setTabActiva] = useState<TabMediciones>(tabs[0]?.value ?? "historial");
 
@@ -60,20 +75,22 @@ export function LoteMedicionesModal({
 
   if (!isOpen || !lote) return null;
 
-  // Si el único acceso disponible es HU-21, el título/descripción de HU-20
-  // (mediciones manuales) queda engañoso — se ajusta al contenido real.
-  const soloClasificacion = tabs.length === 1 && tabs[0].value === "clasificacion";
+  // Si no hay ninguna tab de mediciones manuales de HU-20 disponible (caso
+  // Responsable de Calidad: solo ve clasificación y/o comparación
+  // histórica), el título/descripción de HU-20 queda engañoso — se ajusta
+  // al contenido real.
+  const sinTabsDeMediciones = !puedeCargarMedicionManual && !puedeVerHistorialManual;
 
   return (
     <Modal
       isOpen={isOpen}
       title={
-        soloClasificacion
+        sinTabsDeMediciones
           ? `Clasificación automática — ${lote.codigo}`
           : `Mediciones manuales — ${lote.codigo}`
       }
       description={
-        soloClasificacion
+        sinTabsDeMediciones
           ? "Resultado calculado a partir de los parámetros registrados."
           : "Respaldo total cuando el lote no tiene sensores asociados."
       }
@@ -89,6 +106,9 @@ export function LoteMedicionesModal({
         )}
         {tabActiva === "clasificacion" && puedeVerClasificacion && (
           <ClasificacionAutomaticaTab lote={lote} />
+        )}
+        {tabActiva === "historico" && puedeVerComparacionHistorica && (
+          <ComparacionHistoricaTab lote={lote} />
         )}
       </div>
     </Modal>
