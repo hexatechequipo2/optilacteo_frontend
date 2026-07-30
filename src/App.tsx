@@ -50,11 +50,13 @@ function App() {
             {/* DASHBOARD PRODUCCIÓN (HU-38: pantalla de inicio del rol
                 Responsable de producción — "jefe de producción" en el
                 backlog). Distinto del /dashboard de arriba, que es el
-                resumen de plataforma exclusivo de Administrador. */}
+                resumen de plataforma exclusivo de Administrador. Gerente
+                también puede consultarlo (no es su landing de login, pero le
+                queda accesible desde el Sidebar). */}
             <Route
               path="/dashboard-produccion"
               element={
-                <ProtectedRoute allowedRoles={["Responsable de producción"]}>
+                <ProtectedRoute allowedRoles={["Responsable de producción", "Gerente"]}>
                   <DashboardProduccionPage />
                 </ProtectedRoute>
               }
@@ -70,11 +72,14 @@ function App() {
               }
             />
 
-            {/* CONFIGURACIÓN (HU-09 Umbrales + HU-12 Logo e identidad: solo GERENTE) */}
+            {/* CONFIGURACIÓN (HU-09 Umbrales + HU-12 Logo e identidad: solo
+                GERENTE. HU-23 Comparación histórica: GERENTE edita,
+                RESPONSABLE DE CALIDAD solo consulta — el gating de qué
+                pestaña ve cada rol vive en ConfiguracionPage.tsx) */}
             <Route
               path="/configuracion"
               element={
-                <ProtectedRoute allowedRoles={["Gerente"]}>
+                <ProtectedRoute allowedRoles={["Gerente", "Responsable de calidad"]}>
                   <ConfiguracionPage />
                 </ProtectedRoute>
               }

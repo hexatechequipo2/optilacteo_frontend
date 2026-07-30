@@ -30,8 +30,8 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
         />
       )}
 
-      <div className="flex flex-1 flex-col overflow-y-auto">
-        <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900 sm:px-6 sm:py-4 lg:px-8">
+      <div className="flex flex-1 flex-col overflow-y-auto print:overflow-visible">
+        <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 print:hidden dark:border-slate-800 dark:bg-slate-900 sm:px-6 sm:py-4 lg:px-8">
           {/* Breadcrumb y menú */}
           <div className="flex min-w-0 items-center gap-2 sm:gap-4">
             <button

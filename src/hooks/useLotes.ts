@@ -11,6 +11,8 @@ interface UseLotesResult {
   isCreating: boolean;
   updateLote: (id: number, dto: UpdateLoteDto) => Promise<Lote>;
   isUpdating: boolean;
+  finalizarLote: (id: number) => Promise<Lote>;
+  finalizandoId: number | null;
 }
 
 export function useLotes(): UseLotesResult {
@@ -19,6 +21,7 @@ export function useLotes(): UseLotesResult {
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [finalizandoId, setFinalizandoId] = useState<number | null>(null);
 
   const fetchLotes = useCallback(async () => {
     setIsLoading(true);
@@ -63,6 +66,17 @@ export function useLotes(): UseLotesResult {
     }
   }, []);
 
+  const finalizarLote = useCallback(async (id: number) => {
+    setFinalizandoId(id);
+    try {
+      const actualizado = await loteService.finalizar(id);
+      setLotes((prev) => prev.map((l) => (l.id === id ? actualizado : l)));
+      return actualizado;
+    } finally {
+      setFinalizandoId(null);
+    }
+  }, []);
+
   return {
     lotes,
     isLoading,
@@ -72,5 +86,7 @@ export function useLotes(): UseLotesResult {
     isCreating,
     updateLote,
     isUpdating,
+    finalizarLote,
+    finalizandoId,
   };
 }

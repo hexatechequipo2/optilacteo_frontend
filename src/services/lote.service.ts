@@ -47,6 +47,14 @@ export const loteService = {
     return data;
   },
 
+  // PATCH /lotes/:id/finalizar: exclusivo Responsable de calidad
+  // (lote.controller.ts). Cierra el ciclo de vida del lote (estado ->
+  // finalizado); no hay endpoint inverso.
+  finalizar: async (id: number): Promise<Lote> => {
+    const { data } = await api.patch<Lote>(`/lotes/${id}/finalizar`);
+    return data;
+  },
+
   // HU-22: bandeja dedicada de lotes No Apto sin revisión vigente (el
   // backend ya excluye acá los que ya fueron decididos y no se
   // reclasificaron de nuevo). No está paginado.

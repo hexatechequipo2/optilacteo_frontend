@@ -1,11 +1,11 @@
 import axios from "axios";
 import api from "./api";
-import type { Notificacion } from "../types/notificacion.types";
+import type { Notificacion, NotificacionPaginada } from "../types/notificacion.types";
 
 export const notificacionService = {
   getAll: async (): Promise<Notificacion[]> => {
-    const { data } = await api.get<Notificacion[]>("/notificaciones");
-    return data;
+    const { data } = await api.get<NotificacionPaginada>("/notificaciones");
+    return data.data;
   },
 
   marcarLeida: async (id: number): Promise<void> => {

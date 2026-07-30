@@ -220,7 +220,7 @@ export function LoteFormModal({
         // no se puede editar proveedor, ubicacionInicial ni parametros.
         await onUpdate(lote!.id, {
           materiaPrima: values.materiaPrima,
-          fechaIngreso: new Date(values.fechaIngreso).toISOString(),
+          fechaIngreso: new Date(`${values.fechaIngreso}T12:00:00`).toISOString(),
           destinoInicial: values.destinoInicial as DestinoLote,
         });
         onClose();
@@ -241,7 +241,7 @@ export function LoteFormModal({
       const respuesta = await onCreate({
         proveedorId: Number(values.proveedorId),
         materiaPrima: values.materiaPrima,
-        fechaIngreso: new Date(values.fechaIngreso).toISOString(),
+        fechaIngreso: new Date(`${values.fechaIngreso}T12:00:00`).toISOString(),
         destinoInicial: values.destinoInicial as DestinoLote,
         ubicacionInicial: values.ubicacionInicial || undefined,
         parametros,

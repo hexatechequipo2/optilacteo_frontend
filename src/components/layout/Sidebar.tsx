@@ -39,11 +39,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const esResponsableProduccion = user?.rolNombre === "Responsable de producción";
   const puedeVerDashboard = esAdmin;
   // HU-38: dashboard operativo propio del Responsable de producción — no es
-  // el mismo /dashboard de plataforma que ve el Administrador.
-  const puedeVerDashboardProduccion = esResponsableProduccion;
+  // el mismo /dashboard de plataforma que ve el Administrador. Gerente
+  // también lo puede consultar (ver allowedRoles en App.tsx).
+  const puedeVerDashboardProduccion = esResponsableProduccion || esGerente;
   const puedeVerUsuarios = esAdmin || esGerente;
   const puedeVerEmpresas = esAdmin;
-  const puedeVerConfiguracion = esGerente;
+  // HU-23: Responsable de calidad entra en modo solo lectura (ver
+  // ConfiguracionPage.tsx / App.tsx).
+  const puedeVerConfiguracion = esGerente || user?.rolNombre === "Responsable de calidad";
   const puedeVerPlanes = esAdmin;
   const puedeVerProveedores = esAdmin || esGerente;
   // HU-20 suma Operario de línea (carga manual) y Responsable de producción
@@ -179,7 +182,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex h-screen w-70 flex-shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-transform duration-300 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none lg:static lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-40 flex h-screen w-70 flex-shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-transform duration-300 print:hidden dark:border-slate-800 dark:bg-slate-900 dark:shadow-none lg:static lg:translate-x-0 ${
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}
     >
