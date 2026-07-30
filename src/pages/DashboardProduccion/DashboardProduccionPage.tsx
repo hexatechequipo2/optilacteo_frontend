@@ -4,6 +4,7 @@ import { useDashboardProduccion } from "../../hooks/useDashboardProduccion";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import { MetricaCard } from "./components/MetricaCard";
 import { LotesProcesadosChart } from "./components/LotesProcesadosChart";
+import { LineaCalidadPanel } from "./components/LineaCalidadPanel";
 
 const HOY = new Date().toLocaleDateString("es-AR", {
   weekday: "long",
@@ -22,7 +23,7 @@ function segundosDesde(iso: string): number {
 // App.tsx). AC de "sin datos": las métricas en 0 se muestran igual, sin
 // pantalla de error — solo se muestra error si la request en sí falla.
 export default function DashboardProduccionPage() {
-  const { data, isLoading, error, refetch } = useDashboardProduccion();
+  const { resumen, historico, isLoading, error, refetch } = useDashboardProduccion();
   const { empresa } = useEmpresaActual();
   const [, forceTick] = useState(0);
 
@@ -44,9 +45,9 @@ export default function DashboardProduccionPage() {
           </p>
         </div>
 
-        {data && (
+        {resumen && (
           <span className="text-xs text-slate-400 dark:text-slate-500">
-            actualizado hace {segundosDesde(data.actualizadoEn)} s
+            actualizado hace {segundosDesde(resumen.actualizadoEn)} s
           </span>
         )}
       </div>
@@ -70,19 +71,21 @@ export default function DashboardProduccionPage() {
             Cargando panel de producción...
           </p>
         </div>
-      ) : data ? (
+      ) : resumen ? (
         <>
+          <LineaCalidadPanel resumen={resumen.lineaCalidad} />
+
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <MetricaCard label="Lotes procesados hoy" metrica={data.lotesProcesadosHoy} />
-            <MetricaCard label="Alertas activas" metrica={data.alertasActivas} />
-            <MetricaCard label="Parámetros críticos" metrica={data.parametrosCriticos} />
+            <MetricaCard label="Lotes procesados hoy" metrica={resumen.lotesProcesados} />
+            <MetricaCard label="Alertas activas" metrica={resumen.alertasActivas} />
+            <MetricaCard label="Parámetros críticos" metrica={resumen.parametrosCriticos} />
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900">
             <p className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-300">
               Lotes procesados · últimos 7 días
             </p>
-            <LotesProcesadosChart datos={data.lotesUltimos7Dias} />
+            <LotesProcesadosChart datos={historico?.puntos ?? []} />
           </div>
         </>
       ) : null}

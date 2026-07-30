@@ -16,14 +16,14 @@ export function LotesProcesadosChart({ datos }: LotesProcesadosChartProps) {
     );
   }
 
-  const valores = datos.map((d) => d.valor);
+  const valores = datos.map((d) => d.lotesProcesados);
   const max = Math.max(...valores);
   const min = Math.min(...valores);
   const rango = max - min || 1;
 
   const puntos = datos.map((d, i) => {
     const x = datos.length === 1 ? 50 : (i / (datos.length - 1)) * 100;
-    const y = 100 - ((d.valor - min) / rango) * 100;
+    const y = 100 - ((d.lotesProcesados - min) / rango) * 100;
     return { x, y, ...d };
   });
 
