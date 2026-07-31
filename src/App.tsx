@@ -15,6 +15,7 @@ import PlanesPage from "./pages/Planes/PlanesPage";
 import ProveedoresPage from "./pages/Proveedores/ProveedoresPage";
 import LotesPage from "./pages/Lotes/LotesPage";
 import RevisionLotesPage from "./pages/Lotes/RevisionLotesPage";
+import MedicionManualPage from "./pages/MedicionManual/MedicionManualPage";
 import SensoresPage from "./pages/Sensores/SensoresPage";
 import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
@@ -149,6 +150,21 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={["Responsable de calidad"]}>
                   <RevisionLotesPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* MEDICIÓN MANUAL (HU-20): vista standalone, exclusiva de Operario de
+                línea. Distinta del modal de mediciones manuales dentro de /lotes
+                (Responsable de calidad/Gerente/Administrador/Responsable de
+                producción siguen usando ese, ver LotesPage.tsx) — Operario de
+                línea no tiene acceso a la gestión de lotes en sí, solo a cargar/
+                consultar mediciones manuales de los lotes activos sin sensor. */}
+            <Route
+              path="/mediciones-manuales"
+              element={
+                <ProtectedRoute allowedRoles={["Operario de línea"]}>
+                  <MedicionManualPage />
                 </ProtectedRoute>
               }
             />

@@ -92,9 +92,18 @@ export default function LotesPage() {
   // algún sensor asociado (corresponde HU-15 en ese caso), así que la acción
   // ni se ofrece cuando detectamos esa asociación del lado del cliente
   // (Sensor.loteActualId, ya viene en GET /sensores).
-  const puedeCargarMedicionManualBase = user?.rolNombre === "Operario de línea";
+  const puedeCargarMedicionManualBase = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return rol === "operario de línea";
+  }, [user?.rolNombre]);
+
   const lotesConSensorAsociado = useMemo(
-    () => new Set(sensores.filter((s) => s.loteActualId != null).map((s) => s.loteActualId)),
+    () =>
+      new Set(
+        sensores
+          .filter((s) => s.loteActualId != null && s.estado === "activo")
+          .map((s) => s.loteActualId),
+      ),
     [sensores],
   );
 

@@ -1,4 +1,4 @@
-import { Activity, Droplet, Dna, Grid2x2, Target, Thermometer } from "lucide-react";
+import { Activity, Droplet, Dna, Grid2x2, Radar, Target, Thermometer } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Parametro, TipoMateriaPrima } from "../../../types/configParametro.types";
 
@@ -9,8 +9,7 @@ interface ParametroMeta {
   rangoFisico: { min: number; max: number };
 }
 
-// Conductividad existe en el enum del backend pero todavía no se configura desde esta pantalla.
-export type ParametroVisible = Exclude<Parametro, Parametro.CONDUCTIVIDAD>;
+export type ParametroVisible = Parametro;
 
 // Rango físico espeja RANGOS_FISICOS en
 // optilacteo-backend/src/module/config-parametro/validators/rangos-fisicos.constant.ts
@@ -52,6 +51,12 @@ export const PARAMETROS_META: Record<ParametroVisible, ParametroMeta> = {
     icon: Grid2x2,
     rangoFisico: { min: 0, max: 2 },
   },
+  [Parametro.CONDUCTIVIDAD]: {
+    label: "Conductividad",
+    unidad: "mS/cm",
+    icon: Radar,
+    rangoFisico: { min: 0, max: 30 },
+  },
 };
 
 // Orden de las tarjetas en el grid, igual al mockup.
@@ -62,6 +67,7 @@ export const ORDEN_PARAMETROS: ParametroVisible[] = [
   Parametro.PROTEINA,
   Parametro.ACIDEZ,
   Parametro.DENSIDAD,
+  Parametro.CONDUCTIVIDAD,
 ];
 
 export const TIPO_MATERIA_PRIMA_TABS: { value: TipoMateriaPrima; label: string }[] = [

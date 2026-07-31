@@ -12,6 +12,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   Cpu,
+  FlaskConical,
   X,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
@@ -65,6 +66,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   // Responsable de Calidad en el backend (lote.controller.ts) — a diferencia
   // de /lotes, ningún otro rol tiene acceso de lectura acá.
   const puedeVerRevisionCalidad = user?.rolNombre === "Responsable de calidad";
+  // HU-20: vista standalone de medición manual, exclusiva de Operario de
+  // línea (ver comentario en App.tsx sobre por qué no reusa /lotes).
+  const puedeVerMedicionManual = user?.rolNombre === "Operario de línea";
   // GET /sensores (backend) habilita también a Responsable de producción y
   // Operario de línea, ver sensor.controller.ts.
   const puedeVerSensores =
@@ -164,6 +168,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       : []),
     ...(puedeVerLotes
       ? [{ label: "Lotes", icon: ClipboardList, count: counts.lotes, path: "/lotes" }]
+      : []),
+    ...(puedeVerMedicionManual
+      ? [{ label: "Medición manual", icon: FlaskConical, path: "/mediciones-manuales" }]
       : []),
     ...(puedeVerRevisionCalidad
       ? [
