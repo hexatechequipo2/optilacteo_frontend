@@ -67,7 +67,7 @@ export default function LoginPage() {
         user.rolNombre === "Administrador"
           ? "/dashboard"
           : user.rolNombre === "Gerente"
-            ? "/usuarios"
+            ? "/dashboard-produccion"
             : user.rolNombre === "Responsable de calidad"
               ? "/lotes"
               : user.rolNombre === "Responsable de producción"
