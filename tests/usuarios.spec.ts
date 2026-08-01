@@ -57,16 +57,28 @@ async function mockUsuariosDeps(page: Page) {
   });
 
   await page.route("**/user*", async (route) => {
-    if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(USUARIOS_MOCK) });
   });
   await page.route("**/empresa*", async (route) => {
-    if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(EMPRESAS_MOCK) });
   });
   await page.route("**/rol", async (route) => {
-    if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(ROLES_MOCK) });
+  });
+  await page.route("**/notificacion*", async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } }),
+    });
   });
 }
 
@@ -77,8 +89,8 @@ test.describe("UsuariosPage", () => {
     await loginAsAdministrador(page); // id: 1, no debería aparecer en la tabla
 
     await page.goto("/usuarios");
-    await expect(page.getByText("Juan Pérez")).toBeVisible();
-    await expect(page.getByText("Ana García")).toBeVisible();
+    await expect(page.getByText("Juan Pérez").first()).toBeVisible();
+    await expect(page.getByText("Ana García").first()).toBeVisible();
   });
 
   test("Administrador ve el filtro de empresa, Gerente no", async ({ page }) => {
