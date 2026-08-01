@@ -48,7 +48,8 @@ const EMPRESAS_MOCK = {
 
 async function mockProveedoresAndEmpresas(page: Page) {
   await page.route("**/proveedores*", async (route) => {
-    if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -56,11 +57,21 @@ async function mockProveedoresAndEmpresas(page: Page) {
     });
   });
   await page.route("**/empresa*", async (route) => {
-    if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(EMPRESAS_MOCK),
+    });
+  });
+  await page.route("**/notificacion*", async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } }),
     });
   });
 }
@@ -72,8 +83,8 @@ test.describe("ProveedoresPage", () => {
 
     await page.goto("/proveedores");
 
-    await expect(page.getByText("Tambo El Roble")).toBeVisible();
-    await expect(page.getByText("Transportes Rápido SA")).toBeVisible();
+    await expect(page.getByRole("table").getByText("Tambo El Roble")).toBeVisible();
+    await expect(page.getByRole("table").getByText("Transportes Rápido SA")).toBeVisible();
   });
 
   test("filtrar por tab Tambo manda tipo=tambo al backend", async ({ page }) => {
@@ -93,7 +104,7 @@ test.describe("ProveedoresPage", () => {
     await loginAsAdministrador(page);
     await page.goto("/proveedores");
 
-    await expect(page.getByText("Transportes Rápido SA")).toBeVisible();
+    await expect(page.getByRole("table").getByText("Transportes Rápido SA")).toBeVisible();
 
     // El input dispara el fetch (limit=100) recién 400ms después de dejar
     // de tipear, así que esperamos ese request antes de assertar el filtro.
@@ -103,13 +114,14 @@ test.describe("ProveedoresPage", () => {
     await page.getByPlaceholder(/Buscar por nombre, CUIT, teléfono/i).fill("Roble");
     await requestPromise;
 
-    await expect(page.getByText("Tambo El Roble")).toBeVisible();
-    await expect(page.getByText("Transportes Rápido SA")).not.toBeVisible();
+    await expect(page.getByRole("table").getByText("Tambo El Roble")).toBeVisible();
+    await expect(page.getByRole("table").getByText("Transportes Rápido SA")).not.toBeVisible();
   });
 
   test("estado vacío cuando no hay proveedores", async ({ page }) => {
     await page.route("**/proveedores*", async (route) => {
-      if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -117,8 +129,18 @@ test.describe("ProveedoresPage", () => {
       });
     });
     await page.route("**/empresa*", async (route) => {
-      if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(EMPRESAS_MOCK) });
+    });
+    await page.route("**/notificacion*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } }),
+      });
     });
 
     await loginAsAdministrador(page);
