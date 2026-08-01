@@ -15,7 +15,9 @@ const EMPRESAS_MOCK = {
 
 async function mockEmpresasGet(page: Page) {
   await page.route("**/empresa*", async (route) => {
-    if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.continue();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -30,8 +32,8 @@ test.describe("EmpresasPage", () => {
     await loginAsAdministrador(page);
 
     await page.goto("/empresas");
-    await expect(page.getByText("Tambo San José")).toBeVisible();
-    await expect(page.getByText("Lácteos del Sur")).toBeVisible();
+    await expect(page.getByRole("table").getByText("Tambo San José")).toBeVisible();
+    await expect(page.getByRole("table").getByText("Lácteos del Sur")).toBeVisible();
   });
 
   test("un Gerente no puede acceder a Empresas", async ({ page }) => {

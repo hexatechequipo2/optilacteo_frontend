@@ -64,7 +64,7 @@ export async function loginAs(page: Page, user: MockUser) {
 
   // LoginPage navega a /usuarios con replace si el rol es Gerente,
   // y a /dashboard para el resto de los roles.
-  const destination = user.rolNombre === "Gerente" ? "/usuarios" : "/dashboard";
+  const destination = user.rolNombre === "Gerente" ? "/dashboard-produccion" : "/dashboard";
   await page.waitForURL(destination);
 }
 
