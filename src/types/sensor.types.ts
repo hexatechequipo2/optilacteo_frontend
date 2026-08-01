@@ -78,8 +78,18 @@ export interface SensorLoteHistorial {
   fecha: string; // ISO datetime
 }
 
-// Payloads del WS /sensores (HU-13, LecturasGateway en el backend).
-// No son parte del modelo Sensor: solo llegan en vivo, nunca por REST.
+// Espeja OrigenLectura en optilacteo-backend
+// (src/module/lectura-sensor/enums/origen-lectura.enum.ts, HU-15).
+export enum OrigenLectura {
+  SENSOR = "sensor",
+  MANUAL = "manual",
+}
+
+// Payloads del WS /sensores (HU-13, LecturasGateway en el backend). Es el
+// mismo LecturaResponseDto que devuelve tanto la ingesta automática
+// (POST /sensores/lecturas) como el fallback manual (HU-15,
+// POST /sensores/lecturas/manual) - no son parte del modelo Sensor: solo
+// llegan en vivo o como respuesta de esos dos POST, nunca por GET /sensores.
 export interface LecturaNuevaEvent {
   id: number;
   sensorId: number;
@@ -87,6 +97,8 @@ export interface LecturaNuevaEvent {
   valor: number;
   timestampLectura: string;
   empresaId: number;
+  origen: OrigenLectura;
+  usuarioId: number | null;
   createdAt: string;
 }
 
@@ -96,3 +108,11 @@ export interface SensorFallaEvent {
 }
 
 export type SensorRecuperadoEvent = SensorFallaEvent;
+
+// HU-15: fallback manual mientras el sensor no está ACTIVO (inactivo o en
+// falla). El backend resuelve loteId a partir de la última asociación del
+// sensor (sensor_lote_historial), por eso el DTO no lo pide.
+export interface IngresarLecturaManualDto {
+  sensorId: number;
+  valor: number;
+}

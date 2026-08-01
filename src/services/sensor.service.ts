@@ -2,6 +2,8 @@ import axios from "axios";
 import api from "./api";
 import type {
   CreateSensorDto,
+  IngresarLecturaManualDto,
+  LecturaNuevaEvent,
   Sensor,
   SensorFilterQuery,
   SensorLoteHistorial,
@@ -42,6 +44,14 @@ export const sensorService = {
   // backend el registro de cambio de ubicación del lote si corresponde.
   asociarALote: async (loteId: number, sensorIds: number[]): Promise<Sensor[]> => {
     const { data } = await api.patch<Sensor[]>(`/sensores/lote/${loteId}/asociar`, { sensorIds });
+    return data;
+  },
+
+  // HU-15: fallback manual cuando el sensor no está ACTIVO. El backend
+  // rechaza con 400 si el sensor está activo, y con 403 si el usuario no
+  // tiene permiso de escritura en Recepción/Monitoreo y alertas.
+  ingresarLecturaManual: async (dto: IngresarLecturaManualDto): Promise<LecturaNuevaEvent> => {
+    const { data } = await api.post<LecturaNuevaEvent>("/sensores/lecturas/manual", dto);
     return data;
   },
 };

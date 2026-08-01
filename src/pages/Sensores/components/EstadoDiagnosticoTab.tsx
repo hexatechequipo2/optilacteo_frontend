@@ -1,11 +1,14 @@
 import { Activity, Droplet, Gauge, Grid2x2, Radar, Target, Thermometer, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSensoresRealtime } from "../../../hooks/useSensoresRealtime";
+import { useAuth } from "../../../hooks/useAuth";
 import { ValorConUnidad } from "../../../components/ValorConUnidad";
 import { SensorEstadoBadge } from "../../../components/SensorEstadoBadge";
+import { Badge } from "../../../components/ui/Badge";
 import { Parametro } from "../../../types/configParametro.types";
-import { EstadoSensor } from "../../../types/sensor.types";
+import { EstadoSensor, OrigenLectura } from "../../../types/sensor.types";
 import { PARAMETRO_LABEL, UNIDAD_POR_PARAMETRO } from "../constants/parametroSensor";
+import { IngresoManualFallback } from "./IngresoManualFallback";
 
 const PARAMETRO_ICON: Record<Parametro, LucideIcon> = {
   [Parametro.PH]: Target,
@@ -34,6 +37,15 @@ function formatearHace(timestamp: string | null | undefined, ahora: number): str
 
 export function EstadoDiagnosticoTab() {
   const { sensores, lecturas, isLoading, error, isRealtimeConnected } = useSensoresRealtime();
+  const { user } = useAuth();
+
+  // HU-15: el fallback manual (POST /sensores/lecturas/manual, backend) es
+  // exclusivo de Operario de línea - mismo criterio de comparación normalizada
+  // que el resto de las pantallas (rolNombre puede variar en casing/espacios).
+  const puedeCargarManual = useMemo(
+    () => (user?.rolNombre ?? "").trim().toLowerCase() === "operario de línea",
+    [user?.rolNombre],
+  );
 
   // Un solo intervalo para todo el grid: recalcula los "hace X s" en vivo
   // sin depender de ninguna librería de fechas (el proyecto no tiene una).
@@ -122,18 +134,23 @@ export function EstadoDiagnosticoTab() {
                   {sensor.nombre}
                 </p>
 
-                <p className="my-2">
+                <p className="my-2 flex items-center gap-2">
                   <ValorConUnidad
                     valor={lectura ? lectura.valorActual : "—"}
                     unidad={lectura ? unidad : undefined}
                     size="lg"
                   />
+                  {lectura?.origen === OrigenLectura.MANUAL && (
+                    <Badge variant="neutral">Manual</Badge>
+                  )}
                 </p>
 
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {PARAMETRO_LABEL[sensor.parametro]} · {loteId != null ? `Lote #${loteId}` : "Sin lote asociado"} ·{" "}
                   {formatearHace(lectura?.timestampLectura ?? sensor.ultimaLectura, ahora)}
                 </p>
+
+                {puedeCargarManual && <IngresoManualFallback sensor={sensor} />}
               </div>
             );
           })}

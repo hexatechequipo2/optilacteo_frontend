@@ -1,6 +1,13 @@
 // Espeja el endpoint real de historial de mediciones en optilacteo-backend
 // (HU-19, rama feature/HU-19, módulo src/module/sensor -> /sensores/lecturas).
 
+// TODO(backend): sensor_lecturas.origen (HU-15, OrigenLectura sensor/manual)
+// existe en la entity pero LecturaHistorialItemDto/LecturaMapper.toHistorialItemDto
+// (lectura-sensor.controller.ts) todavía no lo exponen acá, así que hoy el
+// historial no permite diferenciar una lectura real de un ingreso manual de
+// fallback (HU-15, criterio "diferenciado en el historial"). `origen` queda
+// opcional para no romper nada mientras tanto; en cuanto el backend lo agregue,
+// alcanza con sacarle el `?` y mostrar el badge en HistorialMedicionesTab.
 export enum EstadoLectura {
   NORMAL = "NORMAL",
   FUERA_DE_RANGO = "FUERA_DE_RANGO",
@@ -20,6 +27,8 @@ export interface HistorialMedicionItem {
   loteCodigo: string;
   timestampLectura: string; // ISO datetime
   estado: EstadoLectura;
+  // HU-15: ver TODO(backend) arriba - no llega todavía.
+  origen?: "sensor" | "manual";
 }
 
 export interface HistorialMedicionesFilterQuery {
