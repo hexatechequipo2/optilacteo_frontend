@@ -6,6 +6,7 @@ import { Badge } from "../../../components/ui/Badge";
 import { ValorConUnidad } from "../../../components/ValorConUnidad";
 import { useHistorialMediciones } from "../../../hooks/useHistorialMediciones";
 import { EstadoLectura } from "../../../types/historialMediciones.types";
+import type { Lote } from "../../../types/lote.types";
 
 const ESTADO_LABEL: Record<EstadoLectura, string> = {
   [EstadoLectura.NORMAL]: "Normal",
@@ -19,30 +20,38 @@ const ESTADO_VARIANT: Record<EstadoLectura, "success" | "danger" | "warning"> = 
   [EstadoLectura.SIN_UMBRAL_CONFIGURADO]: "warning",
 };
 
-const HEADERS = ["FECHA Y HORA", "LOTE", "SENSOR", "PARÁMETRO", "VALOR", "ESTADO"];
+const HEADERS = ["FECHA Y HORA", "SENSOR", "PARÁMETRO", "VALOR", "ESTADO"];
 
 interface FiltrosDraft {
   fechaInicio: string;
   fechaFin: string;
-  loteCodigo: string;
 }
 
-const FILTROS_VACIOS: FiltrosDraft = { fechaInicio: "", fechaFin: "", loteCodigo: "" };
+const FILTROS_VACIOS: FiltrosDraft = { fechaInicio: "", fechaFin: "" };
 
-export function HistorialMedicionesTab() {
+interface HistorialLecturasLoteTabProps {
+  lote: Lote;
+}
+
+// HU-15: para un lote CON sensor asociado, el historial real de mediciones
+// vive en sensor_lecturas (HU-19, /sensores/lecturas/historial-mediciones),
+// no en mediciones_manuales_lote (HU-20, exclusivo de lotes SIN sensor) -
+// mismo hook que usa Sensores > "Historial de mediciones", acá con
+// loteCodigo fijo al lote actual en vez de un filtro editable. Incluye tanto
+// lecturas reales del sensor como ingresos manuales de fallback (HU-15):
+// el backend los guarda en la misma tabla.
+export function HistorialLecturasLoteTab({ lote }: HistorialLecturasLoteTabProps) {
   const [draft, setDraft] = useState<FiltrosDraft>(FILTROS_VACIOS);
   const [filtrosAplicados, setFiltrosAplicados] = useState<FiltrosDraft>(FILTROS_VACIOS);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const { items, meta, page, setPage, isLoading, error, refetch, isExporting, exportError, exportCsv } =
     useHistorialMediciones({
+      loteCodigo: lote.codigo,
       fechaInicio: filtrosAplicados.fechaInicio || undefined,
       fechaFin: filtrosAplicados.fechaFin || undefined,
-      loteCodigo: filtrosAplicados.loteCodigo.trim() || undefined,
     });
 
-  // El backend devuelve 400 si fechaFin < fechaInicio: se valida acá antes
-  // para evitar el roundtrip.
   const aplicarFiltros = () => {
     if (draft.fechaInicio && draft.fechaFin && draft.fechaFin < draft.fechaInicio) {
       setValidationError("La fecha hasta no puede ser anterior a la fecha desde.");
@@ -74,13 +83,6 @@ export function HistorialMedicionesTab() {
           type="date"
           value={draft.fechaFin}
           onChange={(e) => setDraft((d) => ({ ...d, fechaFin: e.target.value }))}
-        />
-        <Input
-          label="Código de lote"
-          type="text"
-          placeholder="LOTE-1-00001"
-          value={draft.loteCodigo}
-          onChange={(e) => setDraft((d) => ({ ...d, loteCodigo: e.target.value }))}
         />
 
         <Button type="button" className="!w-auto px-6" onClick={aplicarFiltros}>
@@ -149,7 +151,7 @@ export function HistorialMedicionesTab() {
             No hay mediciones para los filtros seleccionados
           </p>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Probá ajustar el rango de fechas o el código de lote.
+            Probá ajustar el rango de fechas.
           </p>
         </div>
       ) : (
@@ -174,9 +176,6 @@ export function HistorialMedicionesTab() {
                   <tr key={item.id} className="text-sm">
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {new Date(item.timestampLectura).toLocaleString("es-AR")}
-                    </td>
-                    <td className="px-5 py-3 font-mono text-xs font-medium text-slate-900 dark:text-white">
-                      {item.loteCodigo}
                     </td>
                     <td className="px-5 py-3 text-slate-700 dark:text-slate-300">{item.sensorNombre}</td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">{item.parametro}</td>
@@ -203,14 +202,9 @@ export function HistorialMedicionesTab() {
                 className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-mono text-xs font-medium text-slate-900 dark:text-white">
-                      {item.loteCodigo}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {new Date(item.timestampLectura).toLocaleString("es-AR")}
-                    </p>
-                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {new Date(item.timestampLectura).toLocaleString("es-AR")}
+                  </p>
                   <div className="flex flex-shrink-0 items-center gap-2">
                     <Badge variant={ESTADO_VARIANT[item.estado]}>{ESTADO_LABEL[item.estado]}</Badge>
                     {item.origen === "manual" && <Badge variant="neutral">Manual</Badge>}

@@ -87,23 +87,26 @@ export default function LotesPage() {
     return rol === "responsable de calidad" || rol === "gerente" || rol === "administrador";
   }, [user?.rolNombre]);
 
-  // POST /lotes/:id/mediciones-manuales (HU-20, backend): solo Operario de
-  // línea. Es respaldo TOTAL: el back rechaza con 400 si el lote ya tiene
-  // algún sensor asociado (corresponde HU-15 en ese caso), así que la acción
-  // ni se ofrece cuando detectamos esa asociación del lado del cliente
-  // (Sensor.loteActualId, ya viene en GET /sensores).
+  // Capacidad base (solo rol) de cargar una medición manual para un lote:
+  // exclusiva de Operario de línea tanto en HU-20 (POST
+  // /lotes/:id/mediciones-manuales, respaldo total sin sensor) como en HU-15
+  // (POST /sensores/lecturas/manual, fallback por sensor puntual). Cuál de
+  // los dos aplica se resuelve en el modal según loteTieneSensor - HU-20 se
+  // rechaza con 400 si el lote tiene cualquier sensor asociado.
   const puedeCargarMedicionManualBase = useMemo(() => {
     const rol = (user?.rolNombre ?? "").trim().toLowerCase();
     return rol === "operario de línea";
   }, [user?.rolNombre]);
 
+  // El backend bloquea HU-20 (POST /lotes/:id/mediciones-manuales) si el lote
+  // tiene CUALQUIER sensor asociado, sin importar su estado (ver
+  // medicion-manual.service.ts: chequea findSensoresActualesDeLote, no
+  // filtra por estado) - antes acá se filtraba por estado === "activo", lo
+  // que hacía que un lote con un sensor inactivo/en falla se tratara como
+  // "sin sensor" y ofreciera el form de HU-20, que el backend termina
+  // rechazando con 400. Corresponde HU-15 en todos esos casos.
   const lotesConSensorAsociado = useMemo(
-    () =>
-      new Set(
-        sensores
-          .filter((s) => s.loteActualId != null && s.estado === "activo")
-          .map((s) => s.loteActualId),
-      ),
+    () => new Set(sensores.filter((s) => s.loteActualId != null).map((s) => s.loteActualId)),
     [sensores],
   );
 
@@ -111,6 +114,7 @@ export default function LotesPage() {
   // Responsable de producción, Gerente y Administrador. Responsable de
   // calidad no está habilitado ahí. Comparación normalizada (trim +
   // lowercase), mismo criterio que puedeVerHistorial en SensoresPage.
+  // Solo aplica a lotes SIN sensor asociado (ver loteTieneSensor).
   const puedeVerHistorialManual = useMemo(() => {
     const rol = (user?.rolNombre ?? "").trim().toLowerCase();
     return (
@@ -121,6 +125,16 @@ export default function LotesPage() {
     );
   }, [user?.rolNombre]);
 
+  // GET /sensores/lecturas/historial-mediciones (HU-19, backend):
+  // Responsable de producción, Gerente y Administrador - NO Operario de
+  // línea (a diferencia de puedeVerHistorialManual). Se usa para lotes CON
+  // sensor asociado (HU-15): ahí el historial real vive en sensor_lecturas,
+  // no en mediciones_manuales_lote.
+  const puedeVerHistorialLecturas = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return rol === "responsable de producción" || rol === "gerente" || rol === "administrador";
+  }, [user?.rolNombre]);
+
   // El ícono de la acción se ofrece si hay al menos una de las tres
   // capacidades (escribir, ver historial o ver clasificación automática);
   // qué pestañas quedan habilitadas adentro del modal se resuelve por lote
@@ -128,6 +142,7 @@ export default function LotesPage() {
   const puedeAbrirMediciones =
     puedeCargarMedicionManualBase ||
     puedeVerHistorialManual ||
+    puedeVerHistorialLecturas ||
     puedeVerClasificacion ||
     puedeVerComparacionHistorica;
 
@@ -266,8 +281,10 @@ export default function LotesPage() {
                             onClick={() => setLoteMediciones(lote)}
                             className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
                             title={
-                              puedeCargarMedicionManualBase || puedeVerHistorialManual
-                                ? "Mediciones manuales"
+                              puedeCargarMedicionManualBase ||
+                              puedeVerHistorialManual ||
+                              puedeVerHistorialLecturas
+                                ? "Mediciones"
                                 : "Clasificación automática"
                             }
                           >
@@ -327,8 +344,10 @@ export default function LotesPage() {
                         onClick={() => setLoteMediciones(lote)}
                         className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
                         title={
-                          puedeCargarMedicionManualBase || puedeVerHistorialManual
-                            ? "Mediciones manuales"
+                          puedeCargarMedicionManualBase ||
+                          puedeVerHistorialManual ||
+                          puedeVerHistorialLecturas
+                            ? "Mediciones"
                             : "Clasificación automática"
                         }
                       >
@@ -413,12 +432,10 @@ export default function LotesPage() {
       <LoteMedicionesModal
         isOpen={loteMediciones !== null}
         lote={loteMediciones}
-        puedeCargarMedicionManual={
-          puedeCargarMedicionManualBase &&
-          loteMediciones !== null &&
-          !lotesConSensorAsociado.has(loteMediciones.id)
-        }
+        puedeCargarMedicionManual={puedeCargarMedicionManualBase && loteMediciones !== null}
         puedeVerHistorialManual={puedeVerHistorialManual}
+        puedeVerHistorialLecturas={puedeVerHistorialLecturas}
+        loteTieneSensor={loteMediciones !== null && lotesConSensorAsociado.has(loteMediciones.id)}
         puedeVerClasificacion={puedeVerClasificacion}
         puedeVerComparacionHistorica={puedeVerComparacionHistorica}
         onClose={() => setLoteMediciones(null)}

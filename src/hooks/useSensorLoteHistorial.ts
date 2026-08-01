@@ -60,7 +60,10 @@ export function useSensorLoteHistorial(sensorId: number | null): UseSensorLoteHi
 
   return {
     historial,
-    vigente: historial.at(-1) ?? null,
+    // El backend (findBySensor, sensor-lote-historial.repository.ts) devuelve
+    // el historial ordenado DESC (más reciente primero) - la vigente es el
+    // primer elemento, no el último.
+    vigente: historial[0] ?? null,
     isLoading,
     error,
     refetch: fetchHistorial,

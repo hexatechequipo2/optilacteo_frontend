@@ -4,6 +4,7 @@ import { sensorService } from "../services/sensor.service";
 import { EstadoSensor } from "../types/sensor.types";
 import type {
   LecturaNuevaEvent,
+  OrigenLectura,
   Sensor,
   SensorFallaEvent,
   SensorRecuperadoEvent,
@@ -13,6 +14,9 @@ export interface LecturaRuntime {
   valorActual: number;
   timestampLectura: string;
   loteId: number;
+  // HU-15: permite mostrar en vivo si el último valor vino de un ingreso
+  // manual de fallback en vez del sensor real.
+  origen: OrigenLectura;
 }
 
 interface UseSensoresRealtimeResult {
@@ -86,6 +90,7 @@ export function useSensoresRealtime(): UseSensoresRealtimeResult {
           valorActual: evento.valor,
           timestampLectura: evento.timestampLectura,
           loteId: evento.loteId,
+          origen: evento.origen,
         },
       }));
     });
