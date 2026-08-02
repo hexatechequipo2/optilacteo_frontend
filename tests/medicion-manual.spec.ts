@@ -125,7 +125,12 @@ test.describe("MedicionManualPage", () => {
     await expect(selector.locator("option", { hasText: "LOT-2026-001" })).toBeAttached();
   });
 
-  test.describe("RegistrarMedicionManualTab", () => {
+    test.describe("RegistrarMedicionManualTab", () => {
+    test.beforeEach(async ({ page }) => {
+      // Espera a que el lote se auto-seleccione y el tab renderice los campos
+      await expect(page.locator("#medicion-manual-ph")).toBeVisible();
+    });
+
     test("muestra los campos de parámetros medidos", async ({ page }) => {
       await expect(page.locator("#medicion-manual-ph")).toBeVisible();
       await expect(page.locator("#medicion-manual-temperatura")).toBeVisible();
@@ -166,26 +171,26 @@ test.describe("MedicionManualPage", () => {
     });
 
     test("acepta un valor numérico y muestra el resultado como fuera de rango según el backend", async ({ page }) => {
-  await page.route(/\/lotes\/\d+\/mediciones-manuales/, async (route) => {
-    const rt = route.request().resourceType();
-    if (rt !== "fetch" && rt !== "xhr") return route.continue();
-    if (route.request().method() !== "POST") return route.continue();
-    await route.fulfill({
-      status: 201, contentType: "application/json",
-      body: JSON.stringify({
-        id: 1, loteId: 1, userId: 5,
-        mediciones: [
-          { id: 1, parametro: "ph", valor: 12.0, estado: "FUERA_DE_RANGO",
-            createdAt: "2026-08-01T10:00:00.000Z" },
-        ],
-      }),
+      await page.route(/\/lotes\/\d+\/mediciones-manuales/, async (route) => {
+        const rt = route.request().resourceType();
+        if (rt !== "fetch" && rt !== "xhr") return route.continue();
+        if (route.request().method() !== "POST") return route.continue();
+        await route.fulfill({
+          status: 201, contentType: "application/json",
+          body: JSON.stringify({
+            id: 1, loteId: 1, userId: 5,
+            mediciones: [
+              { id: 1, parametro: "ph", valor: 12.0, estado: "FUERA_DE_RANGO",
+                createdAt: "2026-08-01T10:00:00.000Z" },
+            ],
+          }),
+        });
+      });
+      await page.locator("#medicion-manual-ph").fill("12");
+      await page.locator('button[type="submit"]').click();
+      await expect(page.getByText("MEDICIÓN REGISTRADA")).toBeVisible();
+      await expect(page.getByText("Fuera de rango")).toBeVisible();
     });
-  });
-  await page.locator("#medicion-manual-ph").fill("12");
-  await page.locator('button[type="submit"]').click();
-  await expect(page.getByText("MEDICIÓN REGISTRADA")).toBeVisible();
-  await expect(page.getByText("Fuera de rango")).toBeVisible();
-});
 
     test("muestra error del servidor al fallar el registro", async ({ page }) => {
       await page.route(/\/lotes\/\d+\/mediciones-manuales/, async (route) => {
