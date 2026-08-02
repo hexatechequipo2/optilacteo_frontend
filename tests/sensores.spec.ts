@@ -569,6 +569,164 @@ test("SensoresPage - muestra el historial de asociaciones cuando hay registros",
   await expect(page.getByText(/^Vos ·/)).toBeVisible();
 });
 
+// ---------------------------------------------------------------------------
+// SensoresPage › HistorialMedicionesTab (HU-19)
+// ---------------------------------------------------------------------------
+
+const HISTORIAL_MEDICION_ITEM = {
+  id: 1,
+  valor: 6.8,
+  unidad: "pH",
+  sensorNombre: "Sensor pH Laboratorio",
+  parametro: "pH",
+  loteCodigo: "LOT-2026-001",
+  timestampLectura: "2026-08-01T08:00:00.000Z",
+  estado: "NORMAL",
+};
+
+test.describe("SensoresPage › HistorialMedicionesTab", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSensoresDeps(page);
+    // LIFO: prioridad mayor que **/sensores* para el endpoint de historial
+    await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: [], total: 0, page: 1, limit: 20, rangoAmplio: false }),
+      });
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/sensores");
+    await page.getByRole("button", { name: "Historial de mediciones" }).click();
+  });
+
+  test("muestra estado vacío cuando no hay mediciones", async ({ page }) => {
+    await expect(
+      page.getByText("No hay mediciones para los filtros seleccionados"),
+    ).toBeVisible();
+  });
+
+  test("muestra las mediciones registradas en la tabla", async ({ page }) => {
+    // LIFO: devuelve un item para este test
+    await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [HISTORIAL_MEDICION_ITEM],
+          total: 1,
+          page: 1,
+          limit: 20,
+          rangoAmplio: false,
+        }),
+      });
+    });
+    // Cambiar un filtro para disparar un nuevo fetch con la ruta LIFO
+    await page.locator("input[type='date']").nth(0).fill("2026-07-01");
+    await page.getByRole("button", { name: "Buscar" }).click();
+
+    const row = page.getByRole("row").filter({ hasText: "LOT-2026-001" });
+    await expect(row).toBeVisible();
+    await expect(row.getByText("Sensor pH Laboratorio")).toBeVisible();
+    await expect(row.getByText("Normal")).toBeVisible();
+  });
+
+  test("muestra error de validación cuando fecha hasta es anterior a fecha desde", async ({ page }) => {
+    await page.locator("input[type='date']").nth(0).fill("2026-08-05");
+    await page.locator("input[type='date']").nth(1).fill("2026-08-01");
+    await page.getByRole("button", { name: "Buscar" }).click();
+
+    await expect(
+      page.getByText("La fecha hasta no puede ser anterior a la fecha desde."),
+    ).toBeVisible();
+  });
+
+  test("muestra error del servidor al cargar el historial", async ({ page }) => {
+    await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({ status: 500, body: "" });
+    });
+    await page.locator("input[type='date']").nth(0).fill("2026-07-01");
+    await page.getByRole("button", { name: "Buscar" }).click();
+
+    await expect(
+      page.getByText("No se pudo cargar el historial de mediciones."),
+    ).toBeVisible();
+  });
+
+  test("filtrar por código de lote muestra las mediciones de ese lote", async ({ page }) => {
+  // LIFO: devuelve un item cuando se aplica el filtro
+  await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+      return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: [HISTORIAL_MEDICION_ITEM],
+        total: 1,
+        page: 1,
+        limit: 20,
+        rangoAmplio: false,
+      }),
+    });
+  });
+  await page.getByPlaceholder("LOTE-1-00001").fill("LOT-2026-001");
+  await page.getByRole("button", { name: "Buscar" }).click();
+
+  await expect(
+    page.getByRole("row").filter({ hasText: "LOT-2026-001" }),
+  ).toBeVisible();
+});
+
+test("el botón limpiar filtros aparece al aplicar un filtro y desaparece al limpiarlo", async ({ page }) => {
+  // Sin filtros aplicados el botón no existe
+  await expect(
+    page.getByRole("button", { name: "Limpiar filtros" }),
+  ).not.toBeVisible();
+
+  // Aplicar filtro de fecha
+  await page.locator("input[type='date']").nth(0).fill("2026-07-01");
+  await page.getByRole("button", { name: "Buscar" }).click();
+
+  // Ahora sí aparece
+  await expect(
+    page.getByRole("button", { name: "Limpiar filtros" }),
+  ).toBeVisible();
+
+  // Limpiar → desaparece
+  await page.getByRole("button", { name: "Limpiar filtros" }).click();
+
+  await expect(
+    page.getByRole("button", { name: "Limpiar filtros" }),
+  ).not.toBeVisible();
+});
+
+  
+});
+
+test(
+  "SensoresPage - un usuario sin permiso de ver historial no ve la pestaña de historial de mediciones",
+  async ({ page }) => {
+    await mockSensoresDeps(page);
+    await loginAsOperario(page);
+    await page.goto("/sensores");
+
+    await expect(
+      page.getByRole("button", { name: "Historial de mediciones" }),
+    ).not.toBeVisible();
+  },
+);
+
 test("SensoresPage - un usuario sin permiso de asociación no ve la sección de reasignación", async ({ page }) => {
   await mockSensoresDeps(page);
 
