@@ -1075,3 +1075,161 @@ test("LotesPage › un Responsable de Producción no ve el tab de Comparación h
   await expect(dialog.getByText(/Mediciones — LOT-2026-001/)).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Comparación histórica" })).not.toBeVisible();
 });
+
+// ---------------------------------------------------------------------------
+// LotesPage › HistorialLecturasLoteTab 
+// ---------------------------------------------------------------------------
+test.describe("LotesPage › HistorialLecturasLoteTab", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockLotesDeps(page);
+    // LIFO: sensor con loteActualId: 1 → LOTE_1 queda con sensor asociado
+    await page.route("**/sensores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: 1,
+            nombre: "Sensor pH Laboratorio",
+            tipo: "analogico",
+            parametro: "ph",
+            ubicacion: "laboratorio",
+            rangoMinFavor: 6.0,
+            rangoMaxFavor: 7.5,
+            estado: "activo",
+            empresaId: 10,
+            loteActualId: 1,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            updatedAt: "2026-08-01T00:00:00.000Z",
+          },
+        ]),
+      });
+    });
+
+    await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: [], total: 0, page: 1, limit: 20, rangoAmplio: false }),
+      });
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    const row = page.getByRole("row").filter({ hasText: "LOT-2026-001" });
+    await row.getByTitle("Mediciones").click();
+  });
+
+  test("muestra estado vacío cuando no hay mediciones para el lote con sensor", async ({ page }) => {
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("No hay mediciones para los filtros seleccionados")).toBeVisible();
+  });
+
+  test("muestra las mediciones del lote al aplicar filtros", async ({ page }) => {
+    await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: 1,
+              valor: 6.8,
+              unidad: "pH",
+              sensorNombre: "Sensor pH Laboratorio",
+              parametro: "pH",
+              loteCodigo: "LOT-2026-001",
+              timestampLectura: "2026-08-01T08:00:00.000Z",
+              estado: "NORMAL",
+              origen: "sensor",
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 20,
+          rangoAmplio: false,
+        }),
+      });
+    });
+    const dialog = page.getByRole("dialog");
+    await dialog.locator("input[type='date']").nth(0).fill("2026-08-01");
+    await dialog.getByRole("button", { name: "Buscar" }).click();
+    const histRow = dialog.getByRole("row").filter({ hasText: "Sensor pH Laboratorio" });
+    await expect(histRow).toBeVisible();
+    await expect(histRow.getByText("Normal")).toBeVisible();
+  });
+
+  test("muestra error de validación cuando fecha hasta es anterior a fecha desde", async ({ page }) => {
+    const dialog = page.getByRole("dialog");
+    await dialog.locator("input[type='date']").nth(0).fill("2026-08-05");
+    await dialog.locator("input[type='date']").nth(1).fill("2026-08-01");
+    await dialog.getByRole("button", { name: "Buscar" }).click();
+    await expect(
+      dialog.getByText("La fecha hasta no puede ser anterior a la fecha desde."),
+    ).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LotesPage › IngresoManualFallbackLoteTab 
+// ---------------------------------------------------------------------------
+test.describe("LotesPage › IngresoManualFallbackLoteTab", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockLotesDeps(page);
+    // LIFO: sensor inactivo con loteActualId: 1 → Operario ve tab "Ingreso manual (fallback)"
+    await page.route("**/sensores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: 1,
+            nombre: "Sensor pH Laboratorio",
+            tipo: "analogico",
+            parametro: "ph",
+            ubicacion: "laboratorio",
+            rangoMinFavor: 6.0,
+            rangoMaxFavor: 7.5,
+            estado: "inactivo",
+            empresaId: 10,
+            loteActualId: 1,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            updatedAt: "2026-08-01T00:00:00.000Z",
+          },
+        ]),
+      });
+    });
+    await loginAsOperario(page);
+    await page.goto("/lotes");
+    const row = page.getByRole("row").filter({ hasText: "LOT-2026-001" });
+    await row.getByTitle("Mediciones").click();
+  });
+
+  test("muestra el sensor del lote con el campo de ingreso habilitado", async ({ page }) => {
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Sensor pH Laboratorio · pH")).toBeVisible();
+    await expect(dialog.getByText("Inactivo", { exact: true })).toBeVisible();
+    await expect(dialog.locator("#lectura-manual-1")).toBeEnabled();
+  });
+
+  test("registra el valor manual del sensor y muestra confirmación", async ({ page }) => {
+    const dialog = page.getByRole("dialog");
+    await dialog.locator("#lectura-manual-1").fill("6.8");
+    await dialog
+      .locator("form:has(#lectura-manual-1)")
+      .getByRole("button", { name: "Cargar" })
+      .click();
+    await expect(dialog.getByText("Valor manual registrado.")).toBeVisible();
+  });
+});
