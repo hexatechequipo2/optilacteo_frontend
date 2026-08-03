@@ -370,6 +370,31 @@ test.describe("SensoresPage › EstadoDiagnosticoTab", () => {
     await expect(page.locator("[id^='lectura-manual-']")).toHaveCount(0);
   });
 
+  test("muestra 'Reconectando...' cuando no hay conexión de tiempo real", async ({ page }) => {
+    // Sin servidor WebSocket isRealtimeConnected = false → indicador de reconexión
+    await expect(page.getByText("Reconectando...")).toBeVisible();
+  });
+
+  test("muestra 'Sin lote asociado' cuando el sensor no tiene lote asignado", async ({ page }) => {
+    // SENSOR_1 y SENSOR_2 no tienen loteActualId → loteId = null
+    await expect(page.getByText("Sin lote asociado").first()).toBeVisible();
+  });
+
+  test("muestra 'Lote #X' cuando el sensor tiene un lote asociado", async ({ page }) => {
+    await page.route("**/sensores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.continue();
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify([{ ...SENSOR_1, loteActualId: 1 }]),
+      });
+    });
+    await page.reload();
+    await page.getByRole("button", { name: "Estado y diagnóstico" }).click();
+    await expect(page.getByText("Lote #1")).toBeVisible();
+  });
+
   test.describe("SensoresPage › IngresoManualFallback", () => {
     test.beforeEach(async ({ page }) => {
       await mockSensoresDeps(page);
@@ -418,6 +443,27 @@ test.describe("SensoresPage › EstadoDiagnosticoTab", () => {
       await page.locator("form:has(#lectura-manual-2)").getByRole("button", { name: "Cargar" }).click();
       await expect(page.getByText("No se pudo registrar el valor manual.")).toBeVisible();
     });
+  });
+
+    test("un sensor en estado de falla muestra el badge 'Con falla'", async ({ page }) => {
+    await page.route("**/sensores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.continue();
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify([{ ...SENSOR_1, estado: "falla" }]),
+      });
+    });
+    await page.reload();
+    await page.getByRole("button", { name: "Estado y diagnóstico" }).click();
+    await expect(page.getByText("Con falla", { exact: true })).toBeVisible();
+    await expect(page.getByText("1 con falla")).toBeVisible();
+  });
+
+  test("un sensor activo no muestra alerta de falla", async ({ page }) => {
+    await expect(page.getByText("Activo", { exact: true })).toBeVisible();
+    await expect(page.getByText("Con falla", { exact: true })).not.toBeVisible();
   });
 });
 
