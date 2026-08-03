@@ -280,6 +280,159 @@ test.describe("ConfiguracionPage", () => {
       ).toBeVisible();
     });
   });
+
+  test.describe("LogoIdentidadTab", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.waitForLoadState("networkidle");
+      // timeout extendido por si networkidle resuelve antes de que
+      // EmpresaContext complete el fetch y el useEffect pueble el input
+      await expect(page.locator("#configuracion-empresa-nombre")).toHaveValue("Lácteos del Sur S.A.", { timeout: 10000 });
+    });
+
+    test("rechaza un archivo con formato no permitido", async ({ page }) => {
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "logo.pdf",
+        mimeType: "application/pdf",
+        buffer: Buffer.from("fake pdf content"),
+      });
+      await expect(page.getByText("El logo debe ser formato PNG o JPG.")).toBeVisible();
+    });
+
+    test("rechaza un archivo que supera los 2 MB", async ({ page }) => {
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "big-logo.png",
+        mimeType: "image/png",
+        buffer: Buffer.alloc(2 * 1024 * 1024 + 1),
+      });
+      await expect(page.getByText("El logo no puede superar los 2MB.")).toBeVisible();
+    });
+
+        test("rechaza guardar identidad con nombre vacío", async ({ page }) => {
+      await page.locator("#configuracion-empresa-nombre").fill("");
+      await page.getByRole("button", { name: "Guardar identidad" }).click();
+      await expect(page.getByText("El nombre es obligatorio")).toBeVisible();
+    });
+
+    test("guarda el nombre de la empresa y muestra mensaje de éxito", async ({ page }) => {
+      await page.locator("#configuracion-empresa-nombre").fill("Nuevo Nombre S.A.");
+      await page.getByRole("button", { name: "Guardar identidad" }).click();
+      await expect(page.getByText("Los cambios se guardaron correctamente.")).toBeVisible();
+    });
+
+        test("muestra el preview al seleccionar un logo válido y guarda con éxito", async ({ page }) => {
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "logo.png",
+        mimeType: "image/png",
+        buffer: Buffer.from("fake png content"),
+      });
+      
+      await expect(page.getByAltText("Logo de la empresa")).toBeVisible();
+
+      await page.getByRole("button", { name: "Guardar identidad" }).click();
+      await expect(page.getByText("Los cambios se guardaron correctamente.")).toBeVisible();
+    });
+
+    test("muestra error del servidor al fallar la subida del logo", async ({ page }) => {
+      await page.route("**/empresa/me/logo*", async (route) => {
+        const rt = route.request().resourceType();
+        if (rt !== "fetch" && rt !== "xhr") return route.continue();
+        if (route.request().method() !== "POST") return route.continue();
+        await route.fulfill({ status: 500, body: "" });
+      });
+
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "logo.png",
+        mimeType: "image/png",
+        buffer: Buffer.from("fake png content"),
+      });
+      await page.getByRole("button", { name: "Guardar identidad" }).click();
+      await expect(
+        page.getByText("No se pudo subir el logo. Intentá nuevamente."),
+      ).toBeVisible();
+    });
+
+      test("elimina el logo guardado y vuelve al estado por defecto", async ({ page }) => {
+      const EMPRESA_CON_LOGO = {
+        id: 10, name: "Lácteos del Sur S.A.", rut: "30-12345678-9", planId: 1, isActive: true,
+        // data URI evita la request HTTP externa al cargar el preview
+        logoUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAABjE+ibYAAAAASUVORK5CYII=",
+      };
+
+      await page.unroute("**/empresa/me");
+      let logoEliminado = false;
+      await page.route("**/empresa/me", async (route) => {
+        const rt = route.request().resourceType();
+        if (rt !== "fetch" && rt !== "xhr") return route.continue();
+        if (route.request().method() !== "GET") return route.continue();
+        await route.fulfill({
+          status: 200, contentType: "application/json",
+          body: JSON.stringify(
+            logoEliminado
+              ? { id: 10, name: "Lácteos del Sur S.A.", rut: "30-12345678-9", planId: 1, isActive: true }
+              : EMPRESA_CON_LOGO
+          ),
+        });
+      });
+
+      await page.goto("/configuracion");
+      await page.waitForLoadState("networkidle");
+
+      await expect(page.getByRole("button", { name: "Quitar logo" })).toBeVisible();
+      await expect(page.getByAltText("Logo de la empresa")).toBeVisible();
+
+      logoEliminado = true; // el refetch tras DELETE devuelve empresa sin logo
+      await page.getByRole("button", { name: "Quitar logo" }).click();
+
+      await expect(page.getByRole("button", { name: "Quitar logo" })).not.toBeVisible();
+      await expect(page.getByAltText("Logo de la empresa")).not.toBeVisible();
+    });
+
+    test("muestra error del servidor al fallar el guardado del nombre", async ({ page }) => {
+      await page.route("**/empresa/me/identidad*", async (route) => {
+        const rt = route.request().resourceType();
+        if (rt !== "fetch" && rt !== "xhr") return route.continue();
+        if (route.request().method() !== "PATCH") return route.continue();
+        await route.fulfill({ status: 500, body: "" });
+      });
+
+      await page.locator("#configuracion-empresa-nombre").fill("Nuevo Nombre S.A.");
+      await page.getByRole("button", { name: "Guardar identidad" }).click();
+      await expect(page.getByText("No se pudo guardar el nombre. Intentá nuevamente.")).toBeVisible();
+    });
+
+    test("muestra error del servidor al eliminar el logo", async ({ page }) => {
+      const EMPRESA_CON_LOGO = {
+        id: 10, name: "Lácteos del Sur S.A.", rut: "30-12345678-9", planId: 1, isActive: true,
+        logoUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAABjE+ibYAAAAASUVORK5CYII=",
+      };
+
+      await page.unroute("**/empresa/me");
+      await page.route("**/empresa/me", async (route) => {
+        const rt = route.request().resourceType();
+        if (rt !== "fetch" && rt !== "xhr") return route.continue();
+        if (route.request().method() !== "GET") return route.continue();
+        await route.fulfill({
+          status: 200, contentType: "application/json",
+          body: JSON.stringify(EMPRESA_CON_LOGO),
+        });
+      });
+
+      await page.route("**/empresa/me/logo*", async (route) => {
+        const rt = route.request().resourceType();
+        if (rt !== "fetch" && rt !== "xhr") return route.continue();
+        if (route.request().method() !== "DELETE") return route.continue();
+        await route.fulfill({ status: 500, body: "" });
+      });
+
+      await page.goto("/configuracion");
+      await page.waitForLoadState("networkidle");
+
+      await expect(page.getByRole("button", { name: "Quitar logo" })).toBeVisible();
+      await page.getByRole("button", { name: "Quitar logo" }).click();
+
+      await expect(page.getByText("No se pudo eliminar el logo. Intentá nuevamente.")).toBeVisible();
+    });
+  });
 });
 
 test("ConfiguracionPage - un Responsable de calidad ve los inputs de Comparación histórica deshabilitados", async ({ page }) => {
