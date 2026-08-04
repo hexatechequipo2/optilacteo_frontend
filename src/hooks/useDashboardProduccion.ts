@@ -3,15 +3,41 @@ import { dashboardProduccionService } from "../services/dashboardProduccion.serv
 import type {
   DashboardHistoricoResponse,
   DashboardResumenResponse,
+  FiltroPeriodoDashboard,
+  GranularidadHistorico,
 } from "../types/dashboardProduccion.types";
 
 const INTERVALO_DEFAULT_MS = 30_000;
+
+// Mapea el filtro del segmented control a los query params que espera
+// GET /dashboard/lotes-procesados/historico?granularidad=...&cantidad=....
+// "hoy" y "semana" piden serie diaria (1 y 7 puntos); "mes" pide el mes
+// actual agregado. Default = "semana" para no cambiar el comportamiento
+// previo (antes se pedía siempre dias=7).
+const FILTRO_A_PARAMS: Record<
+  FiltroPeriodoDashboard,
+  { granularidad: GranularidadHistorico; cantidad: number }
+> = {
+  hoy: { granularidad: "dia", cantidad: 1 },
+  semana: { granularidad: "dia", cantidad: 7 },
+  mes: { granularidad: "mes", cantidad: 1 },
+};
+
+// GET /dashboard (métricas generales) no toma "cantidad", solo agrega según
+// la granularidad pedida: hoy, esta semana o este mes.
+const FILTRO_A_GRANULARIDAD_RESUMEN: Record<FiltroPeriodoDashboard, GranularidadHistorico> = {
+  hoy: "dia",
+  semana: "semana",
+  mes: "mes",
+};
 
 interface UseDashboardProduccionResult {
   resumen: DashboardResumenResponse | null;
   historico: DashboardHistoricoResponse | null;
   isLoading: boolean;
   error: string | null;
+  filtro: FiltroPeriodoDashboard;
+  setFiltro: (filtro: FiltroPeriodoDashboard) => void;
   refetch: () => Promise<void>;
 }
 
@@ -29,13 +55,15 @@ export function useDashboardProduccion(
   const [historico, setHistorico] = useState<DashboardHistoricoResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<FiltroPeriodoDashboard>("semana");
   const canceladoRef = useRef(false);
 
   const cargar = useCallback(async () => {
     try {
+      const { granularidad, cantidad } = FILTRO_A_PARAMS[filtro];
       const [resumenData, historicoData] = await Promise.all([
-        dashboardProduccionService.getResumenHoy(),
-        dashboardProduccionService.getHistoricoLotesProcesados(7),
+        dashboardProduccionService.getResumenHoy(FILTRO_A_GRANULARIDAD_RESUMEN[filtro]),
+        dashboardProduccionService.getHistoricoLotesProcesados(granularidad, cantidad),
       ]);
       if (!canceladoRef.current) {
         setResumen(resumenData);
@@ -49,7 +77,7 @@ export function useDashboardProduccion(
     } finally {
       if (!canceladoRef.current) setIsLoading(false);
     }
-  }, []);
+  }, [filtro]);
 
   useEffect(() => {
     canceladoRef.current = false;
@@ -64,5 +92,5 @@ export function useDashboardProduccion(
     };
   }, [cargar, intervaloMs]);
 
-  return { resumen, historico, isLoading, error, refetch: cargar };
+  return { resumen, historico, isLoading, error, filtro, setFiltro, refetch: cargar };
 }
