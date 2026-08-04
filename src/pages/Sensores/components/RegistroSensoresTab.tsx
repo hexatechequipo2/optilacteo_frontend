@@ -81,8 +81,13 @@ export function RegistroSensoresTab({
     setEditingSensor(null);
   };
 
-  const handleSubmit = (dto: SensorFormValues) =>
-    editingSensor ? updateSensor(editingSensor.id, dto) : createSensor(dto);
+  const handleSubmit = (dto: SensorFormValues) => {
+    if (editingSensor) {
+      const { ubicacion, ...updateDto } = dto;
+      return updateSensor(editingSensor.id, updateDto);
+    }
+    return createSensor(dto);
+  };
 
   return (
     <>
