@@ -38,3 +38,9 @@ export interface DashboardHistoricoResponse {
   dias: number;
   puntos: PuntoHistoricoLotes[];
 }
+
+// Filtro de granularidad temporal del historico (segmented control del
+// dashboard). "granularidad"/"cantidad" son los query params que espera
+// GET /dashboard/lotes-procesados/historico?granularidad=dia|semana|mes&cantidad=N.
+export type FiltroPeriodoDashboard = "hoy" | "semana" | "mes";
+export type GranularidadHistorico = "dia" | "semana" | "mes";
