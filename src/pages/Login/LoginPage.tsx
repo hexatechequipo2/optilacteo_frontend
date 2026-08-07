@@ -6,6 +6,7 @@ import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { QLLogo } from "../../components/ui/QLLogo";
 import { useAuth } from "../../hooks/useAuth";
+import { getRoleLanding } from "../../utils/roleLanding";
 
 interface FormErrors {
   email?: string;
@@ -63,19 +64,7 @@ export default function LoginPage() {
       // HU-38 (AC4): el dashboard operativo es la pantalla de inicio del
       // Responsable de producción — antes caía en /sensores como Operario de
       // línea, ahora tiene su propia landing.
-      const destination =
-        user.rolNombre === "Administrador"
-          ? "/dashboard"
-          : user.rolNombre === "Gerente"
-            ? "/dashboard-produccion"
-            : user.rolNombre === "Responsable de calidad"
-              ? "/lotes"
-              : user.rolNombre === "Responsable de producción"
-                ? "/dashboard-produccion"
-                : user.rolNombre === "Operario de línea"
-                  ? "/sensores"
-                  : "/sin-funcionalidades";
-      navigate(destination, { replace: true });
+      navigate(getRoleLanding(user.rolNombre), { replace: true });
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (!error.response) {
