@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
+import { useAuth } from "./hooks/useAuth";
+import { getRoleLanding } from "./utils/roleLanding";
 
 import LoginPage from "./pages/Login/LoginPage";
 import ForgotPasswordPage from "./pages/Login/ForgotPasswordPage";
@@ -21,6 +23,27 @@ import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidade
 
 import { InactivityMonitor } from "./components/layout/InactivityMonitor";
 import { EmpresaProvider } from "./context/EmpresaContext";
+
+// La raíz "/" no puede asumir un destino fijo: cada rol tiene su propia
+// landing (ver getRoleLanding), y un usuario no-Administrador que entra por
+// acá (bookmark, refresh) terminaba en /dashboard -> "Acceso no autorizado".
+function RoleBasedRedirect() {
+  const { isAuthenticated, isInitializing, user } = useAuth();
+
+  if (isInitializing) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-slate-500">Cargando...</p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to={getRoleLanding(user?.rolNombre)} replace />;
+}
 
 function App() {
   return (
@@ -200,7 +223,7 @@ function App() {
             />
 
             {/* DEFAULT */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<RoleBasedRedirect />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </EmpresaProvider>
