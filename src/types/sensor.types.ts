@@ -31,6 +31,7 @@ export enum Ubicacion {
 export interface Sensor {
   id: number;
   nombre: string;
+  marca: string;
   tipo: TipoSensor;
   parametro: Parametro;
   ubicacion: Ubicacion;
@@ -49,6 +50,7 @@ export interface Sensor {
 // siempre en ACTIVO y el sensor no tiene identificador manual.
 export interface CreateSensorDto {
   nombre: string;
+  marca: string;
   tipo: TipoSensor;
   parametro: Parametro;
   ubicacion: Ubicacion;
@@ -63,6 +65,7 @@ export type UpdateSensorDto = Partial<Omit<CreateSensorDto, "ubicacion">>;
 
 export interface SensorFilterQuery {
   nombre?: string;
+  marca?: string;
   tipo?: TipoSensor;
   parametro?: Parametro;
   estado?: EstadoSensor;

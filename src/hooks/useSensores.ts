@@ -11,6 +11,9 @@ interface UseSensoresResult {
   isCreating: boolean;
   updateSensor: (id: number, dto: UpdateSensorDto) => Promise<Sensor>;
   isUpdating: boolean;
+  desactivarSensor: (id: number) => Promise<Sensor>;
+  activarSensor: (id: number) => Promise<Sensor>;
+  isTogglingEstado: boolean;
 }
 
 // La empresa se resuelve en el backend a partir del JWT (CurrentEmpresa),
@@ -23,6 +26,7 @@ export function useSensores(filters: SensorFilterQuery = {}): UseSensoresResult 
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isTogglingEstado, setIsTogglingEstado] = useState(false);
 
   const fetchSensores = useCallback(async () => {
     setIsLoading(true);
@@ -65,6 +69,28 @@ export function useSensores(filters: SensorFilterQuery = {}): UseSensoresResult 
     }
   }, []);
 
+  const desactivarSensor = useCallback(async (id: number) => {
+    setIsTogglingEstado(true);
+    try {
+      const actualizado = await sensorService.desactivar(id);
+      setSensores((prev) => prev.map((s) => (s.id === id ? actualizado : s)));
+      return actualizado;
+    } finally {
+      setIsTogglingEstado(false);
+    }
+  }, []);
+
+  const activarSensor = useCallback(async (id: number) => {
+    setIsTogglingEstado(true);
+    try {
+      const actualizado = await sensorService.activar(id);
+      setSensores((prev) => prev.map((s) => (s.id === id ? actualizado : s)));
+      return actualizado;
+    } finally {
+      setIsTogglingEstado(false);
+    }
+  }, []);
+
   return {
     sensores,
     isLoading,
@@ -74,5 +100,8 @@ export function useSensores(filters: SensorFilterQuery = {}): UseSensoresResult 
     isCreating,
     updateSensor,
     isUpdating,
+    desactivarSensor,
+    activarSensor,
+    isTogglingEstado,
   };
 }

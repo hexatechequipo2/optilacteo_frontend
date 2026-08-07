@@ -30,8 +30,17 @@ export const sensorService = {
     return data;
   },
 
-  remove: async (id: number): Promise<void> => {
-    await api.delete(`/sensores/${id}`);
+  // HU-65: baja lógica — el backend pone el sensor en estado INACTIVO en vez
+  // de borrarlo, así queda excluido de nuevas asociaciones a lote pero
+  // conserva su historial.
+  desactivar: async (id: number): Promise<Sensor> => {
+    const { data } = await api.delete<Sensor>(`/sensores/${id}`);
+    return data;
+  },
+
+  activar: async (id: number): Promise<Sensor> => {
+    const { data } = await api.patch<Sensor>(`/sensores/${id}/activar`);
+    return data;
   },
 
   // HU-33: historial de asociaciones a lote de un sensor (append-only).

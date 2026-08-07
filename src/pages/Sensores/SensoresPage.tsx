@@ -23,19 +23,33 @@ const TAB_HISTORIAL: { value: TabSensores; label: string } = {
 
 export default function SensoresPage() {
   const [filtros, setFiltros] = useState<SensorFilterQuery>({});
-  const { sensores, isLoading, error, refetch, createSensor, isCreating, updateSensor, isUpdating } =
-    useSensores(filtros);
+  const {
+    sensores,
+    isLoading,
+    error,
+    refetch,
+    createSensor,
+    isCreating,
+    updateSensor,
+    isUpdating,
+    desactivarSensor,
+    activarSensor,
+    isTogglingEstado,
+  } = useSensores(filtros);
   const { user } = useAuth();
   const { empresa } = useEmpresaActual();
   const [tabActiva, setTabActiva] = useState<TabSensores>("registro");
 
-  // POST/PATCH /sensores (backend): Responsable de producción y Responsable
-  // de calidad. PATCH /sensores/lote/:loteId/asociar: Operario de línea y
-  // Responsable de calidad. Son capacidades distintas, ver sensor.controller.ts.
+  // POST/PATCH/DELETE /sensores (backend): Responsable de producción,
+  // Responsable de calidad y Gerente (HU-65: inventario de sensores es
+  // responsabilidad de Gerente). PATCH /sensores/lote/:loteId/asociar:
+  // Operario de línea y Responsable de calidad. Son capacidades distintas,
+  // ver sensor.controller.ts.
   const puedeGestionar = useMemo(
     () =>
       user?.rolNombre === "Responsable de producción" ||
-      user?.rolNombre === "Responsable de calidad",
+      user?.rolNombre === "Responsable de calidad" ||
+      user?.rolNombre === "Gerente",
     [user?.rolNombre],
   );
   const puedeAsociar = useMemo(
@@ -87,6 +101,9 @@ export default function SensoresPage() {
           isCreating={isCreating}
           updateSensor={updateSensor}
           isUpdating={isUpdating}
+          desactivarSensor={desactivarSensor}
+          activarSensor={activarSensor}
+          isTogglingEstado={isTogglingEstado}
           puedeGestionar={puedeGestionar}
           puedeAsociar={puedeAsociar}
           filtros={filtros}
