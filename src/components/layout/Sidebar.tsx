@@ -92,6 +92,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     async function loadCounts() {
       try {
         // Ejecutamos las llamadas
+        // Cada llamada lleva su propio .catch(): un 403/500 aislado (p.ej. un
+        // rol con un permiso de módulo desactivado) no debe tirar abajo el
+        // resto de los contadores vía el reject conjunto de Promise.all.
         const [
           empresasRes,
           usuariosRes,
@@ -101,18 +104,22 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           sensoresRes,
           revisionCalidadRes,
         ] = await Promise.all([
-            puedeVerEmpresas ? empresasService.getAll({ limit: 1 }) : { data: [], meta: { total: 0 } },
-            puedeVerUsuarios ? usuariosService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
+            puedeVerEmpresas
+              ? empresasService.getAll({ limit: 1 }).catch(() => ({ data: [], meta: { total: 0 } }))
+              : { data: [], meta: { total: 0 } },
+            puedeVerUsuarios
+              ? usuariosService.getAll({ page: 1, limit: 1 }).catch(() => ({ data: [], meta: { total: 0 } }))
+              : { data: [], meta: { total: 0 } },
             // Si planes/proveedores NO están paginados, devuelven array. Si lo están, ajusta a .meta.total
-            puedeVerPlanes ? planesService.getAll() : [],
-            puedeVerProveedores ? proveedoresService.getAll({ page: 1, limit: 1 }) : { data: [], meta: { total: 0 } },
-            // .catch(() => 0): GET /lotes todavía no habilita Operario de
-            // línea/Responsable de producción (ver comentario en
-            // puedeVerLotes) — que ese 403 no tire abajo el resto de los
-            // contadores del Promise.all.
+            puedeVerPlanes ? planesService.getAll().catch(() => []) : [],
+            puedeVerProveedores
+              ? proveedoresService.getAll({ page: 1, limit: 1 }).catch(() => ({ data: [], meta: { total: 0 } }))
+              : { data: [], meta: { total: 0 } },
+            // GET /lotes todavía no habilita Operario de línea/Responsable de
+            // producción (ver comentario en puedeVerLotes).
             puedeVerLotes ? loteService.count().catch(() => 0) : 0,
             // No hay endpoint de conteo dedicado para sensores, se toma el length del getAll.
-            puedeVerSensores ? sensorService.getAll() : [],
+            puedeVerSensores ? sensorService.getAll().catch(() => []) : [],
             // HU-22: no hay endpoint de conteo dedicado, se toma el length de
             // GET /lotes/no-aptos.
             puedeVerRevisionCalidad ? loteService.getNoAptos().catch(() => []) : [],
