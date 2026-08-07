@@ -40,16 +40,18 @@ export default function SensoresPage() {
   const { empresa } = useEmpresaActual();
   const [tabActiva, setTabActiva] = useState<TabSensores>("registro");
 
-  // POST/PATCH/DELETE /sensores (backend): Responsable de producción,
-  // Responsable de calidad y Gerente (HU-65: inventario de sensores es
-  // responsabilidad de Gerente). PATCH /sensores/lote/:loteId/asociar:
-  // Operario de línea y Responsable de calidad. Son capacidades distintas,
-  // ver sensor.controller.ts.
+  // POST/PATCH/DELETE /sensores (backend): exclusivo Responsable de
+  // producción y Responsable de calidad (ver @Roles en sensor.controller.ts).
+  // Gerente NO gestiona sensores pese a que HU-65 amplió su GET a todo el
+  // inventario (@Roles del GET incluye Gerente, líneas 47-48 del controller)
+  // — esa lectura no se traduce en permiso de alta/edición/baja, así que
+  // queda afuera acá para no ofrecer acciones que el backend va a rechazar
+  // con 403. PATCH /sensores/lote/:loteId/asociar: Operario de línea y
+  // Responsable de calidad, capacidad distinta (puedeAsociar más abajo).
   const puedeGestionar = useMemo(
     () =>
       user?.rolNombre === "Responsable de producción" ||
-      user?.rolNombre === "Responsable de calidad" ||
-      user?.rolNombre === "Gerente",
+      user?.rolNombre === "Responsable de calidad",
     [user?.rolNombre],
   );
   const puedeAsociar = useMemo(
