@@ -2,6 +2,7 @@
 // (src/module/lote: entities, DTOs y mapper), mergeado en develop (HU-60).
 import type { Parametro, TipoMateriaPrima } from "./configParametro.types";
 import type { Sensor, Ubicacion } from "./sensor.types";
+import type { TrazabilidadEntidad } from "./auditoria.types";
 
 // HU-21: resultado de la clasificación automática (Apto/No Apto), calculada
 // por el backend a partir de los parámetros del lote y los umbrales
@@ -64,6 +65,11 @@ export interface Lote {
   warning?: string;
   rendimiento?: number | null; // HU-62: cargado opcionalmente al finalizar
   unidadRendimiento?: UnidadRendimiento | null; // HU-62 (extensión): obligatoria si rendimiento viene cargado
+  // HU-63: quién creó el lote y, si aplica, quién lo modificó por última vez.
+  // El backend lo manda para cualquier rol que pueda leer /lotes — la
+  // restricción a Gerente/Administrador se aplica en el frontend
+  // (ver puedeVerAuditoria).
+  auditoria?: TrazabilidadEntidad;
 }
 
 export interface CreateLoteDto {

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, History, Pencil } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
+import { AuditoriaModal } from "../../components/AuditoriaModal";
 import { useProveedores } from "../../hooks/useProveedores";
 import { useEmpresas } from "../../hooks/useEmpresas";
 import { useAuth } from "../../hooks/useAuth";
+import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
 import { ProveedorFormModal } from "./ProveedorFormModal";
 import type { Proveedor, TipoProveedor } from "../../types/proveedor.types";
 
@@ -95,8 +97,15 @@ export default function ProveedoresPage() {
 
   const { empresas } = useEmpresas(esGerente);
 
+  // HU-63: quién creó el proveedor y, si aplica, quién lo modificó por
+  // última vez. El backend manda el bloque `auditoria` para cualquier rol
+  // que pueda leer /proveedores (no lo gatea); la restricción a
+  // Gerente/Administrador se aplica acá (ver utils/auditoriaVisibility.ts).
+  const puedeVerAuditoriaProveedor = puedeVerAuditoria(user?.rolNombre);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [proveedorEnEdicion, setProveedorEnEdicion] = useState<Proveedor | null>(null);
+  const [proveedorAuditoria, setProveedorAuditoria] = useState<Proveedor | null>(null);
 
   const empresaMap = useMemo(
     () => new Map(empresas.map((e) => [e.id, e.name])),
@@ -257,14 +266,27 @@ export default function ProveedoresPage() {
                       </td>
 
                       <td className="px-5 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setProveedorEnEdicion(p)}
-                          aria-label={`Editar ${p.razonSocial}`}
-                          className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setProveedorEnEdicion(p)}
+                            aria-label={`Editar ${p.razonSocial}`}
+                            className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          {puedeVerAuditoriaProveedor && p.auditoria && (
+                            <button
+                              type="button"
+                              onClick={() => setProveedorAuditoria(p)}
+                              aria-label={`Auditoría de ${p.razonSocial}`}
+                              className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                              title="Auditoría"
+                            >
+                              <History className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -295,14 +317,27 @@ export default function ProveedoresPage() {
                         <p className="text-xs text-slate-500 dark:text-slate-400">{p.cuit}</p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setProveedorEnEdicion(p)}
-                      aria-label={`Editar ${p.razonSocial}`}
-                      className="flex-shrink-0 rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setProveedorEnEdicion(p)}
+                        aria-label={`Editar ${p.razonSocial}`}
+                        className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      {puedeVerAuditoriaProveedor && p.auditoria && (
+                        <button
+                          type="button"
+                          onClick={() => setProveedorAuditoria(p)}
+                          aria-label={`Auditoría de ${p.razonSocial}`}
+                          className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                          title="Auditoría"
+                        >
+                          <History className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
@@ -390,6 +425,13 @@ export default function ProveedoresPage() {
           onSubmit={(dto) => updateProveedor(proveedorEnEdicion.id, dto)}
         />
       )}
+
+      <AuditoriaModal
+        isOpen={proveedorAuditoria !== null}
+        titulo={`Auditoría — ${proveedorAuditoria?.razonSocial ?? ""}`}
+        auditoria={proveedorAuditoria?.auditoria}
+        onClose={() => setProveedorAuditoria(null)}
+      />
     </Layout>
   );
 }

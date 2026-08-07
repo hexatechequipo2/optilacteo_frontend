@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
+import { History } from "lucide-react";
 import { RangoFisicoBadge } from "../../../components/RangoFisicoBadge";
+import { AuditoriaModal } from "../../../components/AuditoriaModal";
+import { useAuth } from "../../../hooks/useAuth";
+import { puedeVerAuditoria } from "../../../utils/auditoriaVisibility";
 import { extraerMensajeError } from "../../../services/configParametro.service";
 import type { ConfigParametro, Parametro, TipoMateriaPrima } from "../../../types/configParametro.types";
 import type { ParametroVisible } from "../constants/parametrosCalidad";
@@ -36,11 +40,20 @@ function validar(minStr: string, maxStr: string, rangoFisico: { min: number; max
 export function ParametroCard({ parametro, tipoMateriaPrima, config, onSave }: ParametroCardProps) {
   const meta = PARAMETROS_META[parametro];
   const Icon = meta.icon;
+  const { user } = useAuth();
 
   const [minInput, setMinInput] = useState(config?.umbralMin?.toString() ?? "");
   const [maxInput, setMaxInput] = useState(config?.umbralMax?.toString() ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mostrarAuditoria, setMostrarAuditoria] = useState(false);
+
+  // HU-63: quién creó esta configuración de umbral y, si aplica, quién la
+  // modificó por última vez. El backend manda el bloque `auditoria` para
+  // cualquier rol que pueda leer /config-parametros (no lo gatea); la
+  // restricción a Gerente/Administrador se aplica acá (ver
+  // utils/auditoriaVisibility.ts).
+  const puedeVerAuditoriaConfig = puedeVerAuditoria(user?.rolNombre);
 
   // Al cambiar de tipo de materia prima (o llegar el fetch inicial) resincroniza
   // los inputs con lo que hay guardado para esa combinación puntual.
@@ -80,9 +93,21 @@ export function ParametroCard({ parametro, tipoMateriaPrima, config, onSave }: P
         <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400">
           <Icon className="h-5 w-5" />
         </span>
-        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
-          {meta.unidad}
-        </span>
+        <div className="flex items-center gap-2">
+          {puedeVerAuditoriaConfig && config?.auditoria && (
+            <button
+              type="button"
+              onClick={() => setMostrarAuditoria(true)}
+              className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+              title="Auditoría"
+            >
+              <History className="h-4 w-4" />
+            </button>
+          )}
+          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+            {meta.unidad}
+          </span>
+        </div>
       </div>
 
       <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
@@ -127,6 +152,13 @@ export function ParametroCard({ parametro, tipoMateriaPrima, config, onSave }: P
       ) : isSaving ? (
         <p className="text-xs text-slate-400 dark:text-slate-500">Guardando...</p>
       ) : null}
+
+      <AuditoriaModal
+        isOpen={mostrarAuditoria}
+        titulo={`Auditoría — ${meta.label}`}
+        auditoria={config?.auditoria}
+        onClose={() => setMostrarAuditoria(false)}
+      />
     </div>
   );
 }
