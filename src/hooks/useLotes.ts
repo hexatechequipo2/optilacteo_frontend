@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { loteService } from "../services/lote.service";
-import type { CreateLoteDto, Lote, LoteCreateResponse, UpdateLoteDto } from "../types/lote.types";
+import type {
+  CreateLoteDto,
+  FinalizarLoteDto,
+  Lote,
+  LoteCreateResponse,
+  UpdateLoteDto,
+} from "../types/lote.types";
 
 interface UseLotesResult {
   lotes: Lote[];
@@ -11,7 +17,7 @@ interface UseLotesResult {
   isCreating: boolean;
   updateLote: (id: number, dto: UpdateLoteDto) => Promise<Lote>;
   isUpdating: boolean;
-  finalizarLote: (id: number) => Promise<Lote>;
+  finalizarLote: (id: number, dto?: FinalizarLoteDto) => Promise<Lote>;
   finalizandoId: number | null;
 }
 
@@ -66,10 +72,10 @@ export function useLotes(): UseLotesResult {
     }
   }, []);
 
-  const finalizarLote = useCallback(async (id: number) => {
+  const finalizarLote = useCallback(async (id: number, dto?: FinalizarLoteDto) => {
     setFinalizandoId(id);
     try {
-      const actualizado = await loteService.finalizar(id);
+      const actualizado = await loteService.finalizar(id, dto);
       setLotes((prev) => prev.map((l) => (l.id === id ? actualizado : l)));
       return actualizado;
     } finally {

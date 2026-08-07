@@ -2,17 +2,22 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, FlaskConical, Pencil } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
+import { Select } from "../../components/ui/Select";
 import { ClasificacionLoteBadge } from "../../components/ClasificacionLoteBadge";
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
-import { extraerMensajeError } from "../../services/lote.service";
 import { proveedoresService } from "../../services/proveedores.service";
 import { TIPO_MATERIA_PRIMA_TABS } from "../Configuracion/constants/parametrosCalidad";
-import { DestinoLote, EstadoLote, type Lote } from "../../types/lote.types";
+import { DestinoLote, EstadoLote, UnidadRendimiento, type Lote } from "../../types/lote.types";
 import type { Proveedor } from "../../types/proveedor.types";
 import { LoteFormModal } from "./LoteFormModal";
 import { LoteMedicionesModal } from "./components/LoteMedicionesModal";
+import { FinalizarLoteModal } from "./components/FinalizarLoteModal";
+import {
+  UNIDAD_RENDIMIENTO_LABEL,
+  UNIDAD_RENDIMIENTO_SIMBOLO,
+} from "./constants/unidadRendimiento";
 
 // Universo suficiente para poblar el selector de proveedores del formulario
 // (no es una tabla paginada: acá se necesita el catálogo completo).
@@ -25,7 +30,30 @@ const DESTINO_LABEL: Record<DestinoLote, string> = {
   [DestinoLote.DESCARTE]: "Descarte",
 };
 
-const HEADERS_BASE = ["LOTE", "PROVEEDOR", "MATERIA PRIMA", "INGRESO", "DESTINO"];
+const HEADERS_BASE = ["LOTE", "PROVEEDOR", "MATERIA PRIMA", "INGRESO", "DESTINO", "RENDIMIENTO"];
+
+// HU-62: solo tiene sentido mostrar el rendimiento una vez que el lote está
+// finalizado (es cuando el backend permite cargarlo). Antes de eso, "—"
+// como el resto de los campos no aplicables todavía.
+function formatRendimiento(lote: Lote): string {
+  if (lote.estado !== EstadoLote.FINALIZADO) return "—";
+  if (lote.rendimiento == null) return "No registrado";
+  // unidadRendimiento puede faltar en lotes finalizados antes de esta
+  // extensión (se guardaba solo el número); se muestra el valor solo.
+  const simbolo = lote.unidadRendimiento ? UNIDAD_RENDIMIENTO_SIMBOLO[lote.unidadRendimiento] : null;
+  return simbolo ? `${lote.rendimiento} ${simbolo}` : String(lote.rendimiento);
+}
+
+// HU-62 (extensión): categorización client-side por unidad de rendimiento —
+// el backend todavía no expone un query param para esto en
+// LoteFilterQueryDto, así que se filtra sobre los lotes ya cargados.
+const FILTRO_UNIDAD_OPTIONS = [
+  { value: "", label: "Todas" },
+  ...Object.values(UnidadRendimiento).map((unidad) => ({
+    value: unidad,
+    label: UNIDAD_RENDIMIENTO_LABEL[unidad],
+  })),
+];
 
 const TIPO_MATERIA_PRIMA_LABEL = new Map(TIPO_MATERIA_PRIMA_TABS.map((t) => [t.value, t.label]));
 
@@ -45,30 +73,27 @@ export default function LotesPage() {
   const { user } = useAuth();
   const { sensores } = useSensores();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [filtroUnidadRendimiento, setFiltroUnidadRendimiento] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
   const [loteMediciones, setLoteMediciones] = useState<Lote | null>(null);
-  const [finalizarError, setFinalizarError] = useState("");
+  const [loteAFinalizar, setLoteAFinalizar] = useState<Lote | null>(null);
 
   // Solo Responsable de calidad puede registrar/editar lotes (POST y PATCH
   // /lotes en el backend); Gerente/Administrador acceden a esta pantalla en
   // modo lectura.
   const puedeCrearLote = user?.rolNombre === "Responsable de calidad";
 
-  // PATCH /lotes/:id/finalizar (backend): exclusivo Responsable de calidad,
-  // mismo rol que puedeCrearLote. Solo tiene sentido ofrecerla mientras el
-  // lote no llegó todavía a un estado terminal (finalizado/rechazado, este
+  // HU-62: PATCH /lotes/:id/finalizar amplió el rol habilitado a
+  // Responsable de calidad y Responsable de Producción (antes exclusivo de
+  // calidad). Comparación normalizada, mismo criterio que el resto de los
+  // checks de este archivo. Solo tiene sentido ofrecerla mientras el lote
+  // no llegó todavía a un estado terminal (finalizado/rechazado, este
   // último decidido por HU-22 vía revisión de calidad).
-  const puedeFinalizarLote = puedeCrearLote;
-
-  const handleFinalizar = async (lote: Lote) => {
-    setFinalizarError("");
-    try {
-      await finalizarLote(lote.id);
-    } catch (err) {
-      setFinalizarError(extraerMensajeError(err, "No se pudo finalizar el lote. Intentá nuevamente."));
-    }
-  };
+  const puedeFinalizarLote = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return rol === "responsable de calidad" || rol === "responsable de producción";
+  }, [user?.rolNombre]);
 
   // HU-21: GET /lotes/:id/clasificaciones (backend, lote.controller.ts)
   // permite Responsable de calidad, Gerente y Administrador — no es
@@ -170,6 +195,14 @@ export default function LotesPage() {
 
   const proveedorMap = new Map(proveedores.map((p) => [p.id, p.razonSocial]));
 
+  // HU-62 (extensión): filtro client-side por unidad de rendimiento. Vacío
+  // ("Todas") no filtra nada; con "" el lote no tiene rendimiento cargado
+  // (no finalizado o finalizado sin rendimiento) y no matchea ninguna unidad.
+  const lotesFiltrados = useMemo(() => {
+    if (filtroUnidadRendimiento === "") return lotes;
+    return lotes.filter((lote) => lote.unidadRendimiento === filtroUnidadRendimiento);
+  }, [lotes, filtroUnidadRendimiento]);
+
   const headers = useMemo(() => {
     const list = [...HEADERS_BASE];
     if (puedeVerClasificacion) list.push("CLASIF. AUTOMÁTICA");
@@ -185,14 +218,24 @@ export default function LotesPage() {
             Lotes
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {lotes.length} lotes registrados
+            {lotesFiltrados.length} lotes registrados
           </p>
         </div>
-        {puedeCrearLote && (
-          <Button type="button" className="!w-auto px-6" onClick={abrirAlta}>
-            + Nuevo lote
-          </Button>
-        )}
+        <div className="flex flex-wrap items-end gap-3">
+          <Select
+            id="filtro-unidad-rendimiento"
+            label="Unidad de rendimiento"
+            options={FILTRO_UNIDAD_OPTIONS}
+            value={filtroUnidadRendimiento}
+            onChange={(e) => setFiltroUnidadRendimiento(e.target.value)}
+            className="!py-1.5 text-sm"
+          />
+          {puedeCrearLote && (
+            <Button type="button" className="!w-auto px-6" onClick={abrirAlta}>
+              + Nuevo lote
+            </Button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -205,12 +248,6 @@ export default function LotesPage() {
           >
             Reintentar
           </button>
-        </div>
-      )}
-
-      {finalizarError && (
-        <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
-          {finalizarError}
         </div>
       )}
 
@@ -227,6 +264,16 @@ export default function LotesPage() {
             {puedeCrearLote
               ? 'Registrá el primer lote recibido con el botón "+ Nuevo lote".'
               : "Todavía no hay lotes registrados por Responsable de calidad."}
+          </p>
+        </div>
+      ) : lotesFiltrados.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-base font-medium text-slate-700 dark:text-slate-300">
+            Ningún lote coincide con el filtro
+          </p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            No hay lotes finalizados con rendimiento en{" "}
+            {UNIDAD_RENDIMIENTO_LABEL[filtroUnidadRendimiento as UnidadRendimiento]?.toLowerCase()}.
           </p>
         </div>
       ) : (
@@ -247,7 +294,7 @@ export default function LotesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {lotes.map((lote) => (
+                {lotesFiltrados.map((lote) => (
                   <tr key={lote.id} className="text-sm">
                     <td className="px-5 py-3 font-mono text-xs font-medium text-slate-900 dark:text-white">
                       {lote.codigo}
@@ -263,6 +310,9 @@ export default function LotesPage() {
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {formatRendimiento(lote)}
                     </td>
                     {puedeVerClasificacion && (
                       <td className="px-5 py-3">
@@ -305,8 +355,7 @@ export default function LotesPage() {
                           (lote.estado === EstadoLote.REGISTRADO || lote.estado === EstadoLote.EN_PROCESO) && (
                             <button
                               type="button"
-                              onClick={() => void handleFinalizar(lote)}
-                              disabled={finalizandoId === lote.id}
+                              onClick={() => setLoteAFinalizar(lote)}
                               className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400"
                               title="Finalizar lote"
                             >
@@ -323,7 +372,7 @@ export default function LotesPage() {
 
           {/* Cards (mobile) */}
           <div className="flex flex-col gap-3 md:hidden">
-            {lotes.map((lote) => (
+            {lotesFiltrados.map((lote) => (
               <div
                 key={lote.id}
                 className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
@@ -368,8 +417,7 @@ export default function LotesPage() {
                       (lote.estado === EstadoLote.REGISTRADO || lote.estado === EstadoLote.EN_PROCESO) && (
                         <button
                           type="button"
-                          onClick={() => void handleFinalizar(lote)}
-                          disabled={finalizandoId === lote.id}
+                          onClick={() => setLoteAFinalizar(lote)}
                           className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-emerald-50 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400"
                           title="Finalizar lote"
                         >
@@ -410,6 +458,10 @@ export default function LotesPage() {
                       {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
                     </dd>
                   </div>
+                  <div className="col-span-2">
+                    <dt className="text-slate-400 dark:text-slate-500">Rendimiento</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">{formatRendimiento(lote)}</dd>
+                  </div>
                 </dl>
               </div>
             ))}
@@ -439,6 +491,14 @@ export default function LotesPage() {
         puedeVerClasificacion={puedeVerClasificacion}
         puedeVerComparacionHistorica={puedeVerComparacionHistorica}
         onClose={() => setLoteMediciones(null)}
+      />
+
+      <FinalizarLoteModal
+        isOpen={loteAFinalizar !== null}
+        lote={loteAFinalizar}
+        isSubmitting={loteAFinalizar !== null && finalizandoId === loteAFinalizar.id}
+        onClose={() => setLoteAFinalizar(null)}
+        onConfirm={finalizarLote}
       />
     </Layout>
   );

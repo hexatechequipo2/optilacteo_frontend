@@ -32,6 +32,17 @@ export const EstadoLote = {
 
 export type EstadoLote = (typeof EstadoLote)[keyof typeof EstadoLote];
 
+// HU-62 (extensión, PR #82 en optilacteo-backend): unidad del rendimiento
+// cargado al finalizar. Espeja UnidadRendimiento del backend
+// (src/module/lote/enums/unidad-rendimiento.enum.ts).
+export const UnidadRendimiento = {
+  LITROS: "litros",
+  KILOGRAMOS: "kilogramos",
+  PORCENTAJE: "porcentaje",
+} as const;
+
+export type UnidadRendimiento = (typeof UnidadRendimiento)[keyof typeof UnidadRendimiento];
+
 export interface LoteParametro {
   parametro: Parametro;
   valor: number;
@@ -51,6 +62,8 @@ export interface Lote {
   parametros: LoteParametro[];
   createdAt: string;
   warning?: string;
+  rendimiento?: number | null; // HU-62: cargado opcionalmente al finalizar
+  unidadRendimiento?: UnidadRendimiento | null; // HU-62 (extensión): obligatoria si rendimiento viene cargado
 }
 
 export interface CreateLoteDto {
@@ -71,6 +84,17 @@ export interface UpdateLoteDto {
   materiaPrima?: TipoMateriaPrima;
   fechaIngreso?: string;
   destinoInicial?: DestinoLote;
+}
+
+// HU-62: PATCH /lotes/:id/finalizar acepta este body opcional. Mismo
+// criterio de validación que el backend (finalizar-lote.dto.ts): numérico
+// y no negativo; si no se carga, no se envía la clave (nunca 0 por defecto).
+// unidadRendimiento pasó a ser obligatoria del lado del backend cuando se
+// informa rendimiento (@ValidateIf en FinalizarLoteDto) — se refleja acá
+// como requerida solo dentro de esa combinación (ver FinalizarLoteModal).
+export interface FinalizarLoteDto {
+  rendimiento?: number | null;
+  unidadRendimiento?: UnidadRendimiento;
 }
 
 // POST /lotes ahora devuelve esta forma en vez de solo el Lote:
