@@ -1,4 +1,6 @@
 // Espeja los enums de src/module/config-parametro/enums en optilacteo-backend.
+import type { TrazabilidadEntidad } from "./auditoria.types";
+
 export enum Parametro {
   PH = "ph",
   TEMPERATURA = "temperatura",
@@ -24,6 +26,11 @@ export interface ConfigParametro {
   umbralMax: number;
   createdAt: string;
   updatedAt: string;
+  // HU-63: quién creó esta configuración de umbral y, si aplica, quién la
+  // modificó por última vez. El backend lo manda para cualquier rol que
+  // pueda leer /config-parametros — la restricción a Gerente/Administrador
+  // se aplica en el frontend (ver puedeVerAuditoria).
+  auditoria?: TrazabilidadEntidad;
 }
 
 export interface CreateConfigParametroDto {

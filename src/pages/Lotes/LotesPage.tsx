@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FlaskConical, Pencil } from "lucide-react";
+import { CheckCircle2, FlaskConical, History, Pencil } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
 import { ClasificacionLoteBadge } from "../../components/ClasificacionLoteBadge";
+import { AuditoriaModal } from "../../components/AuditoriaModal";
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
 import { proveedoresService } from "../../services/proveedores.service";
+import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
 import { TIPO_MATERIA_PRIMA_TABS } from "../Configuracion/constants/parametrosCalidad";
 import { DestinoLote, EstadoLote, UnidadRendimiento, type Lote } from "../../types/lote.types";
 import type { Proveedor } from "../../types/proveedor.types";
@@ -78,11 +80,18 @@ export default function LotesPage() {
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
   const [loteMediciones, setLoteMediciones] = useState<Lote | null>(null);
   const [loteAFinalizar, setLoteAFinalizar] = useState<Lote | null>(null);
+  const [loteAuditoria, setLoteAuditoria] = useState<Lote | null>(null);
 
   // Solo Responsable de calidad puede registrar/editar lotes (POST y PATCH
   // /lotes en el backend); Gerente/Administrador acceden a esta pantalla en
   // modo lectura.
   const puedeCrearLote = user?.rolNombre === "Responsable de calidad";
+
+  // HU-63: quién creó el lote y, si aplica, quién lo modificó por última
+  // vez. El backend manda el bloque `auditoria` para cualquier rol que
+  // pueda leer /lotes (no lo gatea); la restricción a Gerente/Administrador
+  // se aplica acá (ver utils/auditoriaVisibility.ts).
+  const puedeVerAuditoriaLote = puedeVerAuditoria(user?.rolNombre);
 
   // HU-62: PATCH /lotes/:id/finalizar amplió el rol habilitado a
   // Responsable de calidad y Responsable de Producción (antes exclusivo de
@@ -362,6 +371,16 @@ export default function LotesPage() {
                               <CheckCircle2 className="h-4 w-4" />
                             </button>
                           )}
+                        {puedeVerAuditoriaLote && lote.auditoria && (
+                          <button
+                            type="button"
+                            onClick={() => setLoteAuditoria(lote)}
+                            className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                            title="Auditoría"
+                          >
+                            <History className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -424,6 +443,16 @@ export default function LotesPage() {
                           <CheckCircle2 className="h-4 w-4" />
                         </button>
                       )}
+                    {puedeVerAuditoriaLote && lote.auditoria && (
+                      <button
+                        type="button"
+                        onClick={() => setLoteAuditoria(lote)}
+                        className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                        title="Auditoría"
+                      >
+                        <History className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -499,6 +528,13 @@ export default function LotesPage() {
         isSubmitting={loteAFinalizar !== null && finalizandoId === loteAFinalizar.id}
         onClose={() => setLoteAFinalizar(null)}
         onConfirm={finalizarLote}
+      />
+
+      <AuditoriaModal
+        isOpen={loteAuditoria !== null}
+        titulo={`Auditoría — ${loteAuditoria?.codigo ?? ""}`}
+        auditoria={loteAuditoria?.auditoria}
+        onClose={() => setLoteAuditoria(null)}
       />
     </Layout>
   );

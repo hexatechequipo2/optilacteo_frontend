@@ -2,6 +2,7 @@
 // (src/module/sensor: entities, DTOs, enums), mergeado en develop
 // (HU-17 registro de sensores + HU-33 asociación sensor-lote).
 import type { Parametro } from "./configParametro.types";
+import type { TrazabilidadEntidad } from "./auditoria.types";
 
 export enum TipoSensor {
   DIGITAL = "digital",
@@ -44,6 +45,11 @@ export interface Sensor {
   empresaId: number;
   createdAt: string;
   updatedAt: string;
+  // HU-63: quién creó el sensor y, si aplica, quién lo modificó por última
+  // vez. El backend lo manda para cualquier rol que pueda leer /sensores —
+  // la restricción a Gerente/Administrador se aplica en el frontend (ver
+  // puedeVerAuditoria).
+  auditoria?: TrazabilidadEntidad;
 }
 
 // El backend no acepta "estado" ni "codigo" en el alta: el estado arranca

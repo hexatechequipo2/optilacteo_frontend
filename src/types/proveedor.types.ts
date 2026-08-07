@@ -1,3 +1,5 @@
+import type { TrazabilidadEntidad } from "./auditoria.types";
+
 export type TipoProveedor = "tambo" | "transporte" | "insumos" | "laboratorio";
 export type EstadoProveedor = "activa" | "trial" | "suspendida";
 
@@ -15,6 +17,11 @@ export interface Proveedor {
   estado: EstadoProveedor;
   createdAt: string;
   updatedAt: string;
+  // HU-63: quién creó el proveedor y, si aplica, quién lo modificó por
+  // última vez. El backend lo manda para cualquier rol que pueda leer
+  // /proveedores — la restricción a Gerente/Administrador se aplica en el
+  // frontend (ver puedeVerAuditoria).
+  auditoria?: TrazabilidadEntidad;
 }
 
 export interface CreateProveedorDto {
