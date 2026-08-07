@@ -1,10 +1,12 @@
-import { useState } from "react";
-import { Pencil, Link2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Pencil, Link2, Power, PowerOff } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Select } from "../../../components/ui/Select";
+import { Input } from "../../../components/ui/Input";
 import { SensorEstadoBadge } from "../../../components/SensorEstadoBadge";
 import {
   EstadoSensor,
+  TipoSensor,
   Ubicacion,
   type CreateSensorDto,
   type Sensor,
@@ -31,7 +33,16 @@ const UBICACION_FILTER_OPTIONS = [
   ...Object.values(Ubicacion).map((u) => ({ value: u, label: UBICACION_LABEL[u] })),
 ];
 
-const HEADERS = ["NOMBRE", "TIPO", "PARÁMETRO", "UBICACIÓN", "RANGO FAVORABLE", "ESTADO", ""];
+const TIPO_FILTER_OPTIONS = [
+  { value: "", label: "Todos los tipos" },
+  ...Object.values(TipoSensor).map((t) => ({ value: t, label: TIPO_SENSOR_LABEL[t] })),
+];
+
+const HEADERS = ["NOMBRE", "MARCA", "TIPO", "PARÁMETRO", "UBICACIÓN", "RANGO FAVORABLE", "ESTADO", ""];
+
+// Mismo criterio que ProveedoresPage: debounce para no mandar un request
+// al backend por cada letra tipeada en el filtro de texto.
+const MARCA_DEBOUNCE_MS = 400;
 
 interface RegistroSensoresTabProps {
   sensores: Sensor[];
@@ -42,6 +53,9 @@ interface RegistroSensoresTabProps {
   isCreating: boolean;
   updateSensor: (id: number, dto: UpdateSensorDto) => Promise<Sensor>;
   isUpdating: boolean;
+  desactivarSensor: (id: number) => Promise<Sensor>;
+  activarSensor: (id: number) => Promise<Sensor>;
+  isTogglingEstado: boolean;
   puedeGestionar: boolean;
   puedeAsociar: boolean;
   filtros: SensorFilterQuery;
@@ -57,6 +71,9 @@ export function RegistroSensoresTab({
   isCreating,
   updateSensor,
   isUpdating,
+  desactivarSensor,
+  activarSensor,
+  isTogglingEstado,
   puedeGestionar,
   puedeAsociar,
   filtros,
@@ -65,6 +82,19 @@ export function RegistroSensoresTab({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSensor, setEditingSensor] = useState<Sensor | null>(null);
   const [sensorHistorial, setSensorHistorial] = useState<Sensor | null>(null);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [marcaInput, setMarcaInput] = useState(filtros.marca ?? "");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onFiltrosChange({ ...filtros, marca: marcaInput || undefined });
+    }, MARCA_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // Solo re-dispara con marcaInput: si dependiera de filtros/onFiltrosChange
+    // (referencia nueva en cada render del padre) el debounce se reiniciaría
+    // en cada tecla y nunca llegaría a disparar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marcaInput]);
 
   const abrirAlta = () => {
     setEditingSensor(null);
@@ -89,10 +119,42 @@ export function RegistroSensoresTab({
     return createSensor(dto);
   };
 
+  const handleToggleEstado = async (sensor: Sensor) => {
+    setTogglingId(sensor.id);
+    try {
+      if (sensor.estado === EstadoSensor.ACTIVO) {
+        await desactivarSensor(sensor.id);
+      } else {
+        await activarSensor(sensor.id);
+      }
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   return (
     <>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap gap-3">
+          <Input
+            id="filtro-marca"
+            label="Marca"
+            placeholder="Buscar por marca..."
+            value={marcaInput}
+            onChange={(e) => setMarcaInput(e.target.value)}
+          />
+          <Select
+            id="filtro-tipo"
+            label="Tipo"
+            options={TIPO_FILTER_OPTIONS}
+            value={filtros.tipo ?? ""}
+            onChange={(e) =>
+              onFiltrosChange({
+                ...filtros,
+                tipo: (e.target.value || undefined) as TipoSensor | undefined,
+              })
+            }
+          />
           <Select
             id="filtro-ubicacion"
             label="Ubicación"
@@ -177,6 +239,9 @@ export function RegistroSensoresTab({
                       {sensor.nombre}
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {sensor.marca}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {TIPO_SENSOR_LABEL[sensor.tipo]}
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
@@ -209,6 +274,25 @@ export function RegistroSensoresTab({
                             title="Editar sensor"
                           >
                             <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
+                        {puedeGestionar && sensor.estado !== EstadoSensor.FALLA && (
+                          <button
+                            type="button"
+                            disabled={togglingId === sensor.id && isTogglingEstado}
+                            onClick={() => handleToggleEstado(sensor)}
+                            className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                            title={
+                              sensor.estado === EstadoSensor.ACTIVO
+                                ? "Dar de baja sensor"
+                                : "Reactivar sensor"
+                            }
+                          >
+                            {sensor.estado === EstadoSensor.ACTIVO ? (
+                              <PowerOff className="h-4 w-4" />
+                            ) : (
+                              <Power className="h-4 w-4" />
+                            )}
                           </button>
                         )}
                       </div>
@@ -254,6 +338,25 @@ export function RegistroSensoresTab({
                         <Pencil className="h-4 w-4" />
                       </button>
                     )}
+                    {puedeGestionar && sensor.estado !== EstadoSensor.FALLA && (
+                      <button
+                        type="button"
+                        disabled={togglingId === sensor.id && isTogglingEstado}
+                        onClick={() => handleToggleEstado(sensor)}
+                        className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                        title={
+                          sensor.estado === EstadoSensor.ACTIVO
+                            ? "Dar de baja sensor"
+                            : "Reactivar sensor"
+                        }
+                      >
+                        {sensor.estado === EstadoSensor.ACTIVO ? (
+                          <PowerOff className="h-4 w-4" />
+                        ) : (
+                          <Power className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -262,6 +365,10 @@ export function RegistroSensoresTab({
                 </div>
 
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                  <div>
+                    <dt className="text-slate-400 dark:text-slate-500">Marca</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">{sensor.marca}</dd>
+                  </div>
                   <div>
                     <dt className="text-slate-400 dark:text-slate-500">Parámetro</dt>
                     <dd className="text-slate-600 dark:text-slate-400">

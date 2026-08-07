@@ -14,6 +14,7 @@ import { PARAMETRO_LABEL, TIPO_SENSOR_LABEL, UBICACION_LABEL } from "./constants
 // backend no la acepta en el update, es fija una vez creado el sensor).
 export interface SensorFormValues {
   nombre: string;
+  marca: string;
   tipo: TipoSensor;
   parametro: Parametro;
   ubicacion: Ubicacion;
@@ -38,6 +39,7 @@ const UBICACION_OPTIONS = [
 
 interface FormValues {
   nombre: string;
+  marca: string;
   tipo: TipoSensor | "";
   parametro: Parametro | "";
   ubicacion: Ubicacion | "";
@@ -47,6 +49,7 @@ interface FormValues {
 
 interface FormErrors {
   nombre?: string;
+  marca?: string;
   tipo?: string;
   parametro?: string;
   ubicacion?: string;
@@ -56,10 +59,19 @@ interface FormErrors {
 
 function buildInitialValues(sensor?: Sensor): FormValues {
   if (!sensor) {
-    return { nombre: "", tipo: "", parametro: "", ubicacion: "", rangoMinFavor: "", rangoMaxFavor: "" };
+    return {
+      nombre: "",
+      marca: "",
+      tipo: "",
+      parametro: "",
+      ubicacion: "",
+      rangoMinFavor: "",
+      rangoMaxFavor: "",
+    };
   }
   return {
     nombre: sensor.nombre,
+    marca: sensor.marca,
     tipo: sensor.tipo,
     parametro: sensor.parametro,
     ubicacion: sensor.ubicacion,
@@ -71,6 +83,7 @@ function buildInitialValues(sensor?: Sensor): FormValues {
 function validate(values: FormValues, esEdicion: boolean): FormErrors {
   const errors: FormErrors = {};
   if (!values.nombre.trim()) errors.nombre = "El nombre es obligatorio";
+  if (!values.marca.trim()) errors.marca = "La marca es obligatoria";
   if (!values.tipo) errors.tipo = "El tipo es obligatorio";
   if (!values.parametro) errors.parametro = "El parámetro es obligatorio";
   if (!esEdicion && !values.ubicacion) errors.ubicacion = "La ubicación es obligatoria";
@@ -137,6 +150,7 @@ export function SensorFormModal({
     try {
       await onSubmit({
         nombre: values.nombre.trim(),
+        marca: values.marca.trim(),
         tipo: values.tipo as TipoSensor,
         parametro: values.parametro as Parametro,
         ubicacion: values.ubicacion as Ubicacion,
@@ -186,6 +200,13 @@ export function SensorFormModal({
             value={values.nombre}
             onChange={(e) => setValues((prev) => ({ ...prev, nombre: e.target.value }))}
             error={errors.nombre}
+          />
+          <Input
+            id="sensor-marca"
+            label="Marca *"
+            value={values.marca}
+            onChange={(e) => setValues((prev) => ({ ...prev, marca: e.target.value }))}
+            error={errors.marca}
           />
           <Select
             id="sensor-tipo"
