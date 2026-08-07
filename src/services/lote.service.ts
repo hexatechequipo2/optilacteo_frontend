@@ -2,6 +2,7 @@ import axios from "axios";
 import api from "./api";
 import type {
   CreateLoteDto,
+  FinalizarLoteDto,
   Lote,
   LoteCreateResponse,
   LoteFilterQuery,
@@ -47,11 +48,13 @@ export const loteService = {
     return data;
   },
 
-  // PATCH /lotes/:id/finalizar: exclusivo Responsable de calidad
-  // (lote.controller.ts). Cierra el ciclo de vida del lote (estado ->
-  // finalizado); no hay endpoint inverso.
-  finalizar: async (id: number): Promise<Lote> => {
-    const { data } = await api.patch<Lote>(`/lotes/${id}/finalizar`);
+  // PATCH /lotes/:id/finalizar (lote.controller.ts): HU-62 amplió el rol
+  // habilitado a Responsable de calidad y Responsable de Producción (antes
+  // exclusivo de calidad). Cierra el ciclo de vida del lote (estado ->
+  // finalizado); no hay endpoint inverso. El body es opcional: solo se
+  // envía `rendimiento` si el usuario lo cargó en el modal.
+  finalizar: async (id: number, dto?: FinalizarLoteDto): Promise<Lote> => {
+    const { data } = await api.patch<Lote>(`/lotes/${id}/finalizar`, dto);
     return data;
   },
 
