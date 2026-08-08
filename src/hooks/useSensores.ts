@@ -16,6 +16,14 @@ interface UseSensoresResult {
   isTogglingEstado: boolean;
 }
 
+// Guarda defensiva: si desactivar/activar devuelve algo sin forma de Sensor
+// (ej. body vacío, como pasaba en remove() antes del fix de HU-65), no lo
+// pisamos en el estado local — eso corrompía esa fila (nombre/marca/estado
+// en blanco hasta el próximo refetch, ver SensorEstadoBadge).
+function esSensorValido(value: unknown): value is Sensor {
+  return typeof value === "object" && value !== null && "id" in value && "estado" in value;
+}
+
 // La empresa se resuelve en el backend a partir del JWT (CurrentEmpresa),
 // no hace falta resolverla ni pasarla desde acá.
 export function useSensores(filters: SensorFilterQuery = {}): UseSensoresResult {
@@ -73,23 +81,31 @@ export function useSensores(filters: SensorFilterQuery = {}): UseSensoresResult 
     setIsTogglingEstado(true);
     try {
       const actualizado = await sensorService.desactivar(id);
-      setSensores((prev) => prev.map((s) => (s.id === id ? actualizado : s)));
+      if (esSensorValido(actualizado)) {
+        setSensores((prev) => prev.map((s) => (s.id === id ? actualizado : s)));
+      } else {
+        await fetchSensores();
+      }
       return actualizado;
     } finally {
       setIsTogglingEstado(false);
     }
-  }, []);
+  }, [fetchSensores]);
 
   const activarSensor = useCallback(async (id: number) => {
     setIsTogglingEstado(true);
     try {
       const actualizado = await sensorService.activar(id);
-      setSensores((prev) => prev.map((s) => (s.id === id ? actualizado : s)));
+      if (esSensorValido(actualizado)) {
+        setSensores((prev) => prev.map((s) => (s.id === id ? actualizado : s)));
+      } else {
+        await fetchSensores();
+      }
       return actualizado;
     } finally {
       setIsTogglingEstado(false);
     }
-  }, []);
+  }, [fetchSensores]);
 
   return {
     sensores,
