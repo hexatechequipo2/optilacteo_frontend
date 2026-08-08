@@ -9,9 +9,14 @@ import {
 // Datos de prueba
 // ---------------------------------------------------------------------------
 
+// 🔧 "marca" es obligatorio en SensorFormModal (HU-65) y en modo edición
+// buildInitialValues() lo lee sin fallback (`marca: sensor.marca`) — si
+// falta acá, values.marca queda undefined y validate() explota al hacer
+// values.marca.trim(), abortando el submit en silencio.
 const SENSOR_1 = {
   id: 1,
   nombre: "Sensor pH Laboratorio",
+  marca: "Hanna Instruments",
   tipo: "analogico",
   parametro: "ph",
   ubicacion: "laboratorio",
@@ -26,6 +31,7 @@ const SENSOR_1 = {
 const SENSOR_2 = {
   id: 2,
   nombre: "Sensor Temperatura Caldera",
+  marca: "Siemens",
   tipo: "digital",
   parametro: "temperatura",
   ubicacion: "caldera",
@@ -40,6 +46,8 @@ const SENSOR_2 = {
 const SENSORES_MOCK = [SENSOR_1, SENSOR_2];
 
 async function mockSensoresDeps(page: Page) {
+  // Catch-all de menor prioridad (registrado primero -> se prueba último).
+  // Cualquier fetch/xhr que ningún handler más específico resuelva cae acá.
   await page.route("**/*", async (route) => {
     const rt = route.request().resourceType();
     if (rt === "xhr" || rt === "fetch") {
@@ -54,8 +62,10 @@ async function mockSensoresDeps(page: Page) {
 
   await page.route("**/notificacion*", async (route) => {
     const rt = route.request().resourceType();
-    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
-      return route.continue();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    // 🔧 fallback (no continue): si algún día se testea un método
+    // distinto de GET acá, que caiga al catch-all en vez de ir a la red real.
+    if (route.request().method() !== "GET") return route.fallback();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -66,11 +76,14 @@ async function mockSensoresDeps(page: Page) {
     });
   });
 
-  // POST y PATCH los intercepta cada test inline (LIFO)
+  // POST y PATCH los intercepta cada test inline (LIFO). Este handler solo
+  // resuelve el GET; cualquier otro método usa fallback() para no escaparse
+  // a la red real y en cambio caer en la cadena de handlers anteriores
+  // (el override inline del test, o en última instancia el catch-all).
   await page.route("**/sensores*", async (route) => {
     const rt = route.request().resourceType();
     if (rt !== "fetch" && rt !== "xhr") return route.continue();
-    if (route.request().method() !== "GET") return route.continue();
+    if (route.request().method() !== "GET") return route.fallback(); // 🔧 antes: continue()
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -104,7 +117,7 @@ test.describe("SensoresPage", () => {
     await page.route("**/sensores*", async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
-      if (route.request().method() !== "GET") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback(); // 🔧
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -193,19 +206,25 @@ test.describe("SensoresPage › NuevoSensorModal", () => {
     ).not.toBeVisible();
   });
 
-    test("registra un sensor correctamente y cierra el modal", async ({ page }) => {
+  test("registra un sensor correctamente y cierra el modal", async ({ page }) => {
     await page.route("**/sensores*", async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
-      if (route.request().method() !== "POST") return route.continue();
+      if (route.request().method() !== "POST") return route.fallback();
+
       await route.fulfill({
         status: 201,
         contentType: "application/json",
-        body: JSON.stringify({ ...SENSOR_1, id: 99, nombre: "Sensor test" }),
+        body: JSON.stringify({
+          ...SENSOR_1,
+          id: 99,
+          nombre: "Sensor test",
+        }),
       });
     });
 
     await page.getByLabel("Nombre / identificador *").fill("Sensor test");
+    await page.getByLabel("Marca *").fill("Hanna Instruments");
     await page.getByLabel("Tipo de sensor *").selectOption({ value: "analogico" });
     await page.getByLabel("Parámetro que mide *").selectOption({ value: "ph" });
     await page.getByLabel("Ubicación *").selectOption({ value: "laboratorio" });
@@ -223,11 +242,16 @@ test.describe("SensoresPage › NuevoSensorModal", () => {
     await page.route("**/sensores*", async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
-      if (route.request().method() !== "POST") return route.continue();
-      await route.fulfill({ status: 500, body: "" });
+      if (route.request().method() !== "POST") return route.fallback();
+
+      await route.fulfill({
+        status: 500,
+        body: "",
+      });
     });
 
     await page.getByLabel("Nombre / identificador *").fill("Sensor test");
+    await page.getByLabel("Marca *").fill("Hanna Instruments");
     await page.getByLabel("Tipo de sensor *").selectOption({ value: "analogico" });
     await page.getByLabel("Parámetro que mide *").selectOption({ value: "ph" });
     await page.getByLabel("Ubicación *").selectOption({ value: "laboratorio" });
@@ -285,7 +309,7 @@ test.describe("SensoresPage › EditarSensorModal", () => {
     await page.route(/\/sensores\/\d+/, async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
-      if (route.request().method() !== "PATCH") return route.continue();
+      if (route.request().method() !== "PATCH") return route.fallback(); // 🔧 antes: continue()
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -305,7 +329,7 @@ test.describe("SensoresPage › EditarSensorModal", () => {
     await page.route(/\/sensores\/\d+/, async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
-      if (route.request().method() !== "PATCH") return route.continue();
+      if (route.request().method() !== "PATCH") return route.fallback(); // 🔧 antes: continue()
       await route.fulfill({ status: 500, body: "" });
     });
 
@@ -353,7 +377,7 @@ test.describe("SensoresPage › EstadoDiagnosticoTab", () => {
     await page.route("**/sensores*", async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
-      if (route.request().method() !== "GET") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback(); // 🔧
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -384,7 +408,7 @@ test.describe("SensoresPage › EstadoDiagnosticoTab", () => {
     await page.route("**/sensores*", async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
-      if (route.request().method() !== "GET") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback(); // 🔧
       await route.fulfill({
         status: 200, contentType: "application/json",
         body: JSON.stringify([{ ...SENSOR_1, loteActualId: 1 }]),
@@ -436,7 +460,7 @@ test.describe("SensoresPage › EstadoDiagnosticoTab", () => {
 
     test("muestra error del servidor al fallar el registro manual", async ({ page }) => {
       await page.route("**/sensores/lecturas/manual", async (route) => {
-        if (route.request().method() !== "POST") return route.continue();
+        if (route.request().method() !== "POST") return route.fallback(); // 🔧 antes: continue()
         await route.fulfill({ status: 500, body: "" });
       });
       await page.locator("#lectura-manual-2").fill("25");
@@ -445,11 +469,11 @@ test.describe("SensoresPage › EstadoDiagnosticoTab", () => {
     });
   });
 
-    test("un sensor en estado de falla muestra el badge 'Con falla'", async ({ page }) => {
+  test("un sensor en estado de falla muestra el badge 'Con falla'", async ({ page }) => {
     await page.route("**/sensores*", async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
-      if (route.request().method() !== "GET") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback(); // 🔧
       await route.fulfill({
         status: 200, contentType: "application/json",
         body: JSON.stringify([{ ...SENSOR_1, estado: "falla" }]),
@@ -487,8 +511,8 @@ test.describe("SensoresPage › SensorLoteHistorialModal", () => {
     // GET /sensores/:id/historial — vacío por defecto
     await page.route(/\/sensores\/\d+\/historial/, async (route) => {
       const rt = route.request().resourceType();
-      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
-        return route.continue();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback(); // 🔧
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -499,8 +523,8 @@ test.describe("SensoresPage › SensorLoteHistorialModal", () => {
     // GET /lotes — el modal llama a loteService.getAll() al abrirse
     await page.route("**/lotes*", async (route) => {
       const rt = route.request().resourceType();
-      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
-        return route.continue();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback(); // 🔧
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -537,7 +561,7 @@ test.describe("SensoresPage › SensorLoteHistorialModal", () => {
     await page.route(/\/sensores\/lote\/\d+\/asociar/, async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
-      if (route.request().method() !== "PATCH") return route.continue();
+      if (route.request().method() !== "PATCH") return route.fallback(); // 🔧 antes: continue()
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -555,7 +579,7 @@ test.describe("SensoresPage › SensorLoteHistorialModal", () => {
     await page.route(/\/sensores\/lote\/\d+\/asociar/, async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
-      if (route.request().method() !== "PATCH") return route.continue();
+      if (route.request().method() !== "PATCH") return route.fallback(); // 🔧 antes: continue()
       await route.fulfill({ status: 500, body: "" });
     });
 
@@ -573,8 +597,8 @@ test("SensoresPage - muestra el historial de asociaciones cuando hay registros",
 
   await page.route(/\/sensores\/\d+\/historial/, async (route) => {
     const rt = route.request().resourceType();
-    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
-      return route.continue();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.fallback(); // 🔧
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -593,8 +617,8 @@ test("SensoresPage - muestra el historial de asociaciones cuando hay registros",
 
   await page.route("**/lotes*", async (route) => {
     const rt = route.request().resourceType();
-    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
-      return route.continue();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.fallback(); // 🔧
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -636,8 +660,8 @@ test.describe("SensoresPage › HistorialMedicionesTab", () => {
     // LIFO: prioridad mayor que **/sensores* para el endpoint de historial
     await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
       const rt = route.request().resourceType();
-      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
-        return route.continue();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback(); // 🔧
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -659,8 +683,8 @@ test.describe("SensoresPage › HistorialMedicionesTab", () => {
     // LIFO: devuelve un item para este test
     await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
       const rt = route.request().resourceType();
-      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
-        return route.continue();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback(); // 🔧
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -696,8 +720,8 @@ test.describe("SensoresPage › HistorialMedicionesTab", () => {
   test("muestra error del servidor al cargar el historial", async ({ page }) => {
     await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
       const rt = route.request().resourceType();
-      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
-        return route.continue();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback(); // 🔧
       await route.fulfill({ status: 500, body: "" });
     });
     await page.locator("input[type='date']").nth(0).fill("2026-07-01");
@@ -709,55 +733,53 @@ test.describe("SensoresPage › HistorialMedicionesTab", () => {
   });
 
   test("filtrar por código de lote muestra las mediciones de ese lote", async ({ page }) => {
-  // LIFO: devuelve un item cuando se aplica el filtro
-  await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
-    const rt = route.request().resourceType();
-    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
-      return route.continue();
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        data: [HISTORIAL_MEDICION_ITEM],
-        total: 1,
-        page: 1,
-        limit: 20,
-        rangoAmplio: false,
-      }),
+    // LIFO: devuelve un item cuando se aplica el filtro
+    await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback(); // 🔧
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [HISTORIAL_MEDICION_ITEM],
+          total: 1,
+          page: 1,
+          limit: 20,
+          rangoAmplio: false,
+        }),
+      });
     });
+    await page.getByPlaceholder("LOTE-1-00001").fill("LOT-2026-001");
+    await page.getByRole("button", { name: "Buscar" }).click();
+
+    await expect(
+      page.getByRole("row").filter({ hasText: "LOT-2026-001" }),
+    ).toBeVisible();
   });
-  await page.getByPlaceholder("LOTE-1-00001").fill("LOT-2026-001");
-  await page.getByRole("button", { name: "Buscar" }).click();
 
-  await expect(
-    page.getByRole("row").filter({ hasText: "LOT-2026-001" }),
-  ).toBeVisible();
-});
+  test("el botón limpiar filtros aparece al aplicar un filtro y desaparece al limpiarlo", async ({ page }) => {
+    // Sin filtros aplicados el botón no existe
+    await expect(
+      page.getByRole("button", { name: "Limpiar filtros" }),
+    ).not.toBeVisible();
 
-test("el botón limpiar filtros aparece al aplicar un filtro y desaparece al limpiarlo", async ({ page }) => {
-  // Sin filtros aplicados el botón no existe
-  await expect(
-    page.getByRole("button", { name: "Limpiar filtros" }),
-  ).not.toBeVisible();
+    // Aplicar filtro de fecha
+    await page.locator("input[type='date']").nth(0).fill("2026-07-01");
+    await page.getByRole("button", { name: "Buscar" }).click();
 
-  // Aplicar filtro de fecha
-  await page.locator("input[type='date']").nth(0).fill("2026-07-01");
-  await page.getByRole("button", { name: "Buscar" }).click();
+    // Ahora sí aparece
+    await expect(
+      page.getByRole("button", { name: "Limpiar filtros" }),
+    ).toBeVisible();
 
-  // Ahora sí aparece
-  await expect(
-    page.getByRole("button", { name: "Limpiar filtros" }),
-  ).toBeVisible();
+    // Limpiar → desaparece
+    await page.getByRole("button", { name: "Limpiar filtros" }).click();
 
-  // Limpiar → desaparece
-  await page.getByRole("button", { name: "Limpiar filtros" }).click();
-
-  await expect(
-    page.getByRole("button", { name: "Limpiar filtros" }),
-  ).not.toBeVisible();
-});
-
-  
+    await expect(
+      page.getByRole("button", { name: "Limpiar filtros" }),
+    ).not.toBeVisible();
+  });
 });
 
 test(
@@ -778,8 +800,8 @@ test("SensoresPage - un usuario sin permiso de asociación no ve la sección de 
 
   await page.route(/\/sensores\/\d+\/historial/, async (route) => {
     const rt = route.request().resourceType();
-    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
-      return route.continue();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.fallback(); // 🔧
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -789,8 +811,8 @@ test("SensoresPage - un usuario sin permiso de asociación no ve la sección de 
 
   await page.route("**/lotes*", async (route) => {
     const rt = route.request().resourceType();
-    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
-      return route.continue();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.fallback(); // 🔧
     await route.fulfill({
       status: 200,
       contentType: "application/json",
