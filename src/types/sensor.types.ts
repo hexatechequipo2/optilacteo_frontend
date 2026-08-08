@@ -65,8 +65,9 @@ export interface CreateSensorDto {
 }
 
 // UpdateSensorDto real = PartialType(OmitType(CreateSensorDto, ['ubicacion'])):
-// la ubicación no se puede cambiar una vez creado el sensor, y tampoco existe
-// hoy un endpoint para cambiar el estado del sensor.
+// la ubicación no se puede cambiar una vez creado el sensor. El estado se
+// cambia por endpoints dedicados (DELETE para baja lógica, PATCH /activar
+// para reactivar, ver sensorService.desactivar/activar), no por este DTO.
 export type UpdateSensorDto = Partial<Omit<CreateSensorDto, "ubicacion">>;
 
 export interface SensorFilterQuery {

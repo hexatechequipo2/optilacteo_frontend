@@ -3,6 +3,7 @@ import { Pencil, History, Link2, Power, PowerOff } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Select } from "../../../components/ui/Select";
 import { Input } from "../../../components/ui/Input";
+import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { SensorEstadoBadge } from "../../../components/SensorEstadoBadge";
 import { AuditoriaModal } from "../../../components/AuditoriaModal";
 import { useAuth } from "../../../hooks/useAuth";
@@ -16,6 +17,7 @@ import {
   type SensorFilterQuery,
   type UpdateSensorDto,
 } from "../../../types/sensor.types";
+import { extraerMensajeError } from "../../../services/sensor.service";
 import { SensorFormModal, type SensorFormValues } from "../SensorFormModal";
 import { SensorLoteHistorialModal } from "./SensorLoteHistorialModal";
 import { PARAMETRO_LABEL, TIPO_SENSOR_LABEL, UBICACION_LABEL } from "../constants/parametroSensor";
@@ -88,7 +90,11 @@ export function RegistroSensoresTab({
   const [sensorHistorial, setSensorHistorial] = useState<Sensor | null>(null);
   const [sensorAuditoria, setSensorAuditoria] = useState<Sensor | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
   const [marcaInput, setMarcaInput] = useState(filtros.marca ?? "");
+  // Confirmación solo para dar de baja (destructivo, y bloqueado por el
+  // backend si el sensor está asociado a un lote); reactivar no la necesita.
+  const [sensorABajar, setSensorABajar] = useState<Sensor | null>(null);
 
   // HU-63: quién creó el sensor y, si aplica, quién lo modificó por última
   // vez. El backend manda el bloque `auditoria` para cualquier rol que
@@ -132,15 +138,40 @@ export function RegistroSensoresTab({
 
   const handleToggleEstado = async (sensor: Sensor) => {
     setTogglingId(sensor.id);
+    setToggleError(null);
     try {
       if (sensor.estado === EstadoSensor.ACTIVO) {
         await desactivarSensor(sensor.id);
       } else {
         await activarSensor(sensor.id);
       }
+    } catch (err) {
+      setToggleError(
+        extraerMensajeError(
+          err,
+          sensor.estado === EstadoSensor.ACTIVO
+            ? "No se pudo dar de baja el sensor."
+            : "No se pudo reactivar el sensor.",
+        ),
+      );
     } finally {
       setTogglingId(null);
     }
+  };
+
+  const solicitarToggleEstado = (sensor: Sensor) => {
+    if (sensor.estado === EstadoSensor.ACTIVO) {
+      setSensorABajar(sensor);
+    } else {
+      handleToggleEstado(sensor);
+    }
+  };
+
+  const confirmarBaja = async () => {
+    if (!sensorABajar) return;
+    const sensor = sensorABajar;
+    setSensorABajar(null);
+    await handleToggleEstado(sensor);
   };
 
   return (
@@ -207,6 +238,19 @@ export function RegistroSensoresTab({
             className="ml-4 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
           >
             Reintentar
+          </button>
+        </div>
+      )}
+
+      {toggleError && (
+        <div className="mb-4 flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
+          <span>{toggleError}</span>
+          <button
+            type="button"
+            onClick={() => setToggleError(null)}
+            className="ml-4 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
+          >
+            Cerrar
           </button>
         </div>
       )}
@@ -291,7 +335,7 @@ export function RegistroSensoresTab({
                           <button
                             type="button"
                             disabled={togglingId === sensor.id && isTogglingEstado}
-                            onClick={() => handleToggleEstado(sensor)}
+                            onClick={() => solicitarToggleEstado(sensor)}
                             className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
                             title={
                               sensor.estado === EstadoSensor.ACTIVO
@@ -363,7 +407,7 @@ export function RegistroSensoresTab({
                       <button
                         type="button"
                         disabled={togglingId === sensor.id && isTogglingEstado}
-                        onClick={() => handleToggleEstado(sensor)}
+                        onClick={() => solicitarToggleEstado(sensor)}
                         className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
                         title={
                           sensor.estado === EstadoSensor.ACTIVO
@@ -447,6 +491,21 @@ export function RegistroSensoresTab({
         titulo={`Auditoría — ${sensorAuditoria?.nombre ?? ""}`}
         auditoria={sensorAuditoria?.auditoria}
         onClose={() => setSensorAuditoria(null)}
+      />
+
+      <ConfirmModal
+        isOpen={sensorABajar !== null}
+        title="¿Dar de baja este sensor?"
+        description={
+          sensorABajar
+            ? `"${sensorABajar.nombre}" pasará a estado inactivo y dejará de estar disponible para asociar a nuevos lotes. Vas a poder reactivarlo más adelante.`
+            : undefined
+        }
+        confirmLabel="Dar de baja"
+        variant="danger"
+        isLoading={sensorABajar !== null && togglingId === sensorABajar.id && isTogglingEstado}
+        onConfirm={confirmarBaja}
+        onCancel={() => setSensorABajar(null)}
       />
     </>
   );
