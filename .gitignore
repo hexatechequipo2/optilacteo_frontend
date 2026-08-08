@@ -40,3 +40,5 @@ dist-ssr
 /coverage/*.code-workspace
 coverage/
 *.code-workspace
+
+CLAUDE.md 

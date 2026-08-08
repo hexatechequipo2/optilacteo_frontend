@@ -1,4 +1,5 @@
 import { forwardRef, type SelectHTMLAttributes } from "react";
+import { FieldError } from "./FieldError";
 
 interface SelectOption {
   value: string;
@@ -35,7 +36,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             </option>
           ))}
         </select>
-        {error && <span className="text-sm text-red-600">{error}</span>}
+        {error && <FieldError message={error} />}
       </div>
     );
   },

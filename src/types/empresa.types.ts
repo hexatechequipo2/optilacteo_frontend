@@ -29,6 +29,8 @@ export interface EmpresaType {
   plan: string;
   cantidadUsuarios?: number;
   modulos?: EmpresaModulo[];
+  /** HU-12: URL pública del logo (R2) o null si la empresa no tiene uno */
+  logoUrl?: string | null;
 }
 
 /** Todos los campos son opcionales — refleja UpdateEmpresaDto del backend (PartialType) */

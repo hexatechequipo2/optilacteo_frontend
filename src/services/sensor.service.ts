@@ -1,0 +1,74 @@
+import axios from "axios";
+import api from "./api";
+import type {
+  CreateSensorDto,
+  IngresarLecturaManualDto,
+  LecturaNuevaEvent,
+  Sensor,
+  SensorFilterQuery,
+  SensorLoteHistorial,
+  UpdateSensorDto,
+} from "../types/sensor.types";
+
+// El backend valida rango (min < max), unicidad de nombre por empresa y
+// existencia del sensor/lote directamente (400/404/409 con mensaje); no
+// hace falta duplicar esas validaciones acá. La empresa se resuelve del
+// JWT en el backend (CurrentEmpresa), no se manda desde el cliente.
+export const sensorService = {
+  getAll: async (filters: SensorFilterQuery = {}): Promise<Sensor[]> => {
+    const { data } = await api.get<Sensor[]>("/sensores", { params: filters });
+    return data;
+  },
+
+  create: async (dto: CreateSensorDto): Promise<Sensor> => {
+    const { data } = await api.post<Sensor>("/sensores", dto);
+    return data;
+  },
+
+  update: async (id: number, dto: UpdateSensorDto): Promise<Sensor> => {
+    const { data } = await api.patch<Sensor>(`/sensores/${id}`, dto);
+    return data;
+  },
+
+  // HU-65: baja lógica — el backend pone el sensor en estado INACTIVO en vez
+  // de borrarlo, así queda excluido de nuevas asociaciones a lote pero
+  // conserva su historial.
+  desactivar: async (id: number): Promise<Sensor> => {
+    const { data } = await api.delete<Sensor>(`/sensores/${id}`);
+    return data;
+  },
+
+  activar: async (id: number): Promise<Sensor> => {
+    const { data } = await api.patch<Sensor>(`/sensores/${id}/activar`);
+    return data;
+  },
+
+  // HU-33: historial de asociaciones a lote de un sensor (append-only).
+  getHistorial: async (sensorId: number): Promise<SensorLoteHistorial[]> => {
+    const { data } = await api.get<SensorLoteHistorial[]>(`/sensores/${sensorId}/historial`);
+    return data;
+  },
+
+  // Asocia uno o más sensores a un lote. Dispara automáticamente en el
+  // backend el registro de cambio de ubicación del lote si corresponde.
+  asociarALote: async (loteId: number, sensorIds: number[]): Promise<Sensor[]> => {
+    const { data } = await api.patch<Sensor[]>(`/sensores/lote/${loteId}/asociar`, { sensorIds });
+    return data;
+  },
+
+  // HU-15: fallback manual cuando el sensor no está ACTIVO. El backend
+  // rechaza con 400 si el sensor está activo, y con 403 si el usuario no
+  // tiene permiso de escritura en Recepción/Monitoreo y alertas.
+  ingresarLecturaManual: async (dto: IngresarLecturaManualDto): Promise<LecturaNuevaEvent> => {
+    const { data } = await api.post<LecturaNuevaEvent>("/sensores/lecturas/manual", dto);
+    return data;
+  },
+};
+
+export function extraerMensajeError(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err) && err.response?.data?.message) {
+    const { message } = err.response.data;
+    return Array.isArray(message) ? message.join(" ") : message;
+  }
+  return fallback;
+}

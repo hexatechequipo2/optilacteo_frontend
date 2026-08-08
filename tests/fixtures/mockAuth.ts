@@ -10,7 +10,7 @@ import type { Page } from "@playwright/test";
 export interface MockUser {
   id: number;
   email: string;
-  rolNombre: "Administrador" | "Gerente";
+  rolNombre: "Administrador" | "Gerente" | "Responsable de calidad" | "Responsable de producción" | "Operario de línea";
   empresaId?: number;
 }
 
@@ -25,6 +25,35 @@ const GERENTE_USER: MockUser = {
   email: "gerente@optilacteo.com",
   rolNombre: "Gerente",
   empresaId: 10,
+};
+
+const RESPONSABLE_CALIDAD_USER: MockUser = {
+  id: 3,
+  email: "calidad@optilacteo.com",
+  rolNombre: "Responsable de calidad",
+  empresaId: 10,
+};
+
+const RESPONSABLE_PRODUCCION_USER: MockUser = {
+  id: 4,
+  email: "produccion@optilacteo.com",
+  rolNombre: "Responsable de producción",
+  empresaId: 10,
+};
+
+const OPERARIO_USER: MockUser = {
+  id: 5,
+  email: "operario@optilacteo.com",
+  rolNombre: "Operario de línea",
+  empresaId: 10,
+};
+
+const LOGIN_DESTINATIONS: Record<MockUser["rolNombre"], string> = {
+  Administrador: "/dashboard",
+  Gerente: "/dashboard-produccion",
+  "Responsable de calidad": "/lotes",
+  "Responsable de producción": "/dashboard-produccion",
+  "Operario de línea": "/sensores",
 };
 
 /**
@@ -62,10 +91,7 @@ export async function loginAs(page: Page, user: MockUser) {
   await page.locator("#password").fill("password123");
   await page.getByRole("button", { name: "Ingresar a la consola" }).click();
 
-  // LoginPage navega a /usuarios con replace si el rol es Gerente,
-  // y a /dashboard para el resto de los roles.
-  const destination = user.rolNombre === "Gerente" ? "/usuarios" : "/dashboard";
-  await page.waitForURL(destination);
+  await page.waitForURL(LOGIN_DESTINATIONS[user.rolNombre]);
 }
 
 export async function loginAsAdministrador(page: Page) {
@@ -74,4 +100,16 @@ export async function loginAsAdministrador(page: Page) {
 
 export async function loginAsGerente(page: Page) {
   await loginAs(page, GERENTE_USER);
+}
+
+export async function loginAsResponsableCalidad(page: Page) {
+  await loginAs(page, RESPONSABLE_CALIDAD_USER);
+}
+
+export async function loginAsResponsableProduccion(page: Page) {
+  await loginAs(page, RESPONSABLE_PRODUCCION_USER);
+}
+
+export async function loginAsOperario(page: Page) {
+  await loginAs(page, OPERARIO_USER);
 }

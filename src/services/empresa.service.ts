@@ -59,6 +59,32 @@ export const empresasService = {
     return data;
   },
 
+  /** HU-12: el Gerente edita el nombre de su propia empresa */
+  updateIdentidad: async (name: string): Promise<EmpresaType> => {
+    const { data } = await api.patch<EmpresaType>("/empresa/me/identidad", { name });
+    return data;
+  },
+
+  /**
+   * HU-12: sube (o reemplaza) el logo de la propia empresa. PNG/JPG, máx. 2MB.
+   * No fijar el header Content-Type a mano: con FormData, el navegador tiene
+   * que agregarle el boundary automáticamente. Si lo seteamos nosotros a
+   * "multipart/form-data" sin boundary, axios lo respeta tal cual y el
+   * backend no puede parsear el body (busboy/multer necesitan el boundary).
+   */
+  uploadLogo: async (file: File): Promise<EmpresaType> => {
+    const formData = new FormData();
+    formData.append("logo", file);
+    const { data } = await api.post<EmpresaType>("/empresa/me/logo", formData);
+    return data;
+  },
+
+  /** HU-12: elimina el logo de la propia empresa */
+  deleteLogo: async (): Promise<EmpresaType> => {
+    const { data } = await api.delete<EmpresaType>("/empresa/me/logo");
+    return data;
+  },
+
   /** Activa una empresa suspendida */
   activate: async (id: number): Promise<EmpresaType> => {
     const { data } = await api.patch<EmpresaType>(`/empresa/${id}/activar`);

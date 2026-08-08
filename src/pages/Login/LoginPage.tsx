@@ -6,6 +6,7 @@ import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { QLLogo } from "../../components/ui/QLLogo";
 import { useAuth } from "../../hooks/useAuth";
+import { getRoleLanding } from "../../utils/roleLanding";
 
 interface FormErrors {
   email?: string;
@@ -55,13 +56,15 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       const user = await login(email, password, rememberMe);
-      const destination =
-        user.rolNombre === "Administrador"
-          ? "/dashboard"
-          : user.rolNombre === "Gerente"
-            ? "/usuarios"
-            : "/sin-funcionalidades";
-      navigate(destination, { replace: true });
+      // Operario de línea ya tenía Sensores habilitado (HU-17/33/19) pero
+      // caía igual acá por no estar en este mapa: quedaba en un callejón sin
+      // salida (SinFuncionalidadesPage no tiene Layout/Sidebar). HU-20 le
+      // suma además /lotes (carga manual e historial), accesible por Sidebar
+      // una vez adentro.
+      // HU-38 (AC4): el dashboard operativo es la pantalla de inicio del
+      // Responsable de producción — antes caía en /sensores como Operario de
+      // línea, ahora tiene su propia landing.
+      navigate(getRoleLanding(user.rolNombre), { replace: true });
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (!error.response) {

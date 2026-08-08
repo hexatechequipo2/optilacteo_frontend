@@ -64,18 +64,36 @@ async function mockDashboardDeps(page: Page) {
     return route.continue();
   });
 
-  await page.route("**/empresa*", async (route) => {
-    if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+ await page.route("**/empresa*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.continue();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(EMPRESAS_MOCK) });
   });
   await page.route("**/user*", async (route) => {
-    if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.continue();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(USUARIOS_MOCK) });
   });
   await page.route("**/planes*", async (route) => {
-    if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.continue();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(PLANES_MOCK) });
   });
+
+  await page.route("**/notificacion*", async (route) => {
+  const rt = route.request().resourceType();
+  if (rt !== "fetch" && rt !== "xhr") return route.continue();
+  if (route.request().method() !== "GET") return route.continue();
+  await route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } }),
+  });
+});
+
 }
 
 test.describe("DashboardPage", () => {
@@ -121,8 +139,10 @@ test.describe("DashboardPage", () => {
     await loginAsAdministrador(page);
 
     // Retrasamos la respuesta de empresas para poder observar el loading.
-    await page.route("**/empresa*", async (route) => {
-      if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+     await page.route("**/empresa*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.continue();
       await new Promise((resolve) => setTimeout(resolve, 500));
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(EMPRESAS_MOCK) });
     });
@@ -142,7 +162,9 @@ test.describe("DashboardPage", () => {
     // como el de los contadores del Sidebar, que pegan al mismo endpoint).
     let shouldFail = true;
     await page.route("**/empresa*", async (route) => {
-      if (route.request().method() !== "GET" || route.request().resourceType() === "document") return route.continue();
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.continue();
       if (shouldFail) {
         return route.fulfill({
           status: 500,
