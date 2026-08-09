@@ -85,6 +85,7 @@ export interface SensorLoteHistorial {
   loteIdAnterior: number | null; // null si es la primera asociación del sensor
   loteIdNuevo: number;
   userId: number;
+  userEmail?: string; // puede faltar en historial viejo o si el usuario fue borrado
   fecha: string; // ISO datetime
 }
 

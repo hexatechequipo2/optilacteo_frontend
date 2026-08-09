@@ -7,7 +7,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import { useSensorLoteHistorial } from "../../../hooks/useSensorLoteHistorial";
 import { extraerMensajeError } from "../../../services/sensor.service";
 import { loteService } from "../../../services/lote.service";
-import type { Sensor } from "../../../types/sensor.types";
+import type { Sensor, SensorLoteHistorial } from "../../../types/sensor.types";
 import type { Lote } from "../../../types/lote.types";
 
 interface SensorLoteHistorialModalProps {
@@ -25,6 +25,13 @@ function formatFecha(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+// El backend manda userEmail desde HU-33 en adelante; para historial viejo o
+// usuarios borrados puede venir undefined, así que caemos a "Usuario #<id>".
+function formatUsuario(fila: SensorLoteHistorial, currentUserId?: number): string {
+  if (fila.userId === currentUserId) return "Vos";
+  return fila.userEmail ?? `Usuario #${fila.userId}`;
 }
 
 export function SensorLoteHistorialModal({
@@ -144,7 +151,7 @@ export function SensorLoteHistorialModal({
                     <strong>{loteMap.get(fila.loteIdNuevo) ?? `Lote #${fila.loteIdNuevo}`}</strong>
                   </span>
                   <span className="text-xs text-slate-400 dark:text-slate-500">
-                    {fila.userId === user?.id ? "Vos" : `Usuario #${fila.userId}`} · {formatFecha(fila.fecha)}
+                    {formatUsuario(fila, user?.id)} · {formatFecha(fila.fecha)}
                   </span>
                 </li>
               ))}
