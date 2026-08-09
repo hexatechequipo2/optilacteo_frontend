@@ -27,7 +27,7 @@ function esSensorValido(value: unknown): value is Sensor {
 // La empresa se resuelve en el backend a partir del JWT (CurrentEmpresa),
 // no hace falta resolverla ni pasarla desde acá.
 export function useSensores(filters: SensorFilterQuery = {}): UseSensoresResult {
-  const { nombre, tipo, parametro, estado, ubicacion } = filters;
+  const { nombre, marca, tipo, parametro, estado, ubicacion } = filters;
 
   const [sensores, setSensores] = useState<Sensor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,14 +40,14 @@ export function useSensores(filters: SensorFilterQuery = {}): UseSensoresResult 
     setIsLoading(true);
     setError(null);
     try {
-      const result = await sensorService.getAll({ nombre, tipo, parametro, estado, ubicacion });
+      const result = await sensorService.getAll({ nombre, marca, tipo, parametro, estado, ubicacion });
       setSensores(result);
     } catch {
       setError("No se pudieron cargar los sensores.");
     } finally {
       setIsLoading(false);
     }
-  }, [nombre, tipo, parametro, estado, ubicacion]);
+  }, [nombre, marca, tipo, parametro, estado, ubicacion]);
 
   useEffect(() => {
     fetchSensores();
