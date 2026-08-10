@@ -1,9 +1,21 @@
 import { CheckCircle2, Home, Target, XCircle } from "lucide-react";
-import type { LineaCalidadResumen } from "../../../types/dashboardProduccion.types";
+import type {
+  FiltroPeriodoDashboard,
+  LineaCalidadResumen,
+} from "../../../types/dashboardProduccion.types";
 
 interface LineaCalidadPanelProps {
   resumen: LineaCalidadResumen;
+  filtro: FiltroPeriodoDashboard;
 }
+
+// Texto de "recibidos" de la card de Recepción, según el filtro de período
+// activo en el dashboard (mismo filtro que controla el fetch de datos).
+const DETALLE_RECIBIDOS: Record<FiltroPeriodoDashboard, string> = {
+  hoy: "recibidos hoy",
+  semana: "recibidos esta semana",
+  mes: "recibidos este mes",
+};
 
 interface EtapaCardProps {
   icono: typeof Home;
@@ -55,8 +67,9 @@ function EtapaCard({ icono: Icono, label, lotes, detalle, variante = "normal" }:
 // etapa (Recepción -> Clasificación -> No aptos / Aptos). No forma parte de
 // los AC de HU-38, pero Jime lo pidió replicar del proto. El backend
 // (dashboard.service.ts) solo manda los números planos por etapa — el texto
-// descriptivo de cada tarjeta es copy fijo del front, no dato del servidor.
-export function LineaCalidadPanel({ resumen }: LineaCalidadPanelProps) {
+// descriptivo de cada tarjeta es copy del front (la de "Recepción" varía
+// según el filtro de período activo, ver DETALLE_RECIBIDOS).
+export function LineaCalidadPanel({ resumen, filtro }: LineaCalidadPanelProps) {
   return (
     <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -79,7 +92,7 @@ export function LineaCalidadPanel({ resumen }: LineaCalidadPanelProps) {
           icono={Home}
           label="Recepción"
           lotes={resumen.recepcion}
-          detalle={`${resumen.recepcion} recibidos hoy`}
+          detalle={`${resumen.recepcion} ${DETALLE_RECIBIDOS[filtro]}`}
         />
         <EtapaCard
           icono={Target}

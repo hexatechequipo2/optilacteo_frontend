@@ -38,6 +38,13 @@ const TITULO_LABEL: Record<FiltroPeriodoDashboard, string> = {
   mes: "Mes",
 };
 
+// Label de la card "Lotes procesados", según el filtro de período activo.
+const LOTES_PROCESADOS_LABEL: Record<FiltroPeriodoDashboard, string> = {
+  hoy: "Lotes procesados hoy",
+  semana: "Lotes procesados esta semana",
+  mes: "Lotes procesados este mes",
+};
+
 function segundosDesde(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
 }
@@ -115,12 +122,20 @@ export default function DashboardProduccionPage() {
       ) : resumen ? (
         <>
           <div className="print:hidden">
-            <LineaCalidadPanel resumen={resumen.lineaCalidad} />
+            <LineaCalidadPanel resumen={resumen.lineaCalidad} filtro={filtro} />
 
             <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <MetricaCard label="Lotes procesados hoy" metrica={resumen.lotesProcesados} />
-              <MetricaCard label="Alertas activas" metrica={resumen.alertasActivas} />
-              <MetricaCard label="Parámetros críticos" metrica={resumen.parametrosCriticos} />
+              <MetricaCard
+                label={LOTES_PROCESADOS_LABEL[filtro]}
+                metrica={resumen.lotesProcesados}
+                filtro={filtro}
+              />
+              <MetricaCard label="Alertas activas" metrica={resumen.alertasActivas} filtro={filtro} />
+              <MetricaCard
+                label="Parámetros críticos"
+                metrica={resumen.parametrosCriticos}
+                filtro={filtro}
+              />
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900">
