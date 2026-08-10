@@ -1,16 +1,29 @@
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
-import type { MetricaTendencia } from "../../../types/dashboardProduccion.types";
+import type {
+  FiltroPeriodoDashboard,
+  MetricaTendencia,
+} from "../../../types/dashboardProduccion.types";
 
 interface MetricaCardProps {
   label: string;
   metrica: MetricaTendencia;
+  filtro: FiltroPeriodoDashboard;
 }
 
+// Texto de comparación de la tendencia, según el filtro de período activo
+// (el número de variación ya viene calculado contra el período anterior
+// correspondiente, esto solo ajusta el copy).
+const DETALLE_COMPARACION: Record<FiltroPeriodoDashboard, string> = {
+  hoy: "vs. ayer",
+  semana: "vs. semana anterior",
+  mes: "vs. mes anterior",
+};
+
 // AC3 (HU-38): cada métrica muestra una indicación visual de tendencia
-// (sube/baja/igual) respecto al día anterior. Mismo estilo de tarjeta que
+// (sube/baja/igual) respecto al período anterior. Mismo estilo de tarjeta que
 // StatCard (Dashboard admin) para mantener consistencia visual entre los
 // dos dashboards del sistema.
-export function MetricaCard({ label, metrica }: MetricaCardProps) {
+export function MetricaCard({ label, metrica, filtro }: MetricaCardProps) {
   const { valor, variacion, tendencia } = metrica;
 
   const colorTendencia =
@@ -35,7 +48,7 @@ export function MetricaCard({ label, metrica }: MetricaCardProps) {
       <p className={`mt-1 flex items-center gap-1 text-xs font-medium ${colorTendencia}`}>
         <Icono className="h-3.5 w-3.5 shrink-0" />
         {signo}
-        {variacion} vs. ayer
+        {variacion} {DETALLE_COMPARACION[filtro]}
       </p>
     </div>
   );
