@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
   Cpu,
   FlaskConical,
+  Bell,
   X,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
@@ -77,6 +78,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     user?.rolNombre === "Responsable de calidad" ||
     user?.rolNombre === "Responsable de producción" ||
     user?.rolNombre === "Operario de línea";
+  // HU-29: solo Gerente configura destinatarios de alertas (AC4 del
+  // backlog — ver allowedRoles en App.tsx para la ruta protegida).
+  const puedeVerAlertas = esGerente;
 
   const [counts, setCounts] = useState({
     empresas: 0,
@@ -191,6 +195,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       : []),
     ...(puedeVerSensores
       ? [{ label: "Sensores", icon: Cpu, count: counts.sensores, path: "/sensores" }]
+      : []),
+    ...(puedeVerAlertas
+      ? [{ label: "Alertas", icon: Bell, path: "/alertas/destinatarios" }]
       : []),
   ];
 

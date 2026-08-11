@@ -19,6 +19,7 @@ import LotesPage from "./pages/Lotes/LotesPage";
 import RevisionLotesPage from "./pages/Lotes/RevisionLotesPage";
 import MedicionManualPage from "./pages/MedicionManual/MedicionManualPage";
 import SensoresPage from "./pages/Sensores/SensoresPage";
+import DestinatariosAlertasPage from "./pages/Alertas/DestinatariosAlertasPage";
 import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
 import { InactivityMonitor } from "./components/layout/InactivityMonitor";
@@ -208,6 +209,18 @@ function App() {
                   ]}
                 >
                   <SensoresPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ALERTAS — Destinatarios (HU-29): mock data, solo GERENTE
+                configura quién recibe cada nivel de alerta (AC1/AC4 del
+                backlog). Todavía sin conexión al back. */}
+            <Route
+              path="/alertas/destinatarios"
+              element={
+                <ProtectedRoute allowedRoles={["Gerente"]}>
+                  <DestinatariosAlertasPage />
                 </ProtectedRoute>
               }
             />
