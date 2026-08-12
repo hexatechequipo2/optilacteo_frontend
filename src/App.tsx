@@ -20,6 +20,7 @@ import RevisionLotesPage from "./pages/Lotes/RevisionLotesPage";
 import MedicionManualPage from "./pages/MedicionManual/MedicionManualPage";
 import SensoresPage from "./pages/Sensores/SensoresPage";
 import DestinatariosAlertasPage from "./pages/Alertas/DestinatariosAlertasPage";
+import AlertasPage from "./pages/Alertas/AlertasPage";
 import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
 import { InactivityMonitor } from "./components/layout/InactivityMonitor";
@@ -221,6 +222,22 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={["Gerente"]}>
                   <DestinatariosAlertasPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ALERTAS (HU-25): pantalla "Monitoreo y Alertas", exclusiva de
+                Responsable de producción — es quien reacciona a los desvíos
+                de calidad detectados sobre los parámetros de los lotes.
+                Backend real: extiende el módulo de notificaciones (HU-21)
+                con tipo "alerta_umbral" — GET/PATCH /notificaciones + WS
+                /notificaciones, evento "notificacion:nueva" (ver
+                hooks/useAlertas.ts). */}
+            <Route
+              path="/alertas"
+              element={
+                <ProtectedRoute allowedRoles={["Responsable de producción"]}>
+                  <AlertasPage />
                 </ProtectedRoute>
               }
             />
