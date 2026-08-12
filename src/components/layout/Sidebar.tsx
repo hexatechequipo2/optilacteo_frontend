@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
   Cpu,
   FlaskConical,
+  Siren,
   X,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
@@ -77,6 +78,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     user?.rolNombre === "Responsable de calidad" ||
     user?.rolNombre === "Responsable de producción" ||
     user?.rolNombre === "Operario de línea";
+  // HU-25: pantalla "Monitoreo y Alertas", exclusiva de Responsable de
+  // producción (ver allowedRoles en App.tsx).
+  const puedeVerAlertas = esResponsableProduccion;
 
   const [counts, setCounts] = useState({
     empresas: 0,
@@ -192,6 +196,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(puedeVerSensores
       ? [{ label: "Sensores", icon: Cpu, count: counts.sensores, path: "/sensores" }]
       : []),
+    ...(puedeVerAlertas ? [{ label: "Alertas", icon: Siren, path: "/alertas" }] : []),
   ];
 
   return (
