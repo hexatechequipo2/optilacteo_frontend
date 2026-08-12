@@ -15,6 +15,7 @@ import {
   FlaskConical,
   Bell,
   Siren,
+  Snowflake,
   X,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
@@ -71,6 +72,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   // HU-20: vista standalone de medición manual, exclusiva de Operario de
   // línea (ver comentario en App.tsx sobre por qué no reusa /lotes).
   const puedeVerMedicionManual = user?.rolNombre === "Operario de línea";
+  // HU-67 Parte 1/2: mock data, exclusiva de Responsable de producción (ver
+  // allowedRoles en App.tsx).
+  const puedeVerIngresoCamara = esResponsableProduccion;
   // GET /sensores (backend) habilita también a Responsable de producción y
   // Operario de línea, ver sensor.controller.ts.
   const puedeVerSensores =
@@ -186,6 +190,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       : []),
     ...(puedeVerMedicionManual
       ? [{ label: "Medición manual", icon: FlaskConical, path: "/mediciones-manuales" }]
+      : []),
+    ...(puedeVerIngresoCamara
+      ? [{ label: "Ingreso a cámara", icon: Snowflake, path: "/ingreso-camara" }]
       : []),
     ...(puedeVerRevisionCalidad
       ? [
