@@ -1,6 +1,10 @@
 import axios from "axios";
 import api from "./api";
 import type { Notificacion, NotificacionPaginada } from "../types/notificacion.types";
+import type {
+  ConfiguracionNotificacionNivel,
+  CrearConfiguracionNotificacionDto,
+} from "../types/configuracionNotificacion.types";
 
 export interface NotificacionFilterQuery {
   page?: number;
@@ -18,6 +22,33 @@ export const notificacionService = {
 
   marcarLeida: async (id: number): Promise<void> => {
     await api.patch(`/notificaciones/${id}/leida`);
+  },
+};
+
+// HU-26: configuración de destinatarios por nivel de alerta (nivel -> rol).
+// Mismo controller que notificacionService (NotificacionesController), sub-
+// recurso /notificaciones/configuracion — restringido a Gerente/Administrador
+// en el backend (ver NotificacionesController.listarConfiguracion et al.).
+export const configuracionNotificacionService = {
+  getAll: async (): Promise<ConfiguracionNotificacionNivel[]> => {
+    const { data } = await api.get<ConfiguracionNotificacionNivel[]>(
+      "/notificaciones/configuracion",
+    );
+    return data;
+  },
+
+  create: async (
+    dto: CrearConfiguracionNotificacionDto,
+  ): Promise<ConfiguracionNotificacionNivel> => {
+    const { data } = await api.post<ConfiguracionNotificacionNivel>(
+      "/notificaciones/configuracion",
+      dto,
+    );
+    return data;
+  },
+
+  remove: async (id: number): Promise<void> => {
+    await api.delete(`/notificaciones/configuracion/${id}`);
   },
 };
 
