@@ -21,6 +21,7 @@ import MedicionManualPage from "./pages/MedicionManual/MedicionManualPage";
 import SensoresPage from "./pages/Sensores/SensoresPage";
 import DestinatariosAlertasPage from "./pages/Alertas/DestinatariosAlertasPage";
 import AlertasPage from "./pages/Alertas/AlertasPage";
+import IngresoCamaraPage from "./pages/IngresoCamara/IngresoCamaraPage";
 import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
 import { InactivityMonitor } from "./components/layout/InactivityMonitor";
@@ -210,6 +211,18 @@ function App() {
                   ]}
                 >
                   <SensoresPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* INGRESO A CÁMARA (HU-67 Parte 1/2: solo maquetado, mock data,
+                sin conexión al back todavía) — Responsable de producción es
+                quien registra el ingreso de producto terminado a cámara. */}
+            <Route
+              path="/ingreso-camara"
+              element={
+                <ProtectedRoute allowedRoles={["Responsable de producción"]}>
+                  <IngresoCamaraPage />
                 </ProtectedRoute>
               }
             />
