@@ -1,11 +1,17 @@
 import { Select } from "../../../components/ui/Select";
 import { Input } from "../../../components/ui/Input";
 import { Toggle } from "../../../components/ui/Toggle";
+import { ESTADO_ALERTA_META } from "../constants/alertas.constants";
+import { EstadoAlerta } from "../../../types/alertaCierre.types";
 
 interface LoteOption {
   value: string;
   label: string;
 }
+
+// HU-27: "todas" | EstadoAlerta, mismo criterio que el filtro de lote
+// ("todos" + opciones reales).
+export type EstadoAlertaFiltro = "todas" | EstadoAlerta;
 
 interface AlertasFiltrosProps {
   loteId: string;
@@ -17,7 +23,15 @@ interface AlertasFiltrosProps {
   onFechaHastaChange: (value: string) => void;
   soloNoLeidas: boolean;
   onSoloNoLeidasChange: (value: boolean) => void;
+  estado: EstadoAlertaFiltro;
+  onEstadoChange: (value: EstadoAlertaFiltro) => void;
 }
+
+const ESTADO_OPTIONS: { value: EstadoAlertaFiltro; label: string }[] = [
+  { value: "todas", label: "Todos los estados" },
+  { value: EstadoAlerta.ABIERTA, label: ESTADO_ALERTA_META[EstadoAlerta.ABIERTA].label },
+  { value: EstadoAlerta.CERRADA, label: ESTADO_ALERTA_META[EstadoAlerta.CERRADA].label },
+];
 
 // AC de filtros del prototipo: por lote, por rango de fechas, y un toggle
 // para alternar entre alertas leídas/no leídas.
@@ -35,6 +49,8 @@ export function AlertasFiltros({
   onFechaHastaChange,
   soloNoLeidas,
   onSoloNoLeidasChange,
+  estado,
+  onEstadoChange,
 }: AlertasFiltrosProps) {
   return (
     <div className="mb-6 flex flex-wrap items-end gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -65,6 +81,16 @@ export function AlertasFiltros({
           id="alertas-filtro-hasta"
           value={fechaHasta}
           onChange={(e) => onFechaHastaChange(e.target.value)}
+        />
+      </div>
+
+      <div className="w-full sm:w-44">
+        <Select
+          label="Estado"
+          id="alertas-filtro-estado"
+          value={estado}
+          onChange={(e) => onEstadoChange(e.target.value as EstadoAlertaFiltro)}
+          options={ESTADO_OPTIONS}
         />
       </div>
 

@@ -5,12 +5,21 @@ import { Tabs } from "../../components/ui/Tabs";
 import { useAlertas } from "../../hooks/useAlertas";
 import { useLotes } from "../../hooks/useLotes";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
+import { useAuth } from "../../hooks/useAuth";
 import { NivelAlerta } from "../../types/notificacion.types";
+import { EstadoAlerta } from "../../types/alertaCierre.types";
 import { TABS_ALERTAS, TAB_A_NIVEL, type TabAlertas } from "./constants/alertas.constants";
 import { ContadoresAlertas } from "./components/ContadoresAlertas";
-import { AlertasFiltros } from "./components/AlertasFiltros";
+import { AlertasFiltros, type EstadoAlertaFiltro } from "./components/AlertasFiltros";
 import { AlertaCard } from "./components/AlertaCard";
+import { AlertaDetallePanel } from "./components/AlertaDetallePanel";
 import { ReglasActivasPanel } from "./components/ReglasActivasPanel";
+
+// HU-27: mismo rol que ya filtra toda la ruta /alertas (App.tsx) — se repite
+// acá como defensa en profundidad para el botón de cerrar, no porque haga
+// falta hoy (nadie más entra a esta pantalla), sino por si el día de mañana
+// se suma un rol de solo lectura (ej. Gerente) a la ruta.
+const ROL_QUE_PUEDE_CERRAR = "Responsable de producción";
 
 // HU-25 (Pantalla 1 "Monitoreo y Alertas", Figura 1 del doc de Sprint 3).
 // La generación/clasificación de alertas es 100% server-side (backend,
@@ -19,15 +28,22 @@ import { ReglasActivasPanel } from "./components/ReglasActivasPanel";
 // real sin recargar): useAlertas ya deja el array actualizado en vivo, así
 // que cualquier filtro/contador acá es puramente derivado con useMemo.
 export default function AlertasPage() {
-  const { alertas, isLoading, error, isRealtimeConnected, marcarLeida } = useAlertas();
+  const { alertas, isLoading, error, isRealtimeConnected, marcarLeida, cerrarAlerta } = useAlertas();
   const { lotes } = useLotes();
   const { empresa } = useEmpresaActual();
+  const { user } = useAuth();
 
   const [tab, setTab] = useState<TabAlertas>("todas");
   const [loteId, setLoteId] = useState("todos");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
   const [soloNoLeidas, setSoloNoLeidas] = useState(true);
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoAlertaFiltro>("todas");
+  // HU-27: id de la alerta seleccionada para el panel lateral (null =
+  // cerrado). Se guarda el id, no el objeto, para que el panel siempre
+  // refleje el estado más reciente de `alertas` (ej. si se marca leída desde
+  // otro lado mientras el panel está abierto).
+  const [alertaSeleccionadaId, setAlertaSeleccionadaId] = useState<number | null>(null);
 
   // GET /lotes (useLotes, mismo hook que la pantalla de Lotes) trae TODOS
   // los lotes de la empresa — Responsable de producción tiene canRead en
@@ -48,7 +64,12 @@ export default function AlertasPage() {
   const alertasFiltradas = useMemo(() => {
     return alertas.filter((alerta) => {
       if (loteId !== "todos" && String(alerta.data.loteId) !== loteId) return false;
-      if (soloNoLeidas && alerta.leida) return false;
+      // cerrarAlerta() también marca la alerta como leída (HU-27), así que
+      // "Solo no leídas" + estado "Cerradas" siempre daría vacío si se
+      // aplicaran los dos filtros a la vez. El toggle de leída solo tiene
+      // sentido para alertas abiertas.
+      if (soloNoLeidas && alerta.leida && estadoFiltro !== EstadoAlerta.CERRADA) return false;
+      if (estadoFiltro !== "todas" && alerta.estado !== estadoFiltro) return false;
 
       const fecha = new Date(alerta.createdAt);
       if (fechaDesde && fecha < new Date(fechaDesde)) return false;
@@ -59,7 +80,14 @@ export default function AlertasPage() {
       }
       return true;
     });
-  }, [alertas, loteId, soloNoLeidas, fechaDesde, fechaHasta]);
+  }, [alertas, loteId, soloNoLeidas, estadoFiltro, fechaDesde, fechaHasta]);
+
+  // HU-27: se deriva de `alertas` (no un objeto guardado en el click) para
+  // que el panel siempre muestre el estado más reciente de la alerta.
+  const alertaSeleccionada = useMemo(
+    () => alertas.find((a) => a.id === alertaSeleccionadaId) ?? null,
+    [alertas, alertaSeleccionadaId],
+  );
 
   const contadores = useMemo(
     () => ({
@@ -130,6 +158,8 @@ export default function AlertasPage() {
         onFechaHastaChange={setFechaHasta}
         soloNoLeidas={soloNoLeidas}
         onSoloNoLeidasChange={setSoloNoLeidas}
+        estado={estadoFiltro}
+        onEstadoChange={setEstadoFiltro}
       />
 
       <div className="flex flex-col gap-6 lg:flex-row">
@@ -146,13 +176,25 @@ export default function AlertasPage() {
             </div>
           ) : (
             listado.map((alerta) => (
-              <AlertaCard key={alerta.id} alerta={alerta} onMarcarLeida={marcarLeida} />
+              <AlertaCard
+                key={alerta.id}
+                alerta={alerta}
+                onMarcarLeida={marcarLeida}
+                onSeleccionar={(a) => setAlertaSeleccionadaId(a.id)}
+              />
             ))
           )}
         </div>
 
         <ReglasActivasPanel alertas={alertas} />
       </div>
+
+      <AlertaDetallePanel
+        alerta={alertaSeleccionada}
+        onClose={() => setAlertaSeleccionadaId(null)}
+        onCerrar={cerrarAlerta}
+        puedeCerrar={user?.rolNombre === ROL_QUE_PUEDE_CERRAR}
+      />
     </Layout>
   );
 }

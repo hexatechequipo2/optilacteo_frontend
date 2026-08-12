@@ -12,9 +12,14 @@ import {
 import { Badge } from "../../../components/ui/Badge";
 import { ValorConUnidad } from "../../../components/ValorConUnidad";
 import { Parametro } from "../../../types/configParametro.types";
-import type { AlertaNotificacion } from "../../../types/notificacion.types";
+import type { AlertaConCierre } from "../../../types/alertaCierre.types";
 import { NivelAlerta } from "../../../types/notificacion.types";
-import { NIVEL_ALERTA_META, PARAMETRO_LABEL, UNIDAD_POR_PARAMETRO } from "../constants/alertas.constants";
+import {
+  ESTADO_ALERTA_META,
+  NIVEL_ALERTA_META,
+  PARAMETRO_LABEL,
+  UNIDAD_POR_PARAMETRO,
+} from "../constants/alertas.constants";
 
 // Mismo criterio visual que PARAMETRO_ICON en EstadoDiagnosticoTab.tsx
 // (Sensores), para que un parámetro se identifique con el mismo ícono en
@@ -30,8 +35,10 @@ const PARAMETRO_ICON: Record<Parametro, LucideIcon> = {
 };
 
 interface AlertaCardProps {
-  alerta: AlertaNotificacion;
+  alerta: AlertaConCierre;
   onMarcarLeida: (id: number) => void;
+  // HU-27: abre el panel de detalle/cierre.
+  onSeleccionar: (alerta: AlertaConCierre) => void;
 }
 
 function formatearHora(timestamp: string): string {
@@ -45,16 +52,27 @@ function formatearHora(timestamp: string): string {
 
 // AC3: cada card muestra parámetro afectado, valor registrado, umbral
 // configurado y lote asociado, además de la hora y el nivel.
-export function AlertaCard({ alerta, onMarcarLeida }: AlertaCardProps) {
+export function AlertaCard({ alerta, onMarcarLeida, onSeleccionar }: AlertaCardProps) {
   const { data } = alerta;
   const meta = NIVEL_ALERTA_META[alerta.nivelAlerta];
   const NivelIcon = meta.icon;
   const ParametroIcon = PARAMETRO_ICON[data.parametro];
   const unidad = UNIDAD_POR_PARAMETRO[data.parametro];
+  const estadoMeta = ESTADO_ALERTA_META[alerta.estado];
+  const EstadoIcon = estadoMeta.icon;
 
   return (
     <div
-      className={`flex flex-col gap-3 rounded-xl border-l-4 border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5 ${
+      role="button"
+      tabIndex={0}
+      onClick={() => onSeleccionar(alerta)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSeleccionar(alerta);
+        }
+      }}
+      className={`flex cursor-pointer flex-col gap-3 rounded-xl border-l-4 border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 sm:p-5 ${
         alerta.nivelAlerta === NivelAlerta.CRITICA
           ? "border-l-red-500"
           : alerta.nivelAlerta === NivelAlerta.ADVERTENCIA
@@ -79,6 +97,10 @@ export function AlertaCard({ alerta, onMarcarLeida }: AlertaCardProps) {
           <Badge variant={meta.badgeVariant}>
             <NivelIcon className="h-3 w-3" />
             {meta.label}
+          </Badge>
+          <Badge variant={estadoMeta.badgeVariant}>
+            <EstadoIcon className="h-3 w-3" />
+            {estadoMeta.label}
           </Badge>
           <span
             className={`rounded-full px-2.5 py-1 text-xs font-medium ${
@@ -118,7 +140,14 @@ export function AlertaCard({ alerta, onMarcarLeida }: AlertaCardProps) {
         <div className="flex items-center justify-end border-t border-slate-100 pt-3 dark:border-slate-800">
           <button
             type="button"
-            onClick={() => onMarcarLeida(alerta.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMarcarLeida(alerta.id);
+            }}
+            // La card entera es role="button" (abre el panel). Sin esto, el
+            // Enter que el navegador dispara sobre este botón también burbujea
+            // como keydown hasta el div y abre el panel al mismo tiempo.
+            onKeyDown={(e) => e.stopPropagation()}
             className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >
             <Check className="h-3.5 w-3.5" />
