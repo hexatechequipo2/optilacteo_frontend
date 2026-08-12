@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
   Cpu,
   FlaskConical,
+  Bell,
   Siren,
   X,
 } from "lucide-react";
@@ -78,9 +79,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     user?.rolNombre === "Responsable de calidad" ||
     user?.rolNombre === "Responsable de producción" ||
     user?.rolNombre === "Operario de línea";
+  // HU-29: solo Gerente configura destinatarios de alertas (AC4 del
+  // backlog — ver allowedRoles en App.tsx para la ruta protegida).
+  const puedeVerAlertasDestinatarios = esGerente;
   // HU-25: pantalla "Monitoreo y Alertas", exclusiva de Responsable de
   // producción (ver allowedRoles en App.tsx).
-  const puedeVerAlertas = esResponsableProduccion;
+  const puedeVerAlertasMonitoreo = esResponsableProduccion;
 
   const [counts, setCounts] = useState({
     empresas: 0,
@@ -196,7 +200,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(puedeVerSensores
       ? [{ label: "Sensores", icon: Cpu, count: counts.sensores, path: "/sensores" }]
       : []),
-    ...(puedeVerAlertas ? [{ label: "Alertas", icon: Siren, path: "/alertas" }] : []),
+    ...(puedeVerAlertasDestinatarios
+      ? [{ label: "Alertas", icon: Bell, path: "/alertas/destinatarios" }]
+      : []),
+    ...(puedeVerAlertasMonitoreo
+      ? [{ label: "Alertas", icon: Siren, path: "/alertas" }]
+      : []),
   ];
 
   return (
