@@ -6,7 +6,7 @@ import { INGRESOS_CAMARA_MOCK } from "./constants/ingresoCamaraMock";
 
 const HEADERS = ["SKU", "CANTIDAD", "LOTE DE ORIGEN", "FECHA"];
 
-const TODOS_LOS_SKUS = "todos";
+const TODOS_LOS_SKUS = "__todos__";
 
 // HU-67 Parte 1/2: solo maquetado. La tabla filtra el array mock en el
 // cliente y el botón "+ Nuevo ingreso" todavía no abre nada — eso, junto con
@@ -51,6 +51,7 @@ export default function IngresoCamaraPage() {
           <div className="w-full sm:w-56">
             <Select
               id="ingreso-camara-filtro-sku"
+              label="SKU"
               value={skuFiltro}
               onChange={(e) => setSkuFiltro(e.target.value)}
               options={skuOptions}
