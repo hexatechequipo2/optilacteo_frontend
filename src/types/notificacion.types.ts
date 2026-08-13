@@ -30,12 +30,28 @@ export const NivelAlerta = {
 
 export type NivelAlerta = (typeof NivelAlerta)[keyof typeof NivelAlerta];
 
+// HU-27: ciclo de vida de una alerta (Notificacion.estado en el backend —
+// ver enums/estado-alerta.enum.ts, module/notificaciones,
+// optilacteo-backend). Opcional/nullable en Notificacion porque solo se
+// completa para tipo ALERTA_UMBRAL — el resto de notificaciones (ej.
+// lote_no_apto) lo dejan null/undefined, igual que nivelAlerta arriba.
+export const EstadoAlerta = {
+  ABIERTA: "abierta",
+  CERRADA: "cerrada",
+} as const;
+
+export type EstadoAlerta = (typeof EstadoAlerta)[keyof typeof EstadoAlerta];
+
 export interface Notificacion {
   id: number;
   tipo: TipoNotificacion;
   mensaje: string;
   data?: Record<string, unknown> | null;
   nivelAlerta?: NivelAlerta | null;
+  // HU-27
+  estado?: EstadoAlerta | null;
+  accionCorrectiva?: string | null;
+  fechaResolucion?: string | null;
   leida: boolean;
   createdAt: string;
 }
@@ -73,6 +89,15 @@ export interface AlertaNotificacion extends Notificacion {
   tipo: typeof TipoNotificacion.ALERTA_UMBRAL;
   nivelAlerta: NivelAlerta;
   data: AlertaUmbralData;
+  // HU-27: NotificacionMapper.toEntity (backend) siempre setea estado para
+  // este tipo (nace "abierta"), y accionCorrectiva viaja en la misma
+  // respuesta (null hasta que se resuelve la alerta). fechaResolucion queda
+  // opcional, heredado de Notificacion tal cual — no se narrowea a
+  // requerido para no pedirle ese campo al mock de HU-28
+  // (historialAlertas.service.ts), que arma AlertaConCierre con `cerradaEn`
+  // directo y no necesita tocarse por esto.
+  estado: EstadoAlerta;
+  accionCorrectiva: string | null;
 }
 
 export function esAlertaUmbral(n: Notificacion): n is AlertaNotificacion {

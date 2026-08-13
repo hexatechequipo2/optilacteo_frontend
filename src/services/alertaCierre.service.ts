@@ -1,26 +1,31 @@
-import { EstadoAlerta, type CierreAlerta } from "../types/alertaCierre.types";
+import api from "./api";
+import type { CierreAlerta } from "../types/alertaCierre.types";
 
-// TODO(backend): HU-27 pide marcar una alerta como resuelta con una acción
-// correctiva de texto libre, pero no existe endpoint para esto todavía —
-// Notificacion (backend) no tiene estado ni accionCorrectiva. Cuando el
-// backend lo exponga (probablemente PATCH /notificaciones/:id/cerrar con
-// { accionCorrectiva } en el body), reemplazar el Map de acá por una llamada
-// real a `api`, mismo patrón que notificacionService.marcarLeida en
-// notificacion.service.ts. Mientras tanto guardamos el cierre en memoria, a
-// nivel de módulo (sobrevive mientras la pestaña esté abierta, se pierde en
-// un refresh real del navegador — igual que cualquier otro mock sin backend).
-const cierresMock = new Map<number, CierreAlerta>();
+// HU-27: forma cruda que devuelve el backend para
+// PATCH /notificaciones/:id/resolver (NotificacionResponseDto —
+// optilacteo-backend, module/notificaciones). Restringido a Responsable de
+// producción en el backend (NotificacionesController.resolverAlerta);
+// AlertaDetallePanel.tsx ya gatea el botón con `puedeCerrar` para el resto
+// de roles.
+interface ResolverAlertaResponse {
+  estado: CierreAlerta["estado"];
+  accionCorrectiva: string | null;
+  fechaResolucion: string | null;
+}
 
 export const alertaCierreService = {
+  // Mismo patrón que notificacionService.marcarLeida (notificacion.service.ts):
+  // interceptor de Axios agrega el JWT (api.ts), errores se propagan tal
+  // cual para que useAlertas.ts decida el rollback.
   cerrarAlerta: async (id: number, accionCorrectiva: string): Promise<CierreAlerta> => {
-    const cierre: CierreAlerta = {
-      estado: EstadoAlerta.CERRADA,
+    const { data } = await api.patch<ResolverAlertaResponse>(`/notificaciones/${id}/resolver`, {
       accionCorrectiva,
-      cerradaEn: new Date().toISOString(),
-    };
-    cierresMock.set(id, cierre);
-    return cierre;
-  },
+    });
 
-  getCierre: (id: number): CierreAlerta | undefined => cierresMock.get(id),
+    return {
+      estado: data.estado,
+      accionCorrectiva: data.accionCorrectiva,
+      cerradaEn: data.fechaResolucion,
+    };
+  },
 };
