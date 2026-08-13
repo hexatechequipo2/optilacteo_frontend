@@ -15,6 +15,7 @@ import {
   FlaskConical,
   Bell,
   Siren,
+  History,
   Snowflake,
   X,
 } from "lucide-react";
@@ -89,6 +90,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   // HU-25: pantalla "Monitoreo y Alertas", exclusiva de Responsable de
   // producción (ver allowedRoles en App.tsx).
   const puedeVerAlertasMonitoreo = esResponsableProduccion;
+  // HU-28: historial de alertas por lote/período, exclusivo de Responsable
+  // de calidad (ver allowedRoles en App.tsx).
+  const puedeVerHistorialAlertas = user?.rolNombre === "Responsable de calidad";
 
   const [counts, setCounts] = useState({
     empresas: 0,
@@ -212,6 +216,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       : []),
     ...(puedeVerAlertasMonitoreo
       ? [{ label: "Alertas", icon: Siren, path: "/alertas" }]
+      : []),
+    ...(puedeVerHistorialAlertas
+      ? [{ label: "Historial de alertas", icon: History, path: "/alertas/historial" }]
       : []),
   ];
 
