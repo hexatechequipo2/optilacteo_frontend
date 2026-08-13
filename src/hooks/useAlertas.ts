@@ -4,7 +4,7 @@ import { notificacionService } from "../services/notificacion.service";
 import { alertaCierreService } from "../services/alertaCierre.service";
 import type { Notificacion } from "../types/notificacion.types";
 import { esAlertaUmbral } from "../types/notificacion.types";
-import { EstadoAlerta, type AlertaConCierre, type CierreAlerta } from "../types/alertaCierre.types";
+import type { AlertaConCierre } from "../types/alertaCierre.types";
 
 interface UseAlertasResult {
   alertas: AlertaConCierre[];
@@ -26,30 +26,19 @@ export function useAlertas(): UseAlertasResult {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
-  // HU-27: cierres mockeados (ver alertaCierre.service.ts), por id de
-  // notificación.
-  const [cierres, setCierres] = useState<Record<number, CierreAlerta>>({});
 
   useEffect(() => {
     let cancelado = false;
 
     (async () => {
       try {
+        // El estado de cierre (estado/accionCorrectiva/fechaResolucion) ya
+        // viene resuelto en la misma respuesta — NotificacionMapper.toResponse
+        // (backend) lo serializa siempre, no hace falta pedirlo aparte ni
+        // rehidratarlo desde otro lado.
         const result = await notificacionService.getAll({ limit: 100 });
         if (!cancelado) {
           setNotificaciones(result);
-          // Rehidrata los cierres ya guardados en el mock (alertaCierreService
-          // persiste a nivel de módulo, no de este hook) — si no, una alerta
-          // cerrada vuelve a mostrarse "Abierta" cada vez que se remonta este
-          // hook (ej. navegar a otra pantalla y volver a /alertas).
-          setCierres((prev) => {
-            const hidratado = { ...prev };
-            for (const n of result) {
-              const cierre = alertaCierreService.getCierre(n.id);
-              if (cierre) hidratado[n.id] = cierre;
-            }
-            return hidratado;
-          });
         }
       } catch {
         if (!cancelado) setError("No se pudieron cargar las alertas.");
@@ -116,7 +105,18 @@ export function useAlertas(): UseAlertasResult {
         }
       }
       const cierre = await alertaCierreService.cerrarAlerta(id, accionCorrectiva);
-      setCierres((prev) => ({ ...prev, [id]: cierre }));
+      setNotificaciones((prev) =>
+        prev.map((n) =>
+          n.id === id
+            ? {
+                ...n,
+                estado: cierre.estado,
+                accionCorrectiva: cierre.accionCorrectiva,
+                fechaResolucion: cierre.cerradaEn,
+              }
+            : n,
+        ),
+      );
     },
     [notificaciones],
   );
@@ -125,13 +125,9 @@ export function useAlertas(): UseAlertasResult {
     () =>
       notificaciones.filter(esAlertaUmbral).map((alerta) => ({
         ...alerta,
-        ...(cierres[alerta.id] ?? {
-          estado: EstadoAlerta.ABIERTA,
-          accionCorrectiva: null,
-          cerradaEn: null,
-        }),
+        cerradaEn: alerta.fechaResolucion ?? null,
       })),
-    [notificaciones, cierres],
+    [notificaciones],
   );
 
   return { alertas, isLoading, error, isRealtimeConnected, marcarLeida, cerrarAlerta };
