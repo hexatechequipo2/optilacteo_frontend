@@ -42,7 +42,18 @@ export interface Notificacion {
 
 // Forma real de `data` cuando tipo === ALERTA_UMBRAL (ver
 // NotificacionesService.generarAlertaPorUmbral en el backend).
+//
+// El índice de firma string->unknown no espeja nada del backend: es solo
+// para que TS acepte que esto es un `AlertaUmbralData` es válido en el
+// campo `data` de Notificacion (Record<string, unknown> | null) — sin él,
+// AlertaNotificacion (abajo) no puede "extends Notificacion" con `data`
+// restringido a este tipo (TS2430: los interfaces, a diferencia de los
+// literales de objeto, no reciben una firma de índice implícita al
+// compararse contra Record<string, unknown>). Ver esAlertaUmbral() y su uso
+// en useAlertas.ts — sin este índice, el type predicate no tipaba y el
+// .filter() de ahí dejaba de angostar el tipo silenciosamente.
 export interface AlertaUmbralData {
+  [key: string]: unknown;
   loteId: number;
   loteCodigo: string;
   parametro: Parametro;

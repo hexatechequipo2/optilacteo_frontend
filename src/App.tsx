@@ -21,6 +21,7 @@ import MedicionManualPage from "./pages/MedicionManual/MedicionManualPage";
 import SensoresPage from "./pages/Sensores/SensoresPage";
 import DestinatariosAlertasPage from "./pages/Alertas/DestinatariosAlertasPage";
 import AlertasPage from "./pages/Alertas/AlertasPage";
+import HistorialAlertasPage from "./pages/Alertas/HistorialAlertasPage";
 import IngresoCamaraPage from "./pages/IngresoCamara/IngresoCamaraPage";
 import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
@@ -251,6 +252,23 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={["Responsable de producción"]}>
                   <AlertasPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ALERTAS — Historial (HU-28): consulta retrospectiva por lote/
+                nivel/período para análisis de patrones de desvío e informes
+                regulatorios, exclusiva de Responsable de calidad. A
+                diferencia de /alertas (HU-25, bandeja de trabajo en vivo de
+                Responsable de producción) no depende del WS de
+                notificaciones ni de un "no leída" — es de solo lectura sobre
+                el histórico. Todavía sin conexión al backend, ver
+                TODO(backend) en services/historialAlertas.service.ts. */}
+            <Route
+              path="/alertas/historial"
+              element={
+                <ProtectedRoute allowedRoles={["Responsable de calidad"]}>
+                  <HistorialAlertasPage />
                 </ProtectedRoute>
               }
             />
