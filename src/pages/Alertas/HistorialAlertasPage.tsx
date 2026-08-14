@@ -4,25 +4,35 @@ import { Layout } from "../../components/layout/Layout";
 import { useHistorialAlertas } from "../../hooks/useHistorialAlertas";
 import { useLotes } from "../../hooks/useLotes";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
-import { HistorialAlertasFiltros, type NivelFiltro } from "./components/HistorialAlertasFiltros";
+import {
+  HistorialAlertasFiltros,
+  type NivelFiltro,
+  type EstadoFiltro,
+} from "./components/HistorialAlertasFiltros";
 import { HistorialAlertasTabla } from "./components/HistorialAlertasTabla";
 
 interface FiltrosDraft {
   loteId: string;
-  nivel: NivelFiltro;
+  nivelAlerta: NivelFiltro;
+  estado: EstadoFiltro;
   fechaDesde: string;
   fechaHasta: string;
 }
 
-const FILTROS_VACIOS: FiltrosDraft = { loteId: "todos", nivel: "todos", fechaDesde: "", fechaHasta: "" };
+const FILTROS_VACIOS: FiltrosDraft = {
+  loteId: "todos",
+  nivelAlerta: "todos",
+  estado: "todos",
+  fechaDesde: "",
+  fechaHasta: "",
+};
 
 // HU-28 ("Historial de alertas por lote y período"), exclusiva de
 // Responsable de calidad — a diferencia de HU-25 (Monitoreo y Alertas, bandeja
 // de trabajo en vivo de Responsable de producción), esta pantalla es de
 // consulta/análisis retrospectivo para preparar informes regulatorios (AC3:
-// export Excel/PDF). Backend real: ver TODO(backend) en
-// historialAlertas.service.ts — hoy es 100% mock, pero los filtros ya viajan
-// como si fueran query params (AC4).
+// export CSV/PDF). Conectada a GET /notificaciones/historial (+
+// /historial/exportar/csv|pdf) — ver historialAlertas.service.ts.
 export default function HistorialAlertasPage() {
   const { empresa } = useEmpresaActual();
   const { lotes } = useLotes();
@@ -39,10 +49,11 @@ export default function HistorialAlertasPage() {
     [lotes],
   );
 
-  const { items, meta, page, setPage, isLoading, error, isExporting, exportError, exportExcel, exportPdf } =
+  const { items, meta, page, setPage, isLoading, error, isExporting, exportError, exportCsv, exportPdf } =
     useHistorialAlertas({
       loteId: filtrosAplicados.loteId !== "todos" ? Number(filtrosAplicados.loteId) : undefined,
-      nivel: filtrosAplicados.nivel !== "todos" ? filtrosAplicados.nivel : undefined,
+      nivelAlerta: filtrosAplicados.nivelAlerta !== "todos" ? filtrosAplicados.nivelAlerta : undefined,
+      estado: filtrosAplicados.estado !== "todos" ? filtrosAplicados.estado : undefined,
       fechaInicio: filtrosAplicados.fechaDesde || undefined,
       fechaFin: filtrosAplicados.fechaHasta || undefined,
     });
@@ -64,7 +75,8 @@ export default function HistorialAlertasPage() {
 
   const hayFiltrosAplicados =
     filtrosAplicados.loteId !== "todos" ||
-    filtrosAplicados.nivel !== "todos" ||
+    filtrosAplicados.nivelAlerta !== "todos" ||
+    filtrosAplicados.estado !== "todos" ||
     !!filtrosAplicados.fechaDesde ||
     !!filtrosAplicados.fechaHasta;
 
@@ -87,8 +99,10 @@ export default function HistorialAlertasPage() {
         loteId={draft.loteId}
         onLoteIdChange={(value) => setDraft((d) => ({ ...d, loteId: value }))}
         loteOptions={loteOptions}
-        nivel={draft.nivel}
-        onNivelChange={(value) => setDraft((d) => ({ ...d, nivel: value }))}
+        nivelAlerta={draft.nivelAlerta}
+        onNivelAlertaChange={(value) => setDraft((d) => ({ ...d, nivelAlerta: value }))}
+        estado={draft.estado}
+        onEstadoChange={(value) => setDraft((d) => ({ ...d, estado: value }))}
         fechaDesde={draft.fechaDesde}
         onFechaDesdeChange={(value) => setDraft((d) => ({ ...d, fechaDesde: value }))}
         fechaHasta={draft.fechaHasta}
@@ -97,7 +111,7 @@ export default function HistorialAlertasPage() {
         onLimpiar={limpiarFiltros}
         hayFiltrosAplicados={hayFiltrosAplicados}
         isExporting={isExporting}
-        onExportExcel={() => void exportExcel()}
+        onExportCsv={() => void exportCsv()}
         onExportPdf={() => void exportPdf()}
       />
 

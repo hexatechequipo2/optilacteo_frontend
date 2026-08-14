@@ -7,26 +7,22 @@
 // (data.parametro), nivel (nivelAlerta), estado y accionCorrectiva — el AC2
 // completo de esta HU.
 import type { NivelAlerta } from "./notificacion.types";
-import type { AlertaConCierre } from "./alertaCierre.types";
+import type { AlertaConCierre, EstadoAlerta } from "./alertaCierre.types";
 
 export type HistorialAlertaItem = AlertaConCierre;
 
-// TODO(backend): cuando exista GET /alertas/historial (o el sub-recurso que
-// termine exponiendo el backend), estos van a ser los query params reales
-// de la request — loteId/nivel/fechaInicio/fechaFin/page/limit. A propósito
-// tienen la misma forma que HistorialMedicionesFilterQuery (HU-19): el
-// filtrado se manda al servidor, nunca se trae todo para filtrar en memoria
-// acá (AC4 de la HU: la consulta tiene que responder rápido incluso con
-// rangos de 90 días, y eso solo se sostiene con filtrado server-side).
-// Nota: AC1 solo pide lote/nivel/período — no hay filtro de estado
-// (abierta/cerrada) todavía, aunque el estado sí se muestra en el resultado
-// (AC2). Si se termina pidiendo, es un campo más acá y en filtrar()
-// (historialAlertas.service.ts).
+// Query params reales de GET /notificaciones/historial (optilacteo-backend,
+// HistorialAlertasQueryDto — module/notificaciones/dto). Mismos nombres que
+// el DTO del backend (nivelAlerta, no "nivel") para poder mandar `filters`
+// directo como `params` de axios sin traducir nada acá. El filtrado se hace
+// server-side, nunca se trae todo para filtrar en memoria (AC4 de la HU: la
+// consulta tiene que responder rápido incluso con rangos de 90 días).
 export interface HistorialAlertasFilterQuery {
   loteId?: number;
-  nivel?: NivelAlerta;
+  nivelAlerta?: NivelAlerta;
+  estado?: EstadoAlerta;
   fechaInicio?: string; // ISO date (yyyy-MM-dd)
-  fechaFin?: string; // ISO date; sin hora, se normaliza a fin del día
+  fechaFin?: string; // ISO date; sin hora, el backend la normaliza a fin del día
   page?: number;
   limit?: number;
 }
