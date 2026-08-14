@@ -2,7 +2,8 @@ import { FileSpreadsheet, FileText, Search } from "lucide-react";
 import { Select } from "../../../components/ui/Select";
 import { Input } from "../../../components/ui/Input";
 import { NivelAlerta } from "../../../types/notificacion.types";
-import { NIVEL_ALERTA_META } from "../constants/alertas.constants";
+import { EstadoAlerta } from "../../../types/alertaCierre.types";
+import { NIVEL_ALERTA_META, ESTADO_ALERTA_META } from "../constants/alertas.constants";
 
 interface LoteOption {
   value: string;
@@ -12,6 +13,7 @@ interface LoteOption {
 // AC1: "todos" + nivel real, mismo criterio que el filtro de lote/estado de
 // AlertasFiltros.tsx (HU-25).
 export type NivelFiltro = "todos" | NivelAlerta;
+export type EstadoFiltro = "todos" | EstadoAlerta;
 
 const NIVEL_OPTIONS: { value: NivelFiltro; label: string }[] = [
   { value: "todos", label: "Todos los niveles" },
@@ -20,12 +22,20 @@ const NIVEL_OPTIONS: { value: NivelFiltro; label: string }[] = [
   { value: NivelAlerta.CRITICA, label: NIVEL_ALERTA_META[NivelAlerta.CRITICA].label },
 ];
 
+const ESTADO_OPTIONS: { value: EstadoFiltro; label: string }[] = [
+  { value: "todos", label: "Todos los estados" },
+  { value: EstadoAlerta.ABIERTA, label: ESTADO_ALERTA_META[EstadoAlerta.ABIERTA].label },
+  { value: EstadoAlerta.CERRADA, label: ESTADO_ALERTA_META[EstadoAlerta.CERRADA].label },
+];
+
 interface HistorialAlertasFiltrosProps {
   loteId: string;
   onLoteIdChange: (value: string) => void;
   loteOptions: LoteOption[];
-  nivel: NivelFiltro;
-  onNivelChange: (value: NivelFiltro) => void;
+  nivelAlerta: NivelFiltro;
+  onNivelAlertaChange: (value: NivelFiltro) => void;
+  estado: EstadoFiltro;
+  onEstadoChange: (value: EstadoFiltro) => void;
   fechaDesde: string;
   onFechaDesdeChange: (value: string) => void;
   fechaHasta: string;
@@ -34,20 +44,23 @@ interface HistorialAlertasFiltrosProps {
   onLimpiar: () => void;
   hayFiltrosAplicados: boolean;
   isExporting: boolean;
-  onExportExcel: () => void;
+  onExportCsv: () => void;
   onExportPdf: () => void;
 }
 
-// AC1 (filtro por lote/nivel/período) + AC3 (export Excel/PDF). El filtrado
-// server-side real llega con historialAlertasService (ver TODO(backend)
-// ahí) — acá solo se junta el "draft" y se dispara la búsqueda/exportación
-// cuando el usuario lo pide, para no re-consultar en cada tecla.
+// AC1 (filtro por lote/nivel/estado/período) + AC3 (export CSV/PDF). El
+// filtrado es server-side (GET /notificaciones/historial, ver
+// historialAlertas.service.ts) — acá solo se junta el "draft" y se dispara
+// la búsqueda/exportación cuando el usuario lo pide, para no re-consultar en
+// cada tecla.
 export function HistorialAlertasFiltros({
   loteId,
   onLoteIdChange,
   loteOptions,
-  nivel,
-  onNivelChange,
+  nivelAlerta,
+  onNivelAlertaChange,
+  estado,
+  onEstadoChange,
   fechaDesde,
   onFechaDesdeChange,
   fechaHasta,
@@ -56,7 +69,7 @@ export function HistorialAlertasFiltros({
   onLimpiar,
   hayFiltrosAplicados,
   isExporting,
-  onExportExcel,
+  onExportCsv,
   onExportPdf,
 }: HistorialAlertasFiltrosProps) {
   return (
@@ -75,9 +88,19 @@ export function HistorialAlertasFiltros({
         <Select
           label="Nivel"
           id="historial-alertas-filtro-nivel"
-          value={nivel}
-          onChange={(e) => onNivelChange(e.target.value as NivelFiltro)}
+          value={nivelAlerta}
+          onChange={(e) => onNivelAlertaChange(e.target.value as NivelFiltro)}
           options={NIVEL_OPTIONS}
+        />
+      </div>
+
+      <div className="w-full sm:w-44">
+        <Select
+          label="Estado"
+          id="historial-alertas-filtro-estado"
+          value={estado}
+          onChange={(e) => onEstadoChange(e.target.value as EstadoFiltro)}
+          options={ESTADO_OPTIONS}
         />
       </div>
 
@@ -119,17 +142,17 @@ export function HistorialAlertasFiltros({
         </button>
       )}
 
-      {/* AC3: exportable en Excel y PDF, sobre el resultado filtrado (no
-          solo la página visible — ver exportExcel/exportPdf en
+      {/* AC3: exportable en CSV y PDF, sobre el resultado filtrado (no solo
+          la página visible — ver exportCsv/exportPdf en
           historialAlertas.service.ts). */}
       <div className="ml-auto flex items-center gap-2">
         <button
           type="button"
           disabled={isExporting}
-          onClick={onExportExcel}
+          onClick={onExportCsv}
           className="flex items-center gap-2 rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
         >
-          <FileSpreadsheet className="h-4 w-4" /> {isExporting ? "Exportando..." : "Excel"}
+          <FileSpreadsheet className="h-4 w-4" /> {isExporting ? "Exportando..." : "CSV"}
         </button>
         <button
           type="button"
