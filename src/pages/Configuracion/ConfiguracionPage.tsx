@@ -6,13 +6,15 @@ import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import { LogoIdentidadTab } from "./components/LogoIdentidadTab";
 import { UmbralesCalidadTab } from "./components/UmbralesCalidadTab";
 import { ComparacionHistoricaConfigTab } from "./components/ComparacionHistoricaConfigTab";
+import { PlcGatewayConfigTab } from "./components/PlcGatewayConfigTab";
 
-type TabConfiguracion = "umbrales" | "logo-identidad" | "comparacion-historica";
+type TabConfiguracion = "umbrales" | "logo-identidad" | "comparacion-historica" | "plc-gateway";
 
 const TABS_GERENTE: { value: TabConfiguracion; label: string }[] = [
   { value: "umbrales", label: "Umbrales de calidad" },
   { value: "logo-identidad", label: "Logo e identidad" },
   { value: "comparacion-historica", label: "Comparación histórica" },
+  { value: "plc-gateway", label: "Conexión PLC/Gateway" },
 ];
 
 // HU-23: a diferencia de Umbrales/Logo (Gerente-only, ver allowedRoles en
@@ -24,13 +26,26 @@ const TABS_RESPONSABLE_CALIDAD: { value: TabConfiguracion; label: string }[] = [
   { value: "comparacion-historica", label: "Comparación histórica" },
 ];
 
+// HU-61: pantalla mock (todavía no hay backend, ver TODOs en
+// PlcGatewayConfigTab.tsx), exclusiva de Responsable de producción además de
+// Gerente. No comparte ninguna otra pestaña de acá: Operario de línea y
+// Responsable de calidad no llegan a ver esta tab.
+const TABS_RESPONSABLE_PRODUCCION: { value: TabConfiguracion; label: string }[] = [
+  { value: "plc-gateway", label: "Conexión PLC/Gateway" },
+];
+
 export default function ConfiguracionPage() {
   const { user } = useAuth();
   const { empresa } = useEmpresaActual();
   const esGerente = user?.rolNombre === "Gerente";
-  const tabs = esGerente ? TABS_GERENTE : TABS_RESPONSABLE_CALIDAD;
+  const esResponsableProduccion = user?.rolNombre === "Responsable de producción";
+  const tabs = esGerente
+    ? TABS_GERENTE
+    : esResponsableProduccion
+      ? TABS_RESPONSABLE_PRODUCCION
+      : TABS_RESPONSABLE_CALIDAD;
   const [tabActiva, setTabActiva] = useState<TabConfiguracion>(
-    esGerente ? "logo-identidad" : "comparacion-historica",
+    esGerente ? "logo-identidad" : esResponsableProduccion ? "plc-gateway" : "comparacion-historica",
   );
 
   return (
@@ -51,6 +66,7 @@ export default function ConfiguracionPage() {
       {tabActiva === "logo-identidad" && <LogoIdentidadTab />}
       {tabActiva === "umbrales" && <UmbralesCalidadTab />}
       {tabActiva === "comparacion-historica" && <ComparacionHistoricaConfigTab />}
+      {tabActiva === "plc-gateway" && <PlcGatewayConfigTab />}
     </Layout>
   );
 }

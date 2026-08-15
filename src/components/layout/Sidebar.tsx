@@ -51,7 +51,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const puedeVerEmpresas = esAdmin;
   // HU-23: Responsable de calidad entra en modo solo lectura (ver
   // ConfiguracionPage.tsx / App.tsx).
-  const puedeVerConfiguracion = esGerente || user?.rolNombre === "Responsable de calidad";
+  // HU-61: Responsable de producción entra solo para la pestaña "Conexión
+  // PLC/Gateway" (mock, sin backend todavía — ver PlcGatewayConfigTab.tsx).
+  const puedeVerConfiguracion =
+    esGerente || user?.rolNombre === "Responsable de calidad" || esResponsableProduccion;
   const puedeVerPlanes = esAdmin;
   const puedeVerProveedores = esAdmin || esGerente;
   // HU-20 suma Operario de línea (carga manual) y Responsable de producción
