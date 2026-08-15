@@ -1,8 +1,7 @@
 import type { IngresoCamara } from "../../../types/ingresoCamara.types";
 
-// Mock temporal para el maquetado de HU-67 Parte 1/2. Se reemplaza por datos
-// reales del backend en la Parte 2/2 (conexión al módulo de producto
-// terminado).
+// Mock temporal para el maquetado de HU-67. Se reemplaza por datos reales
+// del backend cuando se conecte al módulo de producto terminado.
 export const INGRESOS_CAMARA_MOCK: IngresoCamara[] = [
   {
     id: "1",
