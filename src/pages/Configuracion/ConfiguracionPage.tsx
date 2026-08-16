@@ -7,14 +7,26 @@ import { LogoIdentidadTab } from "./components/LogoIdentidadTab";
 import { UmbralesCalidadTab } from "./components/UmbralesCalidadTab";
 import { ComparacionHistoricaConfigTab } from "./components/ComparacionHistoricaConfigTab";
 import { PlcGatewayConfigTab } from "./components/PlcGatewayConfigTab";
+import { SkusConfigTab } from "./components/SkusConfigTab";
 
-type TabConfiguracion = "umbrales" | "logo-identidad" | "comparacion-historica" | "plc-gateway";
+type TabConfiguracion =
+  | "umbrales"
+  | "logo-identidad"
+  | "comparacion-historica"
+  | "plc-gateway"
+  | "skus";
 
+// HU-67 (AC 2): tab de catálogo de SKUs, solo para Gerente. POST /skus en el
+// backend está restringido a ADMINISTRADOR/GERENTE (ver sku.controller.ts),
+// pero Administrador no tiene acceso a esta ruta /configuracion en el
+// frontend hoy (allowedRoles en App.tsx no lo incluye) — gap preexistente,
+// no introducido ni resuelto por esta HU.
 const TABS_GERENTE: { value: TabConfiguracion; label: string }[] = [
   { value: "umbrales", label: "Umbrales de calidad" },
   { value: "logo-identidad", label: "Logo e identidad" },
   { value: "comparacion-historica", label: "Comparación histórica" },
   { value: "plc-gateway", label: "Conexión PLC/Gateway" },
+  { value: "skus", label: "Catálogo de SKUs" },
 ];
 
 // HU-23: a diferencia de Umbrales/Logo (Gerente-only, ver allowedRoles en
@@ -67,6 +79,7 @@ export default function ConfiguracionPage() {
       {tabActiva === "umbrales" && <UmbralesCalidadTab />}
       {tabActiva === "comparacion-historica" && <ComparacionHistoricaConfigTab />}
       {tabActiva === "plc-gateway" && <PlcGatewayConfigTab />}
+      {tabActiva === "skus" && <SkusConfigTab />}
     </Layout>
   );
 }

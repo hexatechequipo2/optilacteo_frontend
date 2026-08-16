@@ -1,20 +1,15 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Combobox } from "../../components/ui/Combobox";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
-import {
-  LOTES_ORIGEN_MOCK,
-  SIN_REFERENCIA_LOTE_ORIGEN,
-  SKUS_CATALOGO_MOCK,
-} from "./constants/ingresoCamaraFormMock";
-import type { IngresoCamara } from "../../types/ingresoCamara.types";
+import { loteService } from "../../services/lote.service";
+import { extraerMensajeError } from "../../services/ingresoCamara.service";
+import type { Lote } from "../../types/lote.types";
+import type { CreateIngresoCamaraDto, IngresoCamara } from "../../types/ingresoCamara.types";
+import type { Sku } from "../../types/sku.types";
 
-const LOTE_ORIGEN_OPTIONS = [
-  { value: SIN_REFERENCIA_LOTE_ORIGEN, label: SIN_REFERENCIA_LOTE_ORIGEN },
-  ...LOTES_ORIGEN_MOCK.map((lote) => ({ value: lote, label: lote })),
-];
+const SIN_LOTE_ORIGEN = "";
 
 function hoyComoInputDate(): string {
   const hoy = new Date();
@@ -24,36 +19,37 @@ function hoyComoInputDate(): string {
   return `${anio}-${mes}-${dia}`;
 }
 
-function formatearFecha(fechaInput: string): string {
-  const [anio, mes, dia] = fechaInput.split("-");
-  return `${dia}/${mes}/${anio}`;
+// El backend espera fechaIngreso como ISO datetime (@IsDateString). El
+// input date del form solo tiene día/mes/año; se envía a medianoche UTC.
+function fechaInputAIso(fechaInput: string): string {
+  return new Date(`${fechaInput}T00:00:00.000Z`).toISOString();
 }
 
 interface FormValues {
-  sku: string;
+  skuId: string;
   cantidad: string;
-  loteOrigen: string;
+  loteId: string;
   fecha: string;
 }
 
 interface FormErrors {
-  sku?: string;
+  skuId?: string;
   cantidad?: string;
   fecha?: string;
 }
 
 function buildInitialValues(): FormValues {
   return {
-    sku: "",
+    skuId: "",
     cantidad: "",
-    loteOrigen: SIN_REFERENCIA_LOTE_ORIGEN,
+    loteId: SIN_LOTE_ORIGEN,
     fecha: hoyComoInputDate(),
   };
 }
 
 function validate(values: FormValues): FormErrors {
   const errors: FormErrors = {};
-  if (!values.sku.trim()) errors.sku = "El SKU es obligatorio";
+  if (!values.skuId) errors.skuId = "El SKU es obligatorio";
 
   if (values.cantidad.trim() === "") {
     errors.cantidad = "La cantidad es obligatoria";
@@ -68,39 +64,74 @@ function validate(values: FormValues): FormErrors {
 
 interface IngresoCamaraFormModalProps {
   isOpen: boolean;
+  isSubmitting: boolean;
+  skus: Sku[];
   onClose: () => void;
-  onSubmit: (ingreso: Omit<IngresoCamara, "id">) => void;
+  onCreate: (dto: CreateIngresoCamaraDto) => Promise<IngresoCamara>;
 }
 
-// HU-67 Parte 2/2: formulario de maquetado — valida en el cliente y agrega
-// el ingreso al array mock local de la Pantalla 10. Sin conexión a backend;
-// falta conectar al endpoint real de producto terminado.
-export function IngresoCamaraFormModal({ isOpen, onClose, onSubmit }: IngresoCamaraFormModalProps) {
+// HU-67: formulario conectado al catálogo de SKU real (prop `skus`, ya
+// cargado por la página) y a POST /ingresos-camara. El SKU pasa a
+// seleccionarse por id (Select), no por nombre libre (Combobox) — el
+// backend exige `skuId` numérico.
+export function IngresoCamaraFormModal({
+  isOpen,
+  isSubmitting,
+  skus,
+  onClose,
+  onCreate,
+}: IngresoCamaraFormModalProps) {
   const [values, setValues] = useState<FormValues>(buildInitialValues);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [serverError, setServerError] = useState("");
+  const [lotes, setLotes] = useState<Lote[]>([]);
 
   useEffect(() => {
     if (!isOpen) return;
     setValues(buildInitialValues());
     setErrors({});
+    setServerError("");
+    // Se carga recién al abrir el modal (no en cada render de la página) —
+    // el "lote de origen" es opcional, no vale la pena pedir /lotes si el
+    // usuario nunca abre el formulario.
+    loteService
+      .getAll()
+      .then(setLotes)
+      .catch(() => setLotes([]));
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const skuOptions = [
+    { value: "", label: "Seleccioná un SKU..." },
+    ...skus.map((sku) => ({ value: String(sku.id), label: sku.nombre })),
+  ];
+
+  const loteOptions = [
+    { value: SIN_LOTE_ORIGEN, label: "Sin referencia" },
+    ...lotes.map((lote) => ({ value: String(lote.id), label: lote.codigo })),
+  ];
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const validationErrors = validate(values);
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
-    onSubmit({
-      sku: values.sku,
-      cantidad: Number(values.cantidad),
-      unidad: "unidades",
-      loteOrigen: values.loteOrigen,
-      fecha: formatearFecha(values.fecha),
-    });
-    onClose();
+    setServerError("");
+    try {
+      await onCreate({
+        skuId: Number(values.skuId),
+        cantidad: Number(values.cantidad),
+        ...(values.loteId && { loteId: Number(values.loteId) }),
+        fechaIngreso: fechaInputAIso(values.fecha),
+      });
+      onClose();
+    } catch (error) {
+      setServerError(
+        extraerMensajeError(error, "No se pudo registrar el ingreso. Intentá nuevamente."),
+      );
+    }
   };
 
   return (
@@ -118,8 +149,13 @@ export function IngresoCamaraFormModal({ isOpen, onClose, onSubmit }: IngresoCam
           >
             Cancelar
           </button>
-          <Button type="submit" form="ingreso-camara-form" className="!w-auto px-6">
-            Registrar ingreso
+          <Button
+            type="submit"
+            form="ingreso-camara-form"
+            className="!w-auto px-6"
+            disabled={isSubmitting || skus.length === 0}
+          >
+            {isSubmitting ? "Registrando..." : "Registrar ingreso"}
           </Button>
         </div>
       }
@@ -130,14 +166,20 @@ export function IngresoCamaraFormModal({ isOpen, onClose, onSubmit }: IngresoCam
         noValidate
         className="flex flex-col gap-4"
       >
-        <Combobox
+        {skus.length === 0 && (
+          <p className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+            Tu empresa todavía no tiene SKUs cargados. Pedile a un Gerente que dé de alta uno
+            desde Configuración → Catálogo de SKUs.
+          </p>
+        )}
+
+        <Select
           id="ingreso-camara-sku"
           label="SKU *"
-          placeholder="Buscar SKU..."
-          value={values.sku}
-          onChange={(value) => setValues((prev) => ({ ...prev, sku: value }))}
-          options={SKUS_CATALOGO_MOCK}
-          error={errors.sku}
+          options={skuOptions}
+          value={values.skuId}
+          onChange={(e) => setValues((prev) => ({ ...prev, skuId: e.target.value }))}
+          error={errors.skuId}
         />
 
         <Input
@@ -154,9 +196,9 @@ export function IngresoCamaraFormModal({ isOpen, onClose, onSubmit }: IngresoCam
         <Select
           id="ingreso-camara-lote-origen"
           label="Lote de producción de origen"
-          options={LOTE_ORIGEN_OPTIONS}
-          value={values.loteOrigen}
-          onChange={(e) => setValues((prev) => ({ ...prev, loteOrigen: e.target.value }))}
+          options={loteOptions}
+          value={values.loteId}
+          onChange={(e) => setValues((prev) => ({ ...prev, loteId: e.target.value }))}
         />
 
         <Input
@@ -167,6 +209,12 @@ export function IngresoCamaraFormModal({ isOpen, onClose, onSubmit }: IngresoCam
           onChange={(e) => setValues((prev) => ({ ...prev, fecha: e.target.value }))}
           error={errors.fecha}
         />
+
+        {serverError && (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
+            {serverError}
+          </p>
+        )}
       </form>
     </Modal>
   );

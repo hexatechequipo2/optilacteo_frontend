@@ -7,9 +7,17 @@
 // (data.parametro), nivel (nivelAlerta), estado y accionCorrectiva — el AC2
 // completo de esta HU.
 import type { NivelAlerta } from "./notificacion.types";
-import type { AlertaConCierre, EstadoAlerta } from "./alertaCierre.types";
+import type { AlertaUmbralConCierre, EstadoAlerta } from "./alertaCierre.types";
 
-export type HistorialAlertaItem = AlertaConCierre;
+// HU-31 fix: el backend restringe GET /notificaciones/historial a
+// tipo=alerta_umbral (ver historialAlertas.service.ts) — nunca devuelve
+// alerta_sensor_desconectado. HistorialAlertaItem quedaba atado a
+// AlertaConCierre completo (la unión que HU-31 amplió), así que
+// item.data.loteCodigo/parametro perdían su tipo concreto y colapsaban a
+// `unknown` en HistorialAlertasTabla.tsx (la rama sensor-desconectado de
+// data solo tiene esas claves vía el índice `[key: string]: unknown`).
+// Fijar a AlertaUmbralConCierre refleja lo que el backend realmente manda.
+export type HistorialAlertaItem = AlertaUmbralConCierre;
 
 // Query params reales de GET /notificaciones/historial (optilacteo-backend,
 // HistorialAlertasQueryDto — module/notificaciones/dto). Mismos nombres que

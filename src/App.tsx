@@ -220,9 +220,11 @@ function App() {
               }
             />
 
-            {/* INGRESO A CÁMARA (HU-67 Parte 1/2: solo maquetado, mock data,
-                sin conexión al back todavía) — Responsable de producción es
-                quien registra el ingreso de producto terminado a cámara. */}
+            {/* INGRESO A CÁMARA (HU-67: conectado a GET/POST /ingresos-camara
+                y al catálogo real de SKU vía GET /skus) — Responsable de
+                producción es quien registra el ingreso de producto
+                terminado a cámara (único rol habilitado por el backend para
+                POST /ingresos-camara). */}
             <Route
               path="/ingreso-camara"
               element={
