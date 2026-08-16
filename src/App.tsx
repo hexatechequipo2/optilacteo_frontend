@@ -232,13 +232,14 @@ function App() {
               }
             />
 
-            {/* ALERTAS — Destinatarios (HU-29): mock data, solo GERENTE
-                configura quién recibe cada nivel de alerta (AC1/AC4 del
-                backlog). Todavía sin conexión al back. */}
+            {/* ALERTAS — Destinatarios (HU-29): conectado a
+                GET/POST/DELETE /notificaciones/configuracion. Administrador
+                y Gerente configuran quién recibe cada nivel de alerta, por
+                rol o por usuario puntual (AC1/AC2/AC4 del backlog). */}
             <Route
               path="/alertas/destinatarios"
               element={
-                <ProtectedRoute allowedRoles={["Gerente"]}>
+                <ProtectedRoute allowedRoles={["Administrador", "Gerente"]}>
                   <DestinatariosAlertasPage />
                 </ProtectedRoute>
               }
