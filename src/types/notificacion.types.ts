@@ -114,7 +114,19 @@ export interface AlertaNotificacion extends Notificacion {
   accionCorrectiva: string | null;
 }
 
-export function esAlertaUmbral(n: Notificacion): n is AlertaNotificacion {
+// HU-31 fix: firma genérica en vez de fija a `AlertaNotificacion`. Antes,
+// al llamarse sobre AlertaConCierre[] (unión que introdujo HU-31), el
+// predicado no calzaba con el overload de .filter() que angosta por tipo
+// (AlertaNotificacion no extiende AlertaConCierre, le falta `cerradaEn`),
+// TS caía al overload boolean-only y devolvía AlertaConCierre[] sin
+// angostar — rompía la asignación a ReglasActivasPanel (alertas:
+// AlertaNotificacion[]). Con T genérico, Extract<T, {tipo: 'alerta_umbral'}>
+// resuelve a AlertaUmbralConCierre cuando T = AlertaConCierre, y sigue
+// resolviendo a AlertaNotificacion cuando T = AlertaNotificacion — mismo
+// comportamiento en runtime, solo cambia lo que TS puede inferir.
+export function esAlertaUmbral<T extends Notificacion>(
+  n: T,
+): n is Extract<T, { tipo: typeof TipoNotificacion.ALERTA_UMBRAL }> {
   return n.tipo === TipoNotificacion.ALERTA_UMBRAL && n.nivelAlerta != null && n.data != null;
 }
 
