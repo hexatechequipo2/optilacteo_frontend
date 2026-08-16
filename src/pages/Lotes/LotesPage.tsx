@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FlaskConical, History, Pencil } from "lucide-react";
+import { CheckCircle2, FlaskConical, History, Pencil, Route } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
@@ -16,6 +16,7 @@ import { DestinoLote, EstadoLote, UnidadRendimiento, type Lote } from "../../typ
 import type { Proveedor } from "../../types/proveedor.types";
 import { LoteFormModal } from "./LoteFormModal";
 import { LoteMedicionesModal } from "./components/LoteMedicionesModal";
+import { TrazabilidadLoteModal } from "./components/TrazabilidadLoteModal";
 import { FinalizarLoteModal } from "./components/FinalizarLoteModal";
 import {
   UNIDAD_RENDIMIENTO_LABEL,
@@ -95,6 +96,7 @@ export default function LotesPage() {
   const [loteMediciones, setLoteMediciones] = useState<Lote | null>(null);
   const [loteAFinalizar, setLoteAFinalizar] = useState<Lote | null>(null);
   const [loteAuditoria, setLoteAuditoria] = useState<Lote | null>(null);
+  const [loteTrazabilidadId, setLoteTrazabilidadId] = useState<number | null>(null);
 
   // Solo Responsable de calidad puede registrar/editar lotes (POST y PATCH
   // /lotes en el backend); Gerente/Administrador acceden a esta pantalla en
@@ -183,6 +185,28 @@ export default function LotesPage() {
     return rol === "responsable de producción" || rol === "gerente" || rol === "administrador";
   }, [user?.rolNombre]);
 
+  // HU-68: GET /lotes/:id/consumos (backend) — Responsable de calidad,
+  // Responsable de producción, Gerente y Administrador. Mismo set de roles
+  // que GET /lotes/producciones, así que alcanza con esta única flag para
+  // decidir si se ofrece el ícono de trazabilidad.
+  const puedeVerTrazabilidad = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return (
+      rol === "responsable de calidad" ||
+      rol === "responsable de producción" ||
+      rol === "gerente" ||
+      rol === "administrador"
+    );
+  }, [user?.rolNombre]);
+
+  // HU-68: POST /lotes/:id/consumos (backend) — solo Responsable de calidad
+  // y Responsable de producción pueden registrar un consumo parcial;
+  // Gerente/Administrador ven el panel de trazabilidad en modo lectura.
+  const puedeRegistrarConsumo = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return rol === "responsable de calidad" || rol === "responsable de producción";
+  }, [user?.rolNombre]);
+
   // El ícono de la acción se ofrece si hay al menos una de las tres
   // capacidades (escribir, ver historial o ver clasificación automática);
   // qué pestañas quedan habilitadas adentro del modal se resuelve por lote
@@ -225,6 +249,15 @@ export default function LotesPage() {
     if (filtroUnidadRendimiento === "") return lotes;
     return lotes.filter((lote) => lote.unidadRendimiento === filtroUnidadRendimiento);
   }, [lotes, filtroUnidadRendimiento]);
+
+  // HU-68: se busca por id en la lista ya cargada (no un GET /lotes/:id
+  // aparte) para que, tras registrar un consumo y refetchear /lotes, el
+  // panel reciba el lote con cantidadDisponible actualizado sin depender de
+  // un endpoint que no incluye a Responsable de Producción entre sus roles.
+  const loteTrazabilidad = useMemo(
+    () => lotes.find((l) => l.id === loteTrazabilidadId) ?? null,
+    [lotes, loteTrazabilidadId],
+  );
 
   const headers = useMemo(() => {
     const list = [...HEADERS_BASE];
@@ -370,6 +403,16 @@ export default function LotesPage() {
                             <FlaskConical className="h-4 w-4" />
                           </button>
                         )}
+                        {puedeVerTrazabilidad && (
+                          <button
+                            type="button"
+                            onClick={() => setLoteTrazabilidadId(lote.id)}
+                            className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                            title="Trazabilidad y consumo parcial"
+                          >
+                            <Route className="h-4 w-4" />
+                          </button>
+                        )}
                         {puedeCrearLote && (
                           <button
                             type="button"
@@ -440,6 +483,16 @@ export default function LotesPage() {
                         }
                       >
                         <FlaskConical className="h-4 w-4" />
+                      </button>
+                    )}
+                    {puedeVerTrazabilidad && (
+                      <button
+                        type="button"
+                        onClick={() => setLoteTrazabilidadId(lote.id)}
+                        className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                        title="Trazabilidad y consumo parcial"
+                      >
+                        <Route className="h-4 w-4" />
                       </button>
                     )}
                     {puedeCrearLote && (
@@ -550,6 +603,15 @@ export default function LotesPage() {
         puedeVerClasificacion={puedeVerClasificacion}
         puedeVerComparacionHistorica={puedeVerComparacionHistorica}
         onClose={() => setLoteMediciones(null)}
+      />
+
+      <TrazabilidadLoteModal
+        isOpen={loteTrazabilidadId !== null}
+        lote={loteTrazabilidad}
+        proveedorMap={proveedorMap}
+        puedeRegistrarConsumo={puedeRegistrarConsumo}
+        onClose={() => setLoteTrazabilidadId(null)}
+        onConsumoRegistrado={() => void refetch()}
       />
 
       <FinalizarLoteModal
