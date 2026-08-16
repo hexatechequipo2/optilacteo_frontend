@@ -7,12 +7,16 @@ import type {
 
 export const usuariosService = {
   /** Trae todos los usuarios de la plataforma (todas las empresas) */
-  getAll: async (params: { 
-  page: number; 
-  limit: number; 
-  name?: string; 
-  email?: string; 
-  empresaId?: string | number 
+  getAll: async (params: {
+  page: number;
+  limit: number;
+  name?: string;
+  email?: string;
+  empresaId?: string | number;
+  // HU-29: filtro para poblar el selector de "asignar a usuario puntual"
+  // en Destinatarios de alertas — solo tiene sentido ofrecer usuarios
+  // activos como destinatario.
+  isActive?: boolean;
 }) => {
   const { data } = await api.get("/user", { params });
   return data;

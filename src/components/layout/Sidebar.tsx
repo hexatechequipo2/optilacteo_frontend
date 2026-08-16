@@ -87,9 +87,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     user?.rolNombre === "Responsable de calidad" ||
     user?.rolNombre === "Responsable de producción" ||
     user?.rolNombre === "Operario de línea";
-  // HU-29: solo Gerente configura destinatarios de alertas (AC4 del
-  // backlog — ver allowedRoles en App.tsx para la ruta protegida).
-  const puedeVerAlertasDestinatarios = esGerente;
+  // HU-29: Administrador y Gerente configuran destinatarios de alertas
+  // (AC1/AC4 del backlog — ver allowedRoles en App.tsx para la ruta
+  // protegida).
+  const puedeVerAlertasDestinatarios = esAdmin || esGerente;
   // HU-25: pantalla "Monitoreo y Alertas", exclusiva de Responsable de
   // producción (ver allowedRoles en App.tsx).
   const puedeVerAlertasMonitoreo = esResponsableProduccion;
