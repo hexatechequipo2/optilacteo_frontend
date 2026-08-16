@@ -11,6 +11,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { proveedoresService } from "../../services/proveedores.service";
 import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
 import { TIPO_MATERIA_PRIMA_TABS } from "../Configuracion/constants/parametrosCalidad";
+import { UBICACION_LABEL } from "../Sensores/constants/parametroSensor";
 import { DestinoLote, EstadoLote, UnidadRendimiento, type Lote } from "../../types/lote.types";
 import type { Proveedor } from "../../types/proveedor.types";
 import { LoteFormModal } from "./LoteFormModal";
@@ -20,6 +21,7 @@ import {
   UNIDAD_RENDIMIENTO_LABEL,
   UNIDAD_RENDIMIENTO_SIMBOLO,
 } from "./constants/unidadRendimiento";
+import { getTamboMock } from "./constants/tamboMock";
 
 // Universo suficiente para poblar el selector de proveedores del formulario
 // (no es una tabla paginada: acá se necesita el catálogo completo).
@@ -32,7 +34,19 @@ const DESTINO_LABEL: Record<DestinoLote, string> = {
   [DestinoLote.DESCARTE]: "Descarte",
 };
 
-const HEADERS_BASE = ["LOTE", "PROVEEDOR", "MATERIA PRIMA", "INGRESO", "DESTINO", "RENDIMIENTO"];
+// HU-36 Parte 1/2: se agregan TAMBO (mock, ver constants/tamboMock.ts — el
+// backend todavía no lo modela) y UBICACIÓN (dato real, lote.ubicacionInicial,
+// que ya viaja del backend pero no se mostraba en esta tabla).
+const HEADERS_BASE = [
+  "LOTE",
+  "PROVEEDOR",
+  "TAMBO",
+  "MATERIA PRIMA",
+  "UBICACIÓN",
+  "INGRESO",
+  "DESTINO",
+  "RENDIMIENTO",
+];
 
 // HU-62: solo tiene sentido mostrar el rendimiento una vez que el lote está
 // finalizado (es cuando el backend permite cargarlo). Antes de eso, "—"
@@ -312,7 +326,13 @@ export default function LotesPage() {
                       {proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`}
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {getTamboMock(lote.id)}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {TIPO_MATERIA_PRIMA_LABEL.get(lote.materiaPrima) ?? lote.materiaPrima}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {lote.ubicacionInicial ? UBICACION_LABEL[lote.ubicacionInicial] : "—"}
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {new Date(lote.fechaIngreso).toLocaleDateString("es-AR")}
@@ -470,9 +490,19 @@ export default function LotesPage() {
 
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
                   <div>
+                    <dt className="text-slate-400 dark:text-slate-500">Tambo</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">{getTamboMock(lote.id)}</dd>
+                  </div>
+                  <div>
                     <dt className="text-slate-400 dark:text-slate-500">Materia prima</dt>
                     <dd className="text-slate-600 dark:text-slate-400">
                       {TIPO_MATERIA_PRIMA_LABEL.get(lote.materiaPrima) ?? lote.materiaPrima}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-400 dark:text-slate-500">Ubicación</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">
+                      {lote.ubicacionInicial ? UBICACION_LABEL[lote.ubicacionInicial] : "—"}
                     </dd>
                   </div>
                   <div>
