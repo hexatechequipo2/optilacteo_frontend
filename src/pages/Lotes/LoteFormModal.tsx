@@ -45,6 +45,7 @@ interface FormValues {
   proveedorId: string;
   materiaPrima: TipoMateriaPrima;
   fechaIngreso: string;
+  cantidad: string;
   parametros: Record<ParametroVisible, string>;
   destinoInicial: DestinoLote | "";
   ubicacionInicial: Ubicacion | "";
@@ -53,6 +54,7 @@ interface FormValues {
 interface FormErrors {
   proveedorId?: string;
   fechaIngreso?: string;
+  cantidad?: string;
   destinoInicial?: string;
   parametros?: Partial<Record<ParametroVisible, string>>;
   parametrosGeneral?: string;
@@ -71,6 +73,7 @@ function buildInitialValues(lote?: Lote): FormValues {
       proveedorId: "",
       materiaPrima: TipoMateriaPrima.LECHE_CRUDA,
       fechaIngreso: new Date().toISOString().slice(0, 10),
+      cantidad: "",
       parametros: buildParametrosVacios(),
       destinoInicial: "",
       ubicacionInicial: "",
@@ -80,6 +83,9 @@ function buildInitialValues(lote?: Lote): FormValues {
     proveedorId: String(lote.proveedorId),
     materiaPrima: lote.materiaPrima,
     fechaIngreso: lote.fechaIngreso.slice(0, 10),
+    // No editable en PATCH /lotes/:id (ver UpdateLoteDto): en edición se
+    // muestra de solo lectura más abajo, no hace falta en el form value.
+    cantidad: lote.cantidad != null ? String(lote.cantidad) : "",
     parametros: buildParametrosVacios(),
     destinoInicial: lote.destinoInicial ?? "",
     ubicacionInicial: lote.ubicacionInicial ?? "",
@@ -104,9 +110,18 @@ function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boo
   if (!values.fechaIngreso) errors.fechaIngreso = "La fecha de ingreso es obligatoria";
   if (!values.destinoInicial) errors.destinoInicial = "El destino inicial es obligatorio";
 
-  // PATCH /lotes/:id no acepta parametros (ver UpdateLoteDto / LoteService.update
-  // en el backend): en edición no hay nada que validar acá.
+  // PATCH /lotes/:id no acepta cantidad ni parametros (ver UpdateLoteDto /
+  // LoteService.update en el backend): en edición no hay nada más que
+  // validar acá.
   if (esEdicion) return errors;
+
+  // HU-68: obligatoria en el backend (CreateLoteDto.cantidad, @IsPositive) —
+  // habilita el consumo parcial posterior de este lote.
+  if (values.cantidad.trim() === "") {
+    errors.cantidad = "La cantidad ingresada es obligatoria";
+  } else if (Number.isNaN(Number(values.cantidad)) || Number(values.cantidad) <= 0) {
+    errors.cantidad = "Debe ser un número mayor a 0";
+  }
 
   // Los parámetros son opcionales campo por campo, pero el backend exige al
   // menos uno (@ArrayMinSize(1) en CreateLoteDto): solo se valida formato y
@@ -245,6 +260,7 @@ export function LoteFormModal({
         destinoInicial: values.destinoInicial as DestinoLote,
         ubicacionInicial: values.ubicacionInicial || undefined,
         parametros,
+        cantidad: Number(values.cantidad),
       });
 
       setWarnings(respuesta.warnings ?? []);
@@ -458,6 +474,29 @@ export function LoteFormModal({
             onChange={(e) => setValues((prev) => ({ ...prev, fechaIngreso: e.target.value }))}
             error={errors.fechaIngreso}
           />
+
+          {/* HU-68: cantidad total ingresada, habilita el consumo parcial
+              posterior. No editable en PATCH /lotes/:id (ver UpdateLoteDto). */}
+          {esEdicion ? (
+            <div>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Cantidad ingresada
+              </span>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {lote!.cantidad != null ? `${lote!.cantidad} L` : "No registrada"}
+              </p>
+            </div>
+          ) : (
+            <Input
+              id="lote-cantidad"
+              type="number"
+              inputMode="decimal"
+              label="Cantidad ingresada (L) *"
+              value={values.cantidad}
+              onChange={(e) => setValues((prev) => ({ ...prev, cantidad: e.target.value }))}
+              error={errors.cantidad}
+            />
+          )}
         </div>
 
         {/* Parámetros de calidad: PATCH /lotes/:id no los acepta (ver

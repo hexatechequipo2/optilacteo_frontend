@@ -61,6 +61,11 @@ export interface Lote {
   ubicacionInicial?: Ubicacion | null;
   estado: EstadoLote;
   parametros: LoteParametro[];
+  // HU-68: cantidad total ingresada y saldo remanente para consumo parcial.
+  // Nullable: lotes registrados antes de HU-68 no lo tienen y no admiten
+  // consumo parcial (ver lote-consumo.service.ts en el backend).
+  cantidad?: number | null;
+  cantidadDisponible?: number | null;
   createdAt: string;
   warning?: string;
   rendimiento?: number | null; // HU-62: cargado opcionalmente al finalizar
@@ -80,6 +85,9 @@ export interface CreateLoteDto {
   destinoInicial?: DestinoLote;
   ubicacionInicial?: Ubicacion;
   parametros: LoteParametro[];
+  // HU-68: obligatoria en el backend (CreateLoteDto.cantidad, @IsPositive).
+  // Habilita el consumo parcial posterior (POST /lotes/:id/consumos).
+  cantidad: number;
 }
 
 // PATCH /lotes/:id (LoteService.update en el backend) solo aplica estos 3
