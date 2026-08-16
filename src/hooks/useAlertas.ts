@@ -1,10 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createSocket } from "../services/socket";
 import { notificacionService } from "../services/notificacion.service";
 import { alertaCierreService } from "../services/alertaCierre.service";
 import type { Notificacion } from "../types/notificacion.types";
-import { esAlertaUmbral } from "../types/notificacion.types";
+import { EstadoAlerta, esAlertaSensorDesconectado, esAlertaUmbral } from "../types/notificacion.types";
 import type { AlertaConCierre } from "../types/alertaCierre.types";
+
+// HU-31: a diferencia de la creación (push por WS, evento "notificacion:nueva"),
+// el backend resuelve una alerta de sensor desconectado con un UPDATE directo
+// al repositorio (resolverAlertaSensorDesconectado, disparado desde
+// LecturaSensorService.ingresar) sin emitir ningún evento — no hay forma de
+// enterarse en vivo de que se cerró. TODO(backend): emitir algo como
+// "notificacion:actualizada" para poder sacar este polling. Mientras tanto,
+// se refresca la lista cada 30s (bastante más laxo que el "EN VIVO" del WS,
+// que sigue cubriendo la aparición de alertas nuevas) para que el cierre
+// automático (AC4) se refleje sin que el usuario tenga que recargar.
+const POLLING_RESOLUCION_MS = 30_000;
 
 interface UseAlertasResult {
   alertas: AlertaConCierre[];
@@ -72,6 +83,34 @@ export function useAlertas(): UseAlertasResult {
     };
   }, [isLoading]);
 
+  // HU-31: ver comentario de POLLING_RESOLUCION_MS arriba — solo pega contra
+  // el backend si hay alguna alerta de sensor desconectado todavía abierta
+  // en pantalla (el ref evita cerrar sobre un `notificaciones` desactualizado
+  // dentro del interval sin tener que reiniciarlo en cada cambio de estado).
+  const hayAlertasDesconexionAbiertasRef = useRef(false);
+  hayAlertasDesconexionAbiertasRef.current = notificaciones.some(
+    (n) => esAlertaSensorDesconectado(n) && n.estado === EstadoAlerta.ABIERTA,
+  );
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const interval = setInterval(async () => {
+      if (!hayAlertasDesconexionAbiertasRef.current) return;
+      try {
+        const result = await notificacionService.getAll({ limit: 100 });
+        setNotificaciones(result);
+      } catch {
+        // Silencioso a propósito: es un refresh de background, no hay
+        // acción del usuario que abortar ni feedback útil que mostrarle
+        // por un fallo puntual — el próximo tick reintenta solo.
+      }
+    }, POLLING_RESOLUCION_MS);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
+
   // TODO(backend): no existe forma de volver una notificación a "no leída"
   // (mismo gap que useNotificaciones.ts) — no hay marcarNoLeida acá tampoco.
   const marcarLeida = useCallback(async (id: number) => {
@@ -121,12 +160,17 @@ export function useAlertas(): UseAlertasResult {
     [notificaciones],
   );
 
+  // HU-31: el listado ahora combina alerta_umbral (HU-25) y
+  // alerta_sensor_desconectado — AlertasPage.tsx decide con qué card/panel
+  // renderizar cada una según `alerta.tipo`.
   const alertas = useMemo<AlertaConCierre[]>(
     () =>
-      notificaciones.filter(esAlertaUmbral).map((alerta) => ({
-        ...alerta,
-        cerradaEn: alerta.fechaResolucion ?? null,
-      })),
+      notificaciones
+        .filter((n) => esAlertaUmbral(n) || esAlertaSensorDesconectado(n))
+        .map((alerta) => ({
+          ...alerta,
+          cerradaEn: alerta.fechaResolucion ?? null,
+        })) as AlertaConCierre[],
     [notificaciones],
   );
 

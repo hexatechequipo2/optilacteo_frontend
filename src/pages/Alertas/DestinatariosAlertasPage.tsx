@@ -1,6 +1,8 @@
 import { Layout } from "../../components/layout/Layout";
 import { NivelDestinatariosCard } from "./components/NivelDestinatariosCard";
+import { UmbralDesconexionCard } from "./components/UmbralDesconexionCard";
 import { useConfiguracionAlertas } from "../../hooks/useConfiguracionAlertas";
+import { useConfiguracionAlertaDesconexion } from "../../hooks/useConfiguracionAlertaDesconexion";
 import { useRoles } from "../../hooks/useRoles";
 import { useUsuariosActivos } from "../../hooks/useUsuariosActivos";
 import { NivelAlerta } from "../../types/notificacion.types";
@@ -17,6 +19,12 @@ const NIVELES: NivelAlerta[] = [NivelAlerta.CRITICA, NivelAlerta.ADVERTENCIA, Ni
 export default function DestinatariosAlertasPage() {
   const { configuraciones, isLoading, error, agregarRol, agregarUsuario, quitarDestinatario } =
     useConfiguracionAlertas();
+  const {
+    configuracion: configuracionDesconexion,
+    isLoading: isLoadingDesconexion,
+    isSaving: isSavingDesconexion,
+    actualizarUmbral,
+  } = useConfiguracionAlertaDesconexion();
   const { roles, isLoading: isLoadingRoles } = useRoles();
   const {
     usuarios,
@@ -33,6 +41,19 @@ export default function DestinatariosAlertasPage() {
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Quién recibe cada nivel de alerta · los cambios se aplican de inmediato, sin reinicio
         </p>
+      </div>
+
+      {/* HU-31: umbral de desconexión de sensores, misma gobernanza
+          (Admin/Gerente) que los destinatarios por nivel de abajo — vive
+          en esta pantalla en vez de una ruta nueva para no fragmentar
+          "configuración de alertas" en dos entradas de menú. */}
+      <div className="mb-6">
+        <UmbralDesconexionCard
+          configuracion={configuracionDesconexion}
+          isLoading={isLoadingDesconexion}
+          isSaving={isSavingDesconexion}
+          onActualizar={actualizarUmbral}
+        />
       </div>
 
       {(error || errorUsuarios) && (
