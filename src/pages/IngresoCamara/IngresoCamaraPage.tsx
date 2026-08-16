@@ -3,29 +3,37 @@ import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
 import { INGRESOS_CAMARA_MOCK } from "./constants/ingresoCamaraMock";
+import { IngresoCamaraFormModal } from "./IngresoCamaraFormModal";
+import type { IngresoCamara } from "../../types/ingresoCamara.types";
 
 const HEADERS = ["SKU", "CANTIDAD", "LOTE DE ORIGEN", "FECHA"];
 
 const TODOS_LOS_SKUS = "__todos__";
 
-// HU-67 Parte 1/2: solo maquetado. La tabla filtra el array mock en el
-// cliente y el botón "+ Nuevo ingreso" todavía no abre nada — eso, junto con
-// la conexión al backend real, queda para la Parte 2/2.
+// HU-67 Parte 2/2: maquetado del formulario "Nuevo ingreso a cámara". El
+// modal valida en el cliente y agrega la fila al array mock local (sin
+// llamar a ningún endpoint) — falta conectar al backend real.
 export default function IngresoCamaraPage() {
+  const [ingresos, setIngresos] = useState<IngresoCamara[]>(INGRESOS_CAMARA_MOCK);
   const [skuFiltro, setSkuFiltro] = useState(TODOS_LOS_SKUS);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const skuOptions = useMemo(() => {
-    const skusUnicos = Array.from(new Set(INGRESOS_CAMARA_MOCK.map((i) => i.sku)));
+    const skusUnicos = Array.from(new Set(ingresos.map((i) => i.sku)));
     return [
       { value: TODOS_LOS_SKUS, label: "Todos los SKUs" },
       ...skusUnicos.map((sku) => ({ value: sku, label: sku })),
     ];
-  }, []);
+  }, [ingresos]);
 
   const ingresosFiltrados = useMemo(() => {
-    if (skuFiltro === TODOS_LOS_SKUS) return INGRESOS_CAMARA_MOCK;
-    return INGRESOS_CAMARA_MOCK.filter((i) => i.sku === skuFiltro);
-  }, [skuFiltro]);
+    if (skuFiltro === TODOS_LOS_SKUS) return ingresos;
+    return ingresos.filter((i) => i.sku === skuFiltro);
+  }, [ingresos, skuFiltro]);
+
+  const handleNuevoIngreso = (nuevoIngreso: Omit<IngresoCamara, "id">) => {
+    setIngresos((prev) => [{ id: crypto.randomUUID(), ...nuevoIngreso }, ...prev]);
+  };
 
   return (
     <Layout breadcrumb="Consola > Ingreso a cámara">
@@ -38,7 +46,7 @@ export default function IngresoCamaraPage() {
             Registro de SKUs listos para almacenamiento en cámara
           </p>
         </div>
-        <Button type="button" className="!w-auto px-6">
+        <Button type="button" className="!w-auto px-6" onClick={() => setIsModalOpen(true)}>
           + Nuevo ingreso
         </Button>
       </div>
@@ -98,6 +106,12 @@ export default function IngresoCamaraPage() {
           </p>
         )}
       </div>
+
+      <IngresoCamaraFormModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleNuevoIngreso}
+      />
     </Layout>
   );
 }
