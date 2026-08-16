@@ -6,7 +6,11 @@
 // nombre que ya usan AlertaDetallePanel.tsx, AlertasFiltros.tsx,
 // alertas.constants.ts y el mock de HU-28 (historialAlertas.service.ts, que
 // reusa AlertaConCierre como fila y no debería tener que cambiar por esto).
-import { EstadoAlerta as EstadoAlertaDeNotificacion, type AlertaNotificacion } from "./notificacion.types";
+import {
+  EstadoAlerta as EstadoAlertaDeNotificacion,
+  type AlertaNotificacion,
+  type AlertaSensorDesconectadoNotificacion,
+} from "./notificacion.types";
 
 export const EstadoAlerta = EstadoAlertaDeNotificacion;
 export type EstadoAlerta = EstadoAlertaDeNotificacion;
@@ -20,4 +24,17 @@ export interface CierreAlerta {
 // AlertaNotificacion (HU-25) + el estado de cierre (HU-27). Superset de
 // AlertaNotificacion a propósito: todo lo que ya consume AlertaNotificacion
 // (AlertaCard, ReglasActivasPanel, etc.) sigue funcionando sin cambios.
-export interface AlertaConCierre extends AlertaNotificacion, CierreAlerta {}
+export interface AlertaUmbralConCierre extends AlertaNotificacion, CierreAlerta {}
+
+// HU-31: mismo criterio que AlertaUmbralConCierre, para alertas de sensor
+// desconectado. A diferencia de las de umbral, su cierre es siempre
+// automático (ver resolverAlertaSensorDesconectado en el backend) — no hay
+// flujo de accionCorrectiva manual para este tipo, pero el campo queda en
+// el shape igual (siempre null) para no romper el union con CierreAlerta.
+export interface AlertaSensorDesconectadoConCierre
+  extends AlertaSensorDesconectadoNotificacion,
+    CierreAlerta {}
+
+// Unión: AlertasPage (HU-25/31) maneja los dos tipos en un mismo listado.
+// Discriminar por `tipo` (TipoNotificacion) para angostar a uno u otro.
+export type AlertaConCierre = AlertaUmbralConCierre | AlertaSensorDesconectadoConCierre;

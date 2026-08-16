@@ -4,12 +4,13 @@ import { Button } from "../../../components/ui/Button";
 import { Badge } from "../../../components/ui/Badge";
 import { FieldError } from "../../../components/ui/FieldError";
 import { ValorConUnidad } from "../../../components/ValorConUnidad";
-import type { AlertaConCierre } from "../../../types/alertaCierre.types";
+import type { AlertaUmbralConCierre } from "../../../types/alertaCierre.types";
 import { EstadoAlerta } from "../../../types/alertaCierre.types";
 import { ESTADO_ALERTA_META, NIVEL_ALERTA_META, PARAMETRO_LABEL, UNIDAD_POR_PARAMETRO } from "../constants/alertas.constants";
 
 interface AlertaDetallePanelProps {
-  alerta: AlertaConCierre | null;
+  // HU-31: específico de alerta_umbral, ver mismo comentario en AlertaCard.tsx.
+  alerta: AlertaUmbralConCierre | null;
   onClose: () => void;
   // HU-27: guarda el cierre (mock por ahora, ver alertaCierre.service.ts).
   onCerrar: (id: number, accionCorrectiva: string) => Promise<void>;

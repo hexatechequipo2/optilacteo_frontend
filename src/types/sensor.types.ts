@@ -40,6 +40,10 @@ export interface Sensor {
   rangoMaxFavor: number;
   estado: EstadoSensor;
   ultimaLectura?: string | null;
+  // HU-31: override opcional del umbral de desconexión (minutos) para este
+  // sensor puntual. null/undefined = usa el umbral configurado a nivel
+  // empresa (GET /notificaciones/configuracion-alerta-desconexion).
+  umbralDesconexionMinutos?: number | null;
   // Derivado del historial de asociaciones, no es una columna propia del sensor.
   loteActualId?: number | null;
   empresaId: number;
@@ -68,7 +72,11 @@ export interface CreateSensorDto {
 // la ubicación no se puede cambiar una vez creado el sensor. El estado se
 // cambia por endpoints dedicados (DELETE para baja lógica, PATCH /activar
 // para reactivar, ver sensorService.desactivar/activar), no por este DTO.
-export type UpdateSensorDto = Partial<Omit<CreateSensorDto, "ubicacion">>;
+// umbralDesconexionMinutos (HU-31) se agrega aparte porque no forma parte
+// de CreateSensorDto en el backend — es edit-only, no se setea al alta.
+export type UpdateSensorDto = Partial<Omit<CreateSensorDto, "ubicacion">> & {
+  umbralDesconexionMinutos?: number | null;
+};
 
 export interface SensorFilterQuery {
   nombre?: string;

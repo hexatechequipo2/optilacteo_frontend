@@ -1,48 +1,14 @@
-import {
-  Activity,
-  Check,
-  Droplet,
-  Gauge,
-  Grid2x2,
-  Radar,
-  Target,
-  Thermometer,
-  type LucideIcon,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, WifiOff } from "lucide-react";
 import { Badge } from "../../../components/ui/Badge";
-import { ValorConUnidad } from "../../../components/ValorConUnidad";
-import { Parametro } from "../../../types/configParametro.types";
-import type { AlertaUmbralConCierre } from "../../../types/alertaCierre.types";
+import type { AlertaSensorDesconectadoConCierre } from "../../../types/alertaCierre.types";
 import { NivelAlerta } from "../../../types/notificacion.types";
-import {
-  ESTADO_ALERTA_META,
-  NIVEL_ALERTA_META,
-  PARAMETRO_LABEL,
-  UNIDAD_POR_PARAMETRO,
-} from "../constants/alertas.constants";
+import { ESTADO_ALERTA_META, NIVEL_ALERTA_META } from "../constants/alertas.constants";
 
-// Mismo criterio visual que PARAMETRO_ICON en EstadoDiagnosticoTab.tsx
-// (Sensores), para que un parámetro se identifique con el mismo ícono en
-// las dos pantallas.
-const PARAMETRO_ICON: Record<Parametro, LucideIcon> = {
-  [Parametro.PH]: Target,
-  [Parametro.TEMPERATURA]: Thermometer,
-  [Parametro.DENSIDAD]: Grid2x2,
-  [Parametro.GRASA]: Droplet,
-  [Parametro.PROTEINA]: Gauge,
-  [Parametro.ACIDEZ]: Activity,
-  [Parametro.CONDUCTIVIDAD]: Radar,
-};
-
-interface AlertaCardProps {
-  // HU-31: este componente es específico de alerta_umbral (única forma con
-  // parametro/valor/umbralMin/umbralMax) — AlertasPage decide qué card usar
-  // según `alerta.tipo` antes de llegar acá. Ver AlertaSensorDesconectadoCard
-  // para el otro tipo.
-  alerta: AlertaUmbralConCierre;
+interface AlertaSensorDesconectadoCardProps {
+  alerta: AlertaSensorDesconectadoConCierre;
   onMarcarLeida: (id: number) => void;
-  // HU-27: abre el panel de detalle/cierre.
-  onSeleccionar: (alerta: AlertaUmbralConCierre) => void;
+  onSeleccionar: (alerta: AlertaSensorDesconectadoConCierre) => void;
 }
 
 function formatearHora(timestamp: string): string {
@@ -54,16 +20,41 @@ function formatearHora(timestamp: string): string {
   });
 }
 
-// AC3: cada card muestra parámetro afectado, valor registrado, umbral
-// configurado y lote asociado, además de la hora y el nivel.
-export function AlertaCard({ alerta, onMarcarLeida, onSeleccionar }: AlertaCardProps) {
+// Mismo criterio que formatearHace en EstadoDiagnosticoTab.tsx (Sensores) —
+// se duplica en vez de extraerse a un util compartido porque son las dos
+// únicas pantallas que lo necesitan y difieren en el tick (acá cada 30s
+// alcanza, no hace falta el segundo a segundo de la grilla en vivo).
+function formatearTranscurrido(timestamp: string | null, ahora: number): string {
+  if (!timestamp) return "sin lectura registrada";
+  const diffSeg = Math.floor((ahora - new Date(timestamp).getTime()) / 1000);
+  if (diffSeg < 60) return `hace ${diffSeg} s`;
+  if (diffSeg < 3600) return `hace ${Math.floor(diffSeg / 60)} min`;
+  const horas = Math.floor(diffSeg / 3600);
+  const minRestantes = Math.floor((diffSeg % 3600) / 60);
+  return `hace ${horas} h ${minRestantes} min`;
+}
+
+// HU-31 AC2/AC3: alerta crítica de sensor desconectado — nombre del sensor,
+// última lectura y tiempo transcurrido. Hermana de AlertaCard.tsx (HU-25),
+// pero con la forma de datos propia de este tipo (sensorNombre/ultimaLectura/
+// minutosSinDatos en vez de parametro/valor/umbralMin/umbralMax) — ver
+// AlertasPage.tsx, que decide cuál de las dos renderizar según `alerta.tipo`.
+export function AlertaSensorDesconectadoCard({
+  alerta,
+  onMarcarLeida,
+  onSeleccionar,
+}: AlertaSensorDesconectadoCardProps) {
   const { data } = alerta;
   const meta = NIVEL_ALERTA_META[alerta.nivelAlerta];
   const NivelIcon = meta.icon;
-  const ParametroIcon = PARAMETRO_ICON[data.parametro];
-  const unidad = UNIDAD_POR_PARAMETRO[data.parametro];
   const estadoMeta = ESTADO_ALERTA_META[alerta.estado];
   const EstadoIcon = estadoMeta.icon;
+
+  const [ahora, setAhora] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setAhora(Date.now()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div
@@ -77,21 +68,17 @@ export function AlertaCard({ alerta, onMarcarLeida, onSeleccionar }: AlertaCardP
         }
       }}
       className={`flex cursor-pointer flex-col gap-3 rounded-xl border-l-4 border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 sm:p-5 ${
-        alerta.nivelAlerta === NivelAlerta.CRITICA
-          ? "border-l-red-500"
-          : alerta.nivelAlerta === NivelAlerta.ADVERTENCIA
-            ? "border-l-amber-500"
-            : "border-l-blue-500"
+        alerta.nivelAlerta === NivelAlerta.CRITICA ? "border-l-red-500" : "border-l-amber-500"
       } ${alerta.leida ? "opacity-60" : ""}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-            <ParametroIcon className="h-4 w-4" />
+            <WifiOff className="h-4 w-4" />
           </div>
           <div>
             <p className="text-sm font-semibold text-slate-900 dark:text-white">
-              {PARAMETRO_LABEL[data.parametro]}
+              Sensor desconectado — {data.sensorNombre}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">{alerta.mensaje}</p>
           </div>
@@ -120,22 +107,17 @@ export function AlertaCard({ alerta, onMarcarLeida, onSeleccionar }: AlertaCardP
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
         <div>
-          <p className="text-xs text-slate-400 dark:text-slate-500">Valor registrado</p>
-          <ValorConUnidad valor={data.valor} unidad={unidad} />
-        </div>
-        <div>
-          <p className="text-xs text-slate-400 dark:text-slate-500">Umbral configurado</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">Última lectura</p>
           <span className="text-slate-700 dark:text-slate-300">
-            {data.umbralMin}–{data.umbralMax}
-            {unidad ? ` ${unidad}` : ""}
+            {formatearTranscurrido(data.ultimaLectura, ahora)}
           </span>
         </div>
         <div>
-          <p className="text-xs text-slate-400 dark:text-slate-500">Lote asociado</p>
-          <span className="text-slate-700 dark:text-slate-300">{data.loteCodigo}</span>
+          <p className="text-xs text-slate-400 dark:text-slate-500">Tiempo sin datos</p>
+          <span className="text-slate-700 dark:text-slate-300">{data.minutosSinDatos} min</span>
         </div>
         <div>
-          <p className="text-xs text-slate-400 dark:text-slate-500">Hora</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">Hora de la alerta</p>
           <span className="text-slate-700 dark:text-slate-300">{formatearHora(alerta.createdAt)}</span>
         </div>
       </div>
@@ -148,9 +130,6 @@ export function AlertaCard({ alerta, onMarcarLeida, onSeleccionar }: AlertaCardP
               e.stopPropagation();
               onMarcarLeida(alerta.id);
             }}
-            // La card entera es role="button" (abre el panel). Sin esto, el
-            // Enter que el navegador dispara sobre este botón también burbujea
-            // como keydown hasta el div y abre el panel al mismo tiempo.
             onKeyDown={(e) => e.stopPropagation()}
             className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >

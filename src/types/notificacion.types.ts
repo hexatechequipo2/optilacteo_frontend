@@ -13,6 +13,11 @@ import type { Parametro, TipoMateriaPrima } from "./configParametro.types";
 export const TipoNotificacion = {
   LOTE_NO_APTO: "lote_no_apto",
   ALERTA_UMBRAL: "alerta_umbral",
+  // HU-31: el backend detecta sensores que dejaron de mandar datos por más
+  // de X minutos (ConfiguracionAlertaDesconexion / Sensor.umbralDesconexionMinutos)
+  // y genera esta alerta para cada destinatario configurado en nivel CRITICA
+  // (misma tabla que ya administra DestinatariosAlertasPage, HU-26/29).
+  ALERTA_SENSOR_DESCONECTADO: "alerta_sensor_desconectado",
 } as const;
 
 export type TipoNotificacion = (typeof TipoNotificacion)[keyof typeof TipoNotificacion];
@@ -52,6 +57,15 @@ export interface Notificacion {
   estado?: EstadoAlerta | null;
   accionCorrectiva?: string | null;
   fechaResolucion?: string | null;
+  // NotificacionMapper.toResponse (backend) siempre manda estos 4 campos a
+  // nivel raíz, no solo para ALERTA_UMBRAL/ALERTA_SENSOR_DESCONECTADO — para
+  // el resto de tipos (ej. lote_no_apto) quedan en null. loteId/loteCodigo/
+  // parametro solo se completan para ALERTA_UMBRAL; sensorId solo para
+  // ALERTA_SENSOR_DESCONECTADO (HU-31).
+  loteId?: number | null;
+  loteCodigo?: string | null;
+  parametro?: string | null;
+  sensorId?: number | null;
   leida: boolean;
   createdAt: string;
 }
@@ -102,6 +116,40 @@ export interface AlertaNotificacion extends Notificacion {
 
 export function esAlertaUmbral(n: Notificacion): n is AlertaNotificacion {
   return n.tipo === TipoNotificacion.ALERTA_UMBRAL && n.nivelAlerta != null && n.data != null;
+}
+
+// HU-31: forma real de `data` cuando tipo === ALERTA_SENSOR_DESCONECTADO
+// (ver NotificacionesService.generarAlertaSensorDesconectado, backend).
+// A diferencia de AlertaUmbralData, loteId/loteCodigo/parametro a nivel
+// raíz de Notificacion quedan siempre null para este tipo — el backend
+// nunca los popula acá (ver NotificacionMapper.toEntity, CrearNotificacionParams
+// no recibe loteId/parametro en esta llamada). sensorId sí viene poblado
+// a nivel raíz, además de repetirse en `data`.
+export interface AlertaSensorDesconectadoData {
+  [key: string]: unknown;
+  sensorId: number;
+  sensorNombre: string;
+  ultimaLectura: string | null;
+  minutosSinDatos: number;
+}
+
+// Vista angosta de Notificacion para la sección "Sensor desconectado" de
+// HU-31, mismo criterio que AlertaNotificacion (HU-25) de arriba.
+export interface AlertaSensorDesconectadoNotificacion extends Notificacion {
+  tipo: typeof TipoNotificacion.ALERTA_SENSOR_DESCONECTADO;
+  nivelAlerta: NivelAlerta;
+  data: AlertaSensorDesconectadoData;
+  estado: EstadoAlerta;
+  accionCorrectiva: string | null;
+  sensorId: number;
+}
+
+export function esAlertaSensorDesconectado(
+  n: Notificacion,
+): n is AlertaSensorDesconectadoNotificacion {
+  return (
+    n.tipo === TipoNotificacion.ALERTA_SENSOR_DESCONECTADO && n.nivelAlerta != null && n.data != null
+  );
 }
 
 // GET /notificaciones ahora pagina (NotificacionPaginadaResponseDto en el

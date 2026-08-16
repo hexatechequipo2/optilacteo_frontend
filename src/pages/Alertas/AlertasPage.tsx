@@ -6,13 +6,15 @@ import { useAlertas } from "../../hooks/useAlertas";
 import { useLotes } from "../../hooks/useLotes";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import { useAuth } from "../../hooks/useAuth";
-import { NivelAlerta } from "../../types/notificacion.types";
+import { NivelAlerta, TipoNotificacion, esAlertaUmbral } from "../../types/notificacion.types";
 import { EstadoAlerta } from "../../types/alertaCierre.types";
 import { TABS_ALERTAS, TAB_A_NIVEL, type TabAlertas } from "./constants/alertas.constants";
 import { ContadoresAlertas } from "./components/ContadoresAlertas";
 import { AlertasFiltros, type EstadoAlertaFiltro } from "./components/AlertasFiltros";
 import { AlertaCard } from "./components/AlertaCard";
 import { AlertaDetallePanel } from "./components/AlertaDetallePanel";
+import { AlertaSensorDesconectadoCard } from "./components/AlertaSensorDesconectadoCard";
+import { AlertaSensorDesconectadoDetallePanel } from "./components/AlertaSensorDesconectadoDetallePanel";
 import { ReglasActivasPanel } from "./components/ReglasActivasPanel";
 
 // HU-27: mismo rol que ya filtra toda la ruta /alertas (App.tsx) — se repite
@@ -63,7 +65,12 @@ export default function AlertasPage() {
   // esté activa).
   const alertasFiltradas = useMemo(() => {
     return alertas.filter((alerta) => {
-      if (loteId !== "todos" && String(alerta.data.loteId) !== loteId) return false;
+      // HU-31: alerta_sensor_desconectado no tiene loteId (no está atada a
+      // ningún lote) — filtrar por un lote puntual la deja afuera, pero
+      // sigue visible con "Todos los lotes" (default del selector).
+      if (loteId !== "todos") {
+        if (!esAlertaUmbral(alerta) || String(alerta.data.loteId) !== loteId) return false;
+      }
       // cerrarAlerta() también marca la alerta como leída (HU-27), así que
       // "Solo no leídas" + estado "Cerradas" siempre daría vacío si se
       // aplicaran los dos filtros a la vez. El toggle de leída solo tiene
@@ -88,6 +95,12 @@ export default function AlertasPage() {
     () => alertas.find((a) => a.id === alertaSeleccionadaId) ?? null,
     [alertas, alertaSeleccionadaId],
   );
+  // HU-31: angostado por tipo para cada panel — ver comentario donde se
+  // renderizan más abajo.
+  const alertaSeleccionadaUmbral =
+    alertaSeleccionada && esAlertaUmbral(alertaSeleccionada) ? alertaSeleccionada : null;
+  const alertaSeleccionadaSensor =
+    alertaSeleccionada && !esAlertaUmbral(alertaSeleccionada) ? alertaSeleccionada : null;
 
   const contadores = useMemo(
     () => ({
@@ -175,22 +188,42 @@ export default function AlertasPage() {
               </p>
             </div>
           ) : (
-            listado.map((alerta) => (
-              <AlertaCard
-                key={alerta.id}
-                alerta={alerta}
-                onMarcarLeida={marcarLeida}
-                onSeleccionar={(a) => setAlertaSeleccionadaId(a.id)}
-              />
-            ))
+            listado.map((alerta) =>
+              alerta.tipo === TipoNotificacion.ALERTA_UMBRAL ? (
+                <AlertaCard
+                  key={alerta.id}
+                  alerta={alerta}
+                  onMarcarLeida={marcarLeida}
+                  onSeleccionar={(a) => setAlertaSeleccionadaId(a.id)}
+                />
+              ) : (
+                <AlertaSensorDesconectadoCard
+                  key={alerta.id}
+                  alerta={alerta}
+                  onMarcarLeida={marcarLeida}
+                  onSeleccionar={(a) => setAlertaSeleccionadaId(a.id)}
+                />
+              ),
+            )
           )}
         </div>
 
-        <ReglasActivasPanel alertas={alertas} />
+        {/* HU-31: solo el subconjunto alerta_umbral — las reglas acá son
+            umbralMin/umbralMax por parámetro+materia prima, que no aplica a
+            alerta_sensor_desconectado. */}
+        <ReglasActivasPanel alertas={alertas.filter(esAlertaUmbral)} />
       </div>
 
+      {/* HU-31: dos paneles en vez de uno ramificado adentro — cada uno ya
+          sabe devolver null si su `alerta` no corresponde (mismo patrón que
+          ya tenían con `alerta: AlertaConCierre | null`). Evita narrowing
+          frágil de TS sobre una condición compuesta en un ternario. */}
+      <AlertaSensorDesconectadoDetallePanel
+        alerta={alertaSeleccionadaSensor}
+        onClose={() => setAlertaSeleccionadaId(null)}
+      />
       <AlertaDetallePanel
-        alerta={alertaSeleccionada}
+        alerta={alertaSeleccionadaUmbral}
         onClose={() => setAlertaSeleccionadaId(null)}
         onCerrar={cerrarAlerta}
         puedeCerrar={user?.rolNombre === ROL_QUE_PUEDE_CERRAR}

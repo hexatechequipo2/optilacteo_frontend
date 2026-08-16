@@ -6,6 +6,7 @@ import type {
   ConfiguracionNotificacionNivelUsuario,
   CrearConfiguracionNotificacionDto,
 } from "../types/configuracionNotificacion.types";
+import type { ConfiguracionAlertaDesconexion } from "../types/configuracionAlertaDesconexion.types";
 
 export interface NotificacionFilterQuery {
   page?: number;
@@ -70,6 +71,30 @@ function sinPasswordDeUsuario(
   };
   return { ...config, usuario: { id, name, email } };
 }
+
+// HU-31: umbral de desconexión (minutos) a nivel empresa. Mismo controller
+// que notificacionService/configuracionNotificacionService, sub-recurso
+// /notificaciones/configuracion-alerta-desconexion — restringido a
+// Administrador/Gerente en el backend (mismo @Roles que
+// configuracionNotificacionService de arriba).
+export const configuracionAlertaDesconexionService = {
+  // El backend hace obtenerOCrear: si la empresa todavía no tiene fila,
+  // la crea con el default (15 min) en el mismo GET — nunca devuelve 404.
+  get: async (): Promise<ConfiguracionAlertaDesconexion> => {
+    const { data } = await api.get<ConfiguracionAlertaDesconexion>(
+      "/notificaciones/configuracion-alerta-desconexion",
+    );
+    return data;
+  },
+
+  actualizar: async (umbralMinutos: number): Promise<ConfiguracionAlertaDesconexion> => {
+    const { data } = await api.patch<ConfiguracionAlertaDesconexion>(
+      "/notificaciones/configuracion-alerta-desconexion",
+      { umbralMinutos },
+    );
+    return data;
+  },
+};
 
 export function extraerMensajeError(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err) && err.response?.data?.message) {
