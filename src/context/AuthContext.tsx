@@ -6,6 +6,12 @@ import {
   useContext,
 } from "react";
 import { authService } from "../services/auth.service";
+import { getAccessToken, setAccessToken, subscribeAccessToken } from "../services/tokenStore";
+import {
+  clearRefreshToken,
+  getStoredRefreshToken,
+  storeRefreshToken,
+} from "../services/refreshTokenStorage";
 import type { LoginResponse } from "../types/usuario.types";
 
 type AuthUser = LoginResponse["user"];
@@ -23,60 +29,32 @@ export const AuthContext = createContext<AuthContextType | undefined>(
   undefined,
 );
 
-const TOKEN_KEY = "token";
 const USER_KEY = "usuario";
-const REFRESH_TOKEN_KEY = "refreshToken";
 
 function getStoredUser(): AuthUser | null {
   const raw = localStorage.getItem(USER_KEY);
   return raw ? (JSON.parse(raw) as AuthUser) : null;
 }
 
-type RefreshTokenStorage = "local" | "session";
-
-// El backend rota el refresh_token en cada uso (el anterior queda invalidado),
-// así que hay que recordar en qué storage vive para reescribirlo ahí mismo.
-function getStoredRefreshToken(): {
-  token: string;
-  storage: RefreshTokenStorage;
-} | null {
-  const local = localStorage.getItem(REFRESH_TOKEN_KEY);
-  if (local) return { token: local, storage: "local" };
-
-  const session = sessionStorage.getItem(REFRESH_TOKEN_KEY);
-  if (session) return { token: session, storage: "session" };
-
-  return null;
-}
-
-// rememberMe: true -> localStorage (sobrevive al cierre del navegador)
-// rememberMe: false -> sessionStorage (se pierde al cerrar el navegador)
-function storeRefreshToken(refreshToken: string, storage: RefreshTokenStorage) {
-  if (storage === "local") {
-    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-  } else {
-    sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-  }
-}
-
-function clearRefreshToken() {
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() =>
-    sessionStorage.getItem(TOKEN_KEY),
-  );
+  // El access_token vive en memoria (tokenStore), no en sessionStorage: al
+  // recargar la página se pierde acá y en el módulo por igual, y se
+  // restaura solo a través del flujo de isInitializing de más abajo.
+  const [token, setToken] = useState<string | null>(() => getAccessToken());
   const [user, setUser] = useState<AuthUser | null>(() => getStoredUser());
   const [isLoading, setIsLoading] = useState(false);
   // Si no hay access_token pero sí un refresh token persistido, hay que
   // intentar restaurar la sesión antes de dejar que las rutas protegidas decidan.
   const [isInitializing, setIsInitializing] = useState(
-    () => !sessionStorage.getItem(TOKEN_KEY) && !!getStoredRefreshToken(),
+    () => !getAccessToken() && !!getStoredRefreshToken(),
   );
+
+  // Mantiene el estado de React sincronizado si el token en memoria cambia
+  // "por su cuenta" (p. ej. el interceptor de axios lo refresca en segundo
+  // plano ante un 401 de cualquier request, no solo por login/logout acá).
+  useEffect(() => {
+    return subscribeAccessToken(setToken);
+  }, []);
 
   useEffect(() => {
     if (!isInitializing) return;
@@ -90,15 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const data = await authService.refresh(stored.token);
-        sessionStorage.setItem(TOKEN_KEY, data.access_token);
+        setAccessToken(data.access_token);
         storeRefreshToken(data.refresh_token, stored.storage);
-        setToken(data.access_token);
       } catch (error) {
         console.error("No se pudo restaurar la sesión:", error);
-        sessionStorage.removeItem(TOKEN_KEY);
+        setAccessToken(null);
         localStorage.removeItem(USER_KEY);
         clearRefreshToken();
-        setToken(null);
         setUser(null);
       } finally {
         setIsInitializing(false);
@@ -114,10 +90,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const data = await authService.login({ email, password, rememberMe });
-      sessionStorage.setItem(TOKEN_KEY, data.access_token);
+      setAccessToken(data.access_token);
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
       storeRefreshToken(data.refresh_token, rememberMe ? "local" : "session");
-      setToken(data.access_token);
       setUser(data.user);
       return data.user;
     } finally {
@@ -133,10 +108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Error al revocar sesión en el servidor:", error);
     } finally {
       // Limpieza local independientemente del resultado del servidor
-      sessionStorage.removeItem(TOKEN_KEY);
+      setAccessToken(null);
       localStorage.removeItem(USER_KEY);
       clearRefreshToken();
-      setToken(null);
       setUser(null);
       window.location.href = "/login";
     }
