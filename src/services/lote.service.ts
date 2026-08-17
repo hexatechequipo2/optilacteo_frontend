@@ -12,6 +12,7 @@ import type {
   UpdateLoteDto,
 } from "../types/lote.types";
 import type { ComparacionHistoricaLote } from "../types/comparacionHistorica.types";
+import type { DesvioProveedorLote } from "../types/desvioProveedor.types";
 
 // El backend valida existencia del proveedor, rangos de parámetros y unicidad
 // del código directamente (404/400/409 con mensaje); no hace falta duplicar
@@ -85,6 +86,17 @@ export const loteService = {
   getComparacionHistorica: async (id: number): Promise<ComparacionHistoricaLote> => {
     const { data } = await api.get<ComparacionHistoricaLote>(
       `/lotes/${id}/comparacion-historica`,
+    );
+    return data;
+  },
+
+  // HU-66: histórico de desvíos comprometido (remito) vs. real de un
+  // proveedor. El backend filtra solo lotes con cantidadComprometidaKg
+  // cargado (array vacío si no hay desvíos, 404 si el proveedor no existe o
+  // es de otra empresa — extraerMensajeError ya cubre ese caso).
+  getDesviosPorProveedor: async (proveedorId: number): Promise<DesvioProveedorLote[]> => {
+    const { data } = await api.get<DesvioProveedorLote[]>(
+      `/lotes/proveedor/${proveedorId}/desvios`,
     );
     return data;
   },

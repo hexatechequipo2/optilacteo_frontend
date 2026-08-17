@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { RadioCard } from "../../components/ui/RadioCard";
@@ -49,6 +50,10 @@ interface FormValues {
   parametros: Record<ParametroVisible, string>;
   destinoInicial: DestinoLote | "";
   ubicacionInicial: Ubicacion | "";
+  // HU-66: datos del remito, opcionales (AC4) — el lote se guarda igual sin
+  // ellos.
+  cantidadComprometida: string;
+  parametrosComprometidos: Record<ParametroVisible, string>;
 }
 
 interface FormErrors {
@@ -58,6 +63,8 @@ interface FormErrors {
   destinoInicial?: string;
   parametros?: Partial<Record<ParametroVisible, string>>;
   parametrosGeneral?: string;
+  cantidadComprometida?: string;
+  parametrosComprometidos?: Partial<Record<ParametroVisible, string>>;
 }
 
 function buildParametrosVacios(): Record<ParametroVisible, string> {
@@ -77,6 +84,8 @@ function buildInitialValues(lote?: Lote): FormValues {
       parametros: buildParametrosVacios(),
       destinoInicial: "",
       ubicacionInicial: "",
+      cantidadComprometida: "",
+      parametrosComprometidos: buildParametrosVacios(),
     };
   }
   return {
@@ -89,6 +98,9 @@ function buildInitialValues(lote?: Lote): FormValues {
     parametros: buildParametrosVacios(),
     destinoInicial: lote.destinoInicial ?? "",
     ubicacionInicial: lote.ubicacionInicial ?? "",
+    // HU-66: tampoco editable en PATCH /lotes/:id.
+    cantidadComprometida: "",
+    parametrosComprometidos: buildParametrosVacios(),
   };
 }
 
@@ -153,6 +165,37 @@ function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boo
   if (Object.keys(parametrosErrors).length > 0) errors.parametros = parametrosErrors;
   if (!algunoCargado) errors.parametrosGeneral = "Cargá al menos un parámetro de calidad";
 
+  // HU-66: datos del remito, opcionales (AC4) — solo se valida formato de
+  // lo que sí se cargó.
+  if (values.cantidadComprometida.trim() !== "") {
+    const valor = Number(values.cantidadComprometida);
+    if (Number.isNaN(valor) || valor <= 0) {
+      errors.cantidadComprometida = "Debe ser un número mayor a 0";
+    }
+  }
+
+  const comprometidosErrors: Partial<Record<ParametroVisible, string>> = {};
+  for (const parametro of ORDEN_PARAMETROS) {
+    const raw = values.parametrosComprometidos[parametro];
+    if (raw.trim() === "") continue;
+
+    const valor = Number(raw);
+    if (Number.isNaN(valor)) {
+      comprometidosErrors[parametro] = "Debe ser numérico";
+      continue;
+    }
+    // El backend arma cada item de parametros[] como { parametro, valor,
+    // valorComprometido? }: sin un valor real cargado para ese parámetro no
+    // hay item donde mandar el comprometido (se perdería el dato). La UI ya
+    // deshabilita el input en ese caso, pero se valida igual por las dudas.
+    if (values.parametros[parametro].trim() === "") {
+      comprometidosErrors[parametro] = "Cargá primero el valor real medido de este parámetro";
+    }
+  }
+  if (Object.keys(comprometidosErrors).length > 0) {
+    errors.parametrosComprometidos = comprometidosErrors;
+  }
+
   return errors;
 }
 
@@ -198,6 +241,11 @@ export function LoteFormModal({
   // se pierdan silenciosamente cerrando el modal solo.
   const [warnings, setWarnings] = useState<string[]>([]);
 
+  // HU-66: colapsada por defecto — es común no tener el remito al momento
+  // de la carga (AC4), no queremos que el form se vea más largo/obligatorio
+  // de lo que es cuando no aplica.
+  const [remitoAbierto, setRemitoAbierto] = useState(false);
+
   useEffect(() => {
     if (!isOpen) return;
     setValues(buildInitialValues(lote));
@@ -209,6 +257,7 @@ export function LoteFormModal({
     setSensoresSeleccionados(new Set());
     setAsociarError("");
     setWarnings([]);
+    setRemitoAbierto(false);
   }, [isOpen, lote]);
 
   if (!isOpen) return null;
@@ -219,7 +268,26 @@ export function LoteFormModal({
   ];
 
   const setParametro = (parametro: ParametroVisible, valor: string) => {
-    setValues((prev) => ({ ...prev, parametros: { ...prev.parametros, [parametro]: valor } }));
+    setValues((prev) => {
+      // HU-66: si se borra el valor real, se limpia también el
+      // comprometido de ese parámetro — sin valor real ese item ni siquiera
+      // se manda en parametros[], el comprometido se perdería silenciosamente.
+      const limpiarComprometido = valor.trim() === "";
+      return {
+        ...prev,
+        parametros: { ...prev.parametros, [parametro]: valor },
+        parametrosComprometidos: limpiarComprometido
+          ? { ...prev.parametrosComprometidos, [parametro]: "" }
+          : prev.parametrosComprometidos,
+      };
+    });
+  };
+
+  const setParametroComprometido = (parametro: ParametroVisible, valor: string) => {
+    setValues((prev) => ({
+      ...prev,
+      parametrosComprometidos: { ...prev.parametrosComprometidos, [parametro]: valor },
+    }));
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -247,10 +315,15 @@ export function LoteFormModal({
 
     const parametros: LoteParametro[] = ORDEN_PARAMETROS.filter(
       (parametro) => values.parametros[parametro].trim() !== "",
-    ).map((parametro) => ({
-      parametro,
-      valor: Number(values.parametros[parametro]),
-    }));
+    ).map((parametro) => {
+      const comprometido = values.parametrosComprometidos[parametro].trim();
+      return {
+        parametro,
+        valor: Number(values.parametros[parametro]),
+        // HU-66: opcional (AC4) — solo viaja si se cargó el valor comprometido.
+        ...(comprometido !== "" ? { valorComprometido: Number(comprometido) } : {}),
+      };
+    });
 
     try {
       const respuesta = await onCreate({
@@ -261,6 +334,10 @@ export function LoteFormModal({
         ubicacionInicial: values.ubicacionInicial || undefined,
         parametros,
         cantidad: Number(values.cantidad),
+        // HU-66: opcional (AC4) — solo viaja si se cargó la cantidad comprometida.
+        ...(values.cantidadComprometida.trim() !== ""
+          ? { cantidadComprometidaKg: Number(values.cantidadComprometida) }
+          : {}),
       });
 
       setWarnings(respuesta.warnings ?? []);
@@ -552,6 +629,74 @@ export function LoteFormModal({
             </>
           )}
         </div>
+
+        {/* HU-66: datos del remito, opcionales (AC4) — colapsado por
+            defecto porque no siempre se cuenta con el remito al momento de
+            la carga. PATCH /lotes/:id tampoco acepta estos campos, así que
+            en edición no se muestra la sección. */}
+        {!esEdicion && (
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => setRemitoAbierto((prev) => !prev)}
+              className="flex w-full items-center gap-3"
+            >
+              {remitoAbierto ? (
+                <ChevronDown className="h-4 w-4 flex-shrink-0 text-slate-400 dark:text-slate-500" />
+              ) : (
+                <ChevronRight className="h-4 w-4 flex-shrink-0 text-slate-400 dark:text-slate-500" />
+              )}
+              <span className="text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500">
+                DATOS DEL REMITO (OPCIONAL)
+              </span>
+              <span className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+            </button>
+
+            {remitoAbierto && (
+              <div className="flex flex-col gap-3 border-l-2 border-slate-100 pl-4 dark:border-slate-800">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Cargá lo comprometido por el proveedor según el remito para detectar desvíos
+                  contra lo efectivamente recibido. Si no contás con el remito todavía, podés
+                  dejar esta sección vacía y el lote se guarda igual.
+                </p>
+
+                <Input
+                  id="lote-cantidadComprometida"
+                  type="number"
+                  inputMode="decimal"
+                  label="Cantidad comprometida según remito"
+                  value={values.cantidadComprometida}
+                  onChange={(e) =>
+                    setValues((prev) => ({ ...prev, cantidadComprometida: e.target.value }))
+                  }
+                  error={errors.cantidadComprometida}
+                />
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {ORDEN_PARAMETROS.map((parametro) => {
+                    const meta = PARAMETROS_META[parametro];
+                    const tieneValorReal = values.parametros[parametro].trim() !== "";
+                    return (
+                      <Input
+                        key={`comprometido-${parametro}`}
+                        id={`lote-param-comprometido-${parametro}`}
+                        label={`${meta.label} comprometido (${meta.unidad})`}
+                        type="number"
+                        inputMode="decimal"
+                        disabled={!tieneValorReal}
+                        placeholder={tieneValorReal ? "" : "Cargá primero el valor real"}
+                        value={values.parametrosComprometidos[parametro]}
+                        onChange={(e) => setParametroComprometido(parametro, e.target.value)}
+                        error={errors.parametrosComprometidos?.[parametro]}
+                        className={!tieneValorReal ? "opacity-60" : ""}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Destino */}
         <div className="flex flex-col gap-3">

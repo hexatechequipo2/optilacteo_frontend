@@ -47,6 +47,11 @@ export type UnidadRendimiento = (typeof UnidadRendimiento)[keyof typeof UnidadRe
 export interface LoteParametro {
   parametro: Parametro;
   valor: number;
+  // HU-66: valor comprometido por el proveedor según remito para este
+  // parámetro. Nullable/opcional — solo tiene sentido si `valor` (medido
+  // real) también está cargado; el desvío se calcula al leer, no se
+  // persiste (ver GET /lotes/proveedor/:id/desvios).
+  valorComprometido?: number | null;
 }
 
 export interface Lote {
@@ -61,6 +66,9 @@ export interface Lote {
   ubicacionInicial?: Ubicacion | null;
   estado: EstadoLote;
   parametros: LoteParametro[];
+  // HU-66: cantidad comprometida por el proveedor según remito. Nullable:
+  // opcional si no se contaba con el remito al momento de la carga (AC4).
+  cantidadComprometidaKg?: number | null;
   // HU-68: cantidad total ingresada y saldo remanente para consumo parcial.
   // Nullable: lotes registrados antes de HU-68 no lo tienen y no admiten
   // consumo parcial (ver lote-consumo.service.ts en el backend).
@@ -88,6 +96,9 @@ export interface CreateLoteDto {
   // HU-68: obligatoria en el backend (CreateLoteDto.cantidad, @IsPositive).
   // Habilita el consumo parcial posterior (POST /lotes/:id/consumos).
   cantidad: number;
+  // HU-66: opcional (AC4) — cantidad comprometida por el proveedor según
+  // remito, a nivel lote.
+  cantidadComprometidaKg?: number;
 }
 
 // PATCH /lotes/:id (LoteService.update en el backend) solo aplica estos 3
