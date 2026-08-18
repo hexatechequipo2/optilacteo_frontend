@@ -55,9 +55,21 @@ export default function UsuariosPage() {
   const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
 
   // Filtramos roles en el frontend para el modal (seguridad visual)
-  const rolesAsignables = esGerente 
+  const rolesAsignables = esGerente
     ? roles.filter((rol) => rol.nombre.trim().toLowerCase() !== "administrador")
     : roles;
+
+  // Un Gerente puede editar/desactivar/desbloquear usuarios de roles de
+  // empleados, pero no una cuenta Administrador de su misma empresa —
+  // mismo criterio que esRolBloqueado en MatrizPermisos.tsx.
+  // TODO(backend): esto es solo un cierre de UI. El gap real está en
+  // user.service.ts — update()/deactivate()/activate()/unlock() no validan
+  // el rol del usuario objetivo (solo guardAsignacionDeRol() bloquea que un
+  // Gerente ASIGNE el rol Administrador vía dto.rolId), así que hoy un
+  // Gerente puede editar/desactivar/desbloquear una cuenta Administrador de
+  // su empresa por API directa aunque el botón esté deshabilitado acá.
+  const esUsuarioBloqueado = (usuario: UsuarioType) =>
+    esGerente && (usuario.rolNombre ?? "").trim().toLowerCase() === "administrador";
 
   const empresaOptions = [
     { value: TODAS_LAS_EMPRESAS, label: "Todas las empresas" },
@@ -128,6 +140,7 @@ export default function UsuariosPage() {
             usuarios={usuarios.filter((u) => u.id !== user?.id)}
             onEdit={(usuario: UsuarioType) => setUsuarioEnEdicion(usuario)}
             onUnlock={unlockUsuario}
+            esUsuarioBloqueado={esUsuarioBloqueado}
           />
           
           <div className="mt-6 flex items-center justify-end border-t border-slate-200 pt-4 dark:border-slate-800">
