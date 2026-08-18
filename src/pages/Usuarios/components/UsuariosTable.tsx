@@ -5,6 +5,8 @@ interface UsuariosTableProps {
   usuarios: UsuarioType[];
   onEdit: (usuario: UsuarioType) => void;
   onUnlock: (id: number) => void;
+  /** Mismo criterio que esRolBloqueado en MatrizPermisos.tsx — ver comentario en UsuariosPage.tsx. */
+  esUsuarioBloqueado: (usuario: UsuarioType) => boolean;
 }
 
 function getInitials(name: string): string {
@@ -38,7 +40,7 @@ function EstadoBadge({ isActive, isLocked }: { isActive: boolean; isLocked: bool
   );
 }
 
-export function UsuariosTable({ usuarios, onEdit, onUnlock }: UsuariosTableProps) {
+export function UsuariosTable({ usuarios, onEdit, onUnlock, esUsuarioBloqueado }: UsuariosTableProps) {
   if (usuarios.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-8 text-center dark:border-slate-800 dark:bg-slate-900">
@@ -68,7 +70,9 @@ export function UsuariosTable({ usuarios, onEdit, onUnlock }: UsuariosTableProps
           </thead>
 
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {usuarios.map((usuario) => (
+            {usuarios.map((usuario) => {
+              const bloqueado = esUsuarioBloqueado(usuario);
+              return (
               <tr key={usuario.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
 
                 {/* Usuario */}
@@ -120,9 +124,10 @@ export function UsuariosTable({ usuarios, onEdit, onUnlock }: UsuariosTableProps
                       <button
                         type="button"
                         onClick={() => onUnlock(usuario.id)}
-                        aria-label={`Desbloquear ${usuario.name}`}
-                        title="Desbloquear cuenta"
-                        className="rounded-md px-2 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                        disabled={bloqueado}
+                        aria-label={`Desbloquear ${usuario.name}${bloqueado ? " (no editable)" : ""}`}
+                        title={bloqueado ? "No podés desbloquear una cuenta Administrador" : "Desbloquear cuenta"}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-amber-400 dark:hover:bg-amber-500/10"
                       >
                         Desbloquear
                       </button>
@@ -130,22 +135,27 @@ export function UsuariosTable({ usuarios, onEdit, onUnlock }: UsuariosTableProps
                     <button
                       type="button"
                       onClick={() => onEdit(usuario)}
-                      aria-label={`Editar ${usuario.name}`}
-                      className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                      disabled={bloqueado}
+                      aria-label={`Editar ${usuario.name}${bloqueado ? " (no editable)" : ""}`}
+                      title={bloqueado ? "No podés editar una cuenta Administrador" : "Editar"}
+                      className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {/* Cards (mobile) */}
       <div className="flex flex-col gap-3 md:hidden">
-        {usuarios.map((usuario) => (
+        {usuarios.map((usuario) => {
+          const bloqueado = esUsuarioBloqueado(usuario);
+          return (
           <div
             key={usuario.id}
             className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
@@ -170,9 +180,10 @@ export function UsuariosTable({ usuarios, onEdit, onUnlock }: UsuariosTableProps
                   <button
                     type="button"
                     onClick={() => onUnlock(usuario.id)}
-                    aria-label={`Desbloquear ${usuario.name}`}
-                    title="Desbloquear cuenta"
-                    className="rounded-md px-2 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                    disabled={bloqueado}
+                    aria-label={`Desbloquear ${usuario.name}${bloqueado ? " (no editable)" : ""}`}
+                    title={bloqueado ? "No podés desbloquear una cuenta Administrador" : "Desbloquear cuenta"}
+                    className="rounded-md px-2 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-amber-400 dark:hover:bg-amber-500/10"
                   >
                     Desbloquear
                   </button>
@@ -180,8 +191,10 @@ export function UsuariosTable({ usuarios, onEdit, onUnlock }: UsuariosTableProps
                 <button
                   type="button"
                   onClick={() => onEdit(usuario)}
-                  aria-label={`Editar ${usuario.name}`}
-                  className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                  disabled={bloqueado}
+                  aria-label={`Editar ${usuario.name}${bloqueado ? " (no editable)" : ""}`}
+                  title={bloqueado ? "No podés editar una cuenta Administrador" : "Editar"}
+                  className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -207,7 +220,8 @@ export function UsuariosTable({ usuarios, onEdit, onUnlock }: UsuariosTableProps
               </div>
             </dl>
           </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );
