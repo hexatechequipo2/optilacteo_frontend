@@ -17,6 +17,7 @@ import {
   Siren,
   History,
   Snowflake,
+  Droplets,
   X,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
@@ -57,6 +58,18 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     esGerente || user?.rolNombre === "Responsable de calidad" || esResponsableProduccion;
   const puedeVerPlanes = esAdmin;
   const puedeVerProveedores = esAdmin || esGerente;
+  // HU-36: mismo set de roles que @Roles en GET /tambos (tambo.controller.ts
+  // del backend) — a propósito más amplio que puedeVerProveedores, porque
+  // Operario de línea/Responsable de producción/Responsable de calidad
+  // también necesitan ver (y, según el rol, cargar) el tambo de origen sin
+  // tener acceso a la gestión de proveedores en sí. El gating fino de qué
+  // acción puede hacer cada rol dentro de la pantalla vive en TambosPage.tsx.
+  const puedeVerTambos =
+    esAdmin ||
+    esGerente ||
+    user?.rolNombre === "Operario de línea" ||
+    user?.rolNombre === "Responsable de calidad" ||
+    user?.rolNombre === "Responsable de producción";
   // HU-20 suma Operario de línea (carga manual) y Responsable de producción
   // (historial) además de Responsable de calidad/Gerente/Administrador
   // (HU-60).
@@ -193,6 +206,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(puedeVerProveedores
       ? [{ label: "Proveedores", icon: Home, count: counts.proveedores, path: "/proveedores" }]
       : []),
+    ...(puedeVerTambos ? [{ label: "Tambos", icon: Droplets, path: "/tambos" }] : []),
     ...(puedeVerLotes
       ? [{ label: "Lotes", icon: ClipboardList, count: counts.lotes, path: "/lotes" }]
       : []),

@@ -59,6 +59,7 @@ export interface Lote {
   codigo: string; // identificador único, generado por el backend si no se envía uno
   empresaId: number;
   proveedorId: number;
+  tamboId: number; // HU-36: tambo de origen, obligatorio
   materiaPrima: TipoMateriaPrima;
   fechaIngreso: string; // ISO datetime
   clasificacion: ClasificacionLote | null;
@@ -88,6 +89,7 @@ export interface Lote {
 export interface CreateLoteDto {
   codigo?: string;
   proveedorId: number;
+  tamboId: number; // HU-36: tambo de origen del lote, obligatorio
   materiaPrima: TipoMateriaPrima;
   fechaIngreso: string;
   destinoInicial?: DestinoLote;

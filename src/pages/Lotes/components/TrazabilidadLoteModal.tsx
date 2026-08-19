@@ -17,7 +17,6 @@ import {
 } from "../../Configuracion/constants/parametrosCalidad";
 import type { ConfigParametro, TipoMateriaPrima } from "../../../types/configParametro.types";
 import { EstadoLote, type Lote } from "../../../types/lote.types";
-import { getTamboMock } from "../constants/tamboMock";
 
 // Mismo criterio que LoteFormModal.buscarConfig: el rango esperado depende
 // de la configuración de umbrales de la empresa (HU-09), no de un rango
@@ -43,6 +42,9 @@ interface TrazabilidadLoteModalProps {
   isOpen: boolean;
   lote: Lote | null;
   proveedorMap: Map<number, string>;
+  // HU-36: mismo patrón que proveedorMap — resuelve lote.tamboId -> nombre
+  // (GET /tambos, armado en LotesPage).
+  tamboMap: Map<number, string>;
   // Roles Responsable de calidad / Responsable de producción (POST
   // /lotes/:id/consumos en el backend). Gerente/Administrador ven el panel
   // en modo solo lectura (tienen acceso a GET /lotes/:id/consumos pero no al
@@ -61,6 +63,7 @@ export function TrazabilidadLoteModal({
   isOpen,
   lote,
   proveedorMap,
+  tamboMap,
   puedeRegistrarConsumo,
   onClose,
   onConsumoRegistrado,
@@ -195,7 +198,7 @@ export function TrazabilidadLoteModal({
                 Tambo de origen
               </p>
               <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                {getTamboMock(lote.id)}
+                {tamboMap.get(lote.tamboId) ?? `Tambo #${lote.tamboId}`}
               </p>
             </div>
             <div className="flex flex-col gap-1 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">

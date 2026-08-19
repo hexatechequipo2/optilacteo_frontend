@@ -9,6 +9,7 @@ import { Button } from "../../components/ui/Button";
 import { extraerMensajeError } from "../../services/lote.service";
 import { sensorService, extraerMensajeError as extraerMensajeErrorSensor } from "../../services/sensor.service";
 import { useConfigParametros } from "../../hooks/useConfigParametros";
+import { useTambosPorProveedor } from "../../hooks/useTambos";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -44,6 +45,9 @@ const DESTINO_OPTIONS = [
 
 interface FormValues {
   proveedorId: string;
+  // HU-36: tambo de origen, obligatorio y dependiente del proveedor elegido
+  // (combo encadenado, ver useTambosPorProveedor).
+  tamboId: string;
   materiaPrima: TipoMateriaPrima;
   fechaIngreso: string;
   cantidad: string;
@@ -58,6 +62,7 @@ interface FormValues {
 
 interface FormErrors {
   proveedorId?: string;
+  tamboId?: string;
   fechaIngreso?: string;
   cantidad?: string;
   destinoInicial?: string;
@@ -78,6 +83,7 @@ function buildInitialValues(lote?: Lote): FormValues {
   if (!lote) {
     return {
       proveedorId: "",
+      tamboId: "",
       materiaPrima: TipoMateriaPrima.LECHE_CRUDA,
       fechaIngreso: new Date().toISOString().slice(0, 10),
       cantidad: "",
@@ -90,6 +96,7 @@ function buildInitialValues(lote?: Lote): FormValues {
   }
   return {
     proveedorId: String(lote.proveedorId),
+    tamboId: String(lote.tamboId),
     materiaPrima: lote.materiaPrima,
     fechaIngreso: lote.fechaIngreso.slice(0, 10),
     // No editable en PATCH /lotes/:id (ver UpdateLoteDto): en edición se
@@ -119,6 +126,9 @@ function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boo
   const errors: FormErrors = {};
 
   if (!values.proveedorId) errors.proveedorId = "El proveedor es obligatorio";
+  // HU-36 AC1/AC4: tambo de origen obligatorio, igual de estricto que
+  // proveedorId (CreateLoteDto.tamboId en el backend no tiene @IsOptional).
+  if (!values.tamboId) errors.tamboId = "El tambo de origen es obligatorio";
   if (!values.fechaIngreso) errors.fechaIngreso = "La fecha de ingreso es obligatoria";
   if (!values.destinoInicial) errors.destinoInicial = "El destino inicial es obligatorio";
 
@@ -260,11 +270,28 @@ export function LoteFormModal({
     setRemitoAbierto(false);
   }, [isOpen, lote]);
 
+  // HU-36: combo encadenado — la lista de tambos depende del proveedor
+  // elegido (GET /tambos?proveedorId=xxx). En edición, proveedorId ya viene
+  // fijo desde el lote, así que esto también sirve para poblar el nombre del
+  // tambo actual (mostrado deshabilitado, no editable — ver LoteService.update
+  // en el backend: tamboId no se puede reasignar una vez creado el lote).
+  const { tambos, isLoading: isLoadingTambos } = useTambosPorProveedor(
+    values.proveedorId ? Number(values.proveedorId) : null,
+  );
+
   if (!isOpen) return null;
 
   const proveedorOptions = [
     { value: "", label: "Seleccioná un proveedor" },
     ...proveedores.map((p) => ({ value: String(p.id), label: `${p.razonSocial} (${p.cuit})` })),
+  ];
+
+  const tamboOptions = [
+    {
+      value: "",
+      label: values.proveedorId ? "Seleccioná un tambo" : "Elegí primero un proveedor",
+    },
+    ...tambos.map((t) => ({ value: String(t.id), label: t.nombre })),
   ];
 
   const setParametro = (parametro: ParametroVisible, valor: string) => {
@@ -328,6 +355,7 @@ export function LoteFormModal({
     try {
       const respuesta = await onCreate({
         proveedorId: Number(values.proveedorId),
+        tamboId: Number(values.tamboId), // HU-36
         materiaPrima: values.materiaPrima,
         fechaIngreso: new Date(`${values.fechaIngreso}T12:00:00`).toISOString(),
         destinoInicial: values.destinoInicial as DestinoLote,
@@ -508,18 +536,58 @@ export function LoteFormModal({
         {/* Datos del lote */}
         <div className="flex flex-col gap-3">
           <SectionHeader>DATOS DEL LOTE</SectionHeader>
+          {/* HU-36 AC3: la HU pide poder agregar un proveedor o tambo nuevo
+              sin salir de este formulario. A propósito NO se implementa acá
+              todavía — decisión tomada con el usuario tras confirmar el gap:
+              TODO(backend): quien abre este formulario es siempre Responsable
+              de Calidad (ver puedeCrearLote en LotesPage.tsx, espeja
+              @Roles(RESPONSABLE_CALIDAD) de POST /lotes), pero ese rol no
+              está habilitado ni en POST /tambos (@Roles: OPERARIO_LINEA,
+              GERENTE) ni en POST /proveedores (@Roles: GERENTE,
+              ADMINISTRADOR) — un quick-add acá le devolvería 403 siempre.
+              Solo se conectan los selectores de lectura (GET /proveedores,
+              GET /tambos), que sí incluyen a Responsable de Calidad.
+              Reportado al equipo para sumar RESPONSABLE_CALIDAD a esos dos
+              endpoints del lado del backend; reevaluar el quick-add cuando
+              eso se resuelva. Mientras tanto, Responsable de Calidad puede
+              pedirle a un Operario de línea/Gerente que cargue el tambo
+              faltante desde /tambos (ver TambosPage.tsx) antes de volver acá
+              a completar el lote — no es ideal, pero ya no depende de tocar
+              la base a mano: existe una pantalla real para eso. */}
           <Select
             id="lote-proveedor"
             label="Proveedor *"
             options={proveedorOptions}
             value={values.proveedorId}
             disabled={esEdicion}
-            onChange={(e) => setValues((prev) => ({ ...prev, proveedorId: e.target.value }))}
+            onChange={(e) =>
+              // Cambiar de proveedor invalida el tambo ya elegido (pertenece
+              // al proveedor anterior): se limpia para forzar una nueva
+              // selección dentro de la lista encadenada correcta.
+              setValues((prev) => ({ ...prev, proveedorId: e.target.value, tamboId: "" }))
+            }
             error={errors.proveedorId}
           />
           {esEdicion && (
             <p className="text-xs text-slate-500 dark:text-slate-400">
               El proveedor no se puede modificar una vez creado el lote.
+            </p>
+          )}
+
+          {/* HU-36: tambo de origen, obligatorio y dependiente del proveedor
+              elegido arriba (combo encadenado, GET /tambos?proveedorId=xxx). */}
+          <Select
+            id="lote-tambo"
+            label="Tambo de origen *"
+            options={tamboOptions}
+            value={values.tamboId}
+            disabled={esEdicion || !values.proveedorId || isLoadingTambos}
+            onChange={(e) => setValues((prev) => ({ ...prev, tamboId: e.target.value }))}
+            error={errors.tamboId}
+          />
+          {esEdicion && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              El tambo de origen no se puede modificar una vez creado el lote.
             </p>
           )}
 

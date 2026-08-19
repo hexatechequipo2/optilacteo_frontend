@@ -15,6 +15,7 @@ import EmpresasPage from "./pages/Empresas/EmpresasPage";
 import ConfiguracionPage from "./pages/Configuracion/ConfiguracionPage";
 import PlanesPage from "./pages/Planes/PlanesPage";
 import ProveedoresPage from "./pages/Proveedores/ProveedoresPage";
+import TambosPage from "./pages/Tambos/TambosPage";
 import LotesPage from "./pages/Lotes/LotesPage";
 import RevisionLotesPage from "./pages/Lotes/RevisionLotesPage";
 import MedicionManualPage from "./pages/MedicionManual/MedicionManualPage";
@@ -143,6 +144,33 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={["Gerente", "Administrador"]}>
                   <ProveedoresPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* TAMBOS (HU-36: tambo de origen del lote, entidad propia bajo un
+                proveedor). GET /tambos en el backend (tambo.controller.ts)
+                habilita los 5 roles; el gating fino de qué puede hacer cada
+                uno (alta, edición, baja/reactivación) vive dentro de
+                TambosPage.tsx, no acá: POST es exclusivo de Operario de
+                línea/Gerente, PATCH/activar/baja son exclusivos de
+                Gerente/Administrador — a propósito distinto del gate de
+                /proveedores (solo Gerente/Administrador), porque acá
+                Operario de línea sí necesita poder entrar a cargar un tambo
+                nuevo sin tener acceso a la gestión de proveedores. */}
+            <Route
+              path="/tambos"
+              element={
+                <ProtectedRoute
+                  allowedRoles={[
+                    "Responsable de calidad",
+                    "Gerente",
+                    "Administrador",
+                    "Operario de línea",
+                    "Responsable de producción",
+                  ]}
+                >
+                  <TambosPage />
                 </ProtectedRoute>
               }
             />
