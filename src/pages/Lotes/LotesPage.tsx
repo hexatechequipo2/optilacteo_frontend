@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FlaskConical, History, Pencil, Route } from "lucide-react";
+import { CheckCircle2, FlaskConical, GitMerge, History, Pencil, Route } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
@@ -19,6 +19,7 @@ import type { Tambo } from "../../types/tambo.types";
 import { LoteFormModal } from "./LoteFormModal";
 import { LoteMedicionesModal } from "./components/LoteMedicionesModal";
 import { TrazabilidadLoteModal } from "./components/TrazabilidadLoteModal";
+import { HistorialTrazabilidadModal } from "./components/HistorialTrazabilidadModal";
 import { FinalizarLoteModal } from "./components/FinalizarLoteModal";
 import {
   UNIDAD_RENDIMIENTO_LABEL,
@@ -100,6 +101,7 @@ export default function LotesPage() {
   const [loteAFinalizar, setLoteAFinalizar] = useState<Lote | null>(null);
   const [loteAuditoria, setLoteAuditoria] = useState<Lote | null>(null);
   const [loteTrazabilidadId, setLoteTrazabilidadId] = useState<number | null>(null);
+  const [loteHistorialId, setLoteHistorialId] = useState<number | null>(null);
 
   // Solo Responsable de calidad puede registrar/editar lotes (POST y PATCH
   // /lotes en el backend); Gerente/Administrador acceden a esta pantalla en
@@ -220,6 +222,15 @@ export default function LotesPage() {
   const puedeRegistrarConsumo = useMemo(() => {
     const rol = (user?.rolNombre ?? "").trim().toLowerCase();
     return rol === "responsable de calidad" || rol === "responsable de producción";
+  }, [user?.rolNombre]);
+
+  // HU-32: GET /lotes/:id/trazabilidad (backend) — Responsable de calidad,
+  // Gerente, Administrador. A diferencia de puedeVerTrazabilidad (que gatea
+  // el panel de consumo parcial de HU-68), este NO incluye a Responsable de
+  // producción — ver lote.controller.ts.
+  const puedeVerTrazabilidadCompleta = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return rol === "responsable de calidad" || rol === "gerente" || rol === "administrador";
   }, [user?.rolNombre]);
 
   // El ícono de la acción se ofrece si hay al menos una de las tres
@@ -411,8 +422,8 @@ export default function LotesPage() {
                         )}
                       </td>
                     )}
-                    <td className="px-5 py-3">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
                         {puedeAbrirMediciones && (
                           <button
                             type="button"
@@ -437,6 +448,16 @@ export default function LotesPage() {
                             title="Trazabilidad y consumo parcial"
                           >
                             <Route className="h-4 w-4" />
+                          </button>
+                        )}
+                        {puedeVerTrazabilidadCompleta && (
+                          <button
+                            type="button"
+                            onClick={() => setLoteHistorialId(lote.id)}
+                            className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                            title="Historial de trazabilidad completo"
+                          >
+                            <GitMerge className="h-4 w-4" />
                           </button>
                         )}
                         {puedeCrearLote && (
@@ -519,6 +540,16 @@ export default function LotesPage() {
                         title="Trazabilidad y consumo parcial"
                       >
                         <Route className="h-4 w-4" />
+                      </button>
+                    )}
+                    {puedeVerTrazabilidadCompleta && (
+                      <button
+                        type="button"
+                        onClick={() => setLoteHistorialId(lote.id)}
+                        className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                        title="Historial de trazabilidad completo"
+                      >
+                        <GitMerge className="h-4 w-4" />
                       </button>
                     )}
                     {puedeCrearLote && (
@@ -641,6 +672,12 @@ export default function LotesPage() {
         puedeRegistrarConsumo={puedeRegistrarConsumo}
         onClose={() => setLoteTrazabilidadId(null)}
         onConsumoRegistrado={() => void refetch()}
+      />
+
+      <HistorialTrazabilidadModal
+        isOpen={loteHistorialId !== null}
+        loteId={loteHistorialId}
+        onClose={() => setLoteHistorialId(null)}
       />
 
       <FinalizarLoteModal
