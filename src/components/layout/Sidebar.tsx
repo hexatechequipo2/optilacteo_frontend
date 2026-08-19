@@ -53,7 +53,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   // HU-23: Responsable de calidad entra en modo solo lectura (ver
   // ConfiguracionPage.tsx / App.tsx).
   // HU-61: Responsable de producción entra solo para la pestaña "Conexión
-  // PLC/Gateway" (mock, sin backend todavía — ver PlcGatewayConfigTab.tsx).
+  // PLC/Gateway" (ver PlcGatewayConfigTab.tsx).
   const puedeVerConfiguracion =
     esGerente || user?.rolNombre === "Responsable de calidad" || esResponsableProduccion;
   const puedeVerPlanes = esAdmin;
