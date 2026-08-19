@@ -9,11 +9,13 @@ import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
 import { proveedoresService } from "../../services/proveedores.service";
+import { tamboService } from "../../services/tambo.service";
 import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
 import { TIPO_MATERIA_PRIMA_TABS } from "../Configuracion/constants/parametrosCalidad";
 import { UBICACION_LABEL } from "../Sensores/constants/parametroSensor";
 import { DestinoLote, EstadoLote, UnidadRendimiento, type Lote } from "../../types/lote.types";
 import type { Proveedor } from "../../types/proveedor.types";
+import type { Tambo } from "../../types/tambo.types";
 import { LoteFormModal } from "./LoteFormModal";
 import { LoteMedicionesModal } from "./components/LoteMedicionesModal";
 import { TrazabilidadLoteModal } from "./components/TrazabilidadLoteModal";
@@ -22,7 +24,6 @@ import {
   UNIDAD_RENDIMIENTO_LABEL,
   UNIDAD_RENDIMIENTO_SIMBOLO,
 } from "./constants/unidadRendimiento";
-import { getTamboMock } from "./constants/tamboMock";
 
 // Universo suficiente para poblar el selector de proveedores del formulario
 // (no es una tabla paginada: acá se necesita el catálogo completo).
@@ -35,9 +36,10 @@ const DESTINO_LABEL: Record<DestinoLote, string> = {
   [DestinoLote.DESCARTE]: "Descarte",
 };
 
-// HU-36 Parte 1/2: se agregan TAMBO (mock, ver constants/tamboMock.ts — el
-// backend todavía no lo modela) y UBICACIÓN (dato real, lote.ubicacionInicial,
-// que ya viaja del backend pero no se mostraba en esta tabla).
+// HU-36: se agregan TAMBO (dato real, lote.tamboId resuelto contra
+// tamboMap — reemplaza el mock de la Parte 1/2 ahora que el backend ya lo
+// modela) y UBICACIÓN (dato real, lote.ubicacionInicial, que ya viajaba del
+// backend pero no se mostraba en esta tabla).
 const HEADERS_BASE = [
   "LOTE",
   "PROVEEDOR",
@@ -90,6 +92,7 @@ export default function LotesPage() {
   const { user } = useAuth();
   const { sensores } = useSensores();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [tambos, setTambos] = useState<Tambo[]>([]);
   const [filtroUnidadRendimiento, setFiltroUnidadRendimiento] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
@@ -101,6 +104,18 @@ export default function LotesPage() {
   // Solo Responsable de calidad puede registrar/editar lotes (POST y PATCH
   // /lotes en el backend); Gerente/Administrador acceden a esta pantalla en
   // modo lectura.
+  //
+  // HU-36 (trazabilidad de origen del lote) redacta el criterio como "Como
+  // operario de línea, quiero registrar el proveedor y tambo de origen...".
+  // Verificado con el usuario al implementar esta HU: ese texto quedó
+  // desactualizado por una decisión de producto anterior (HU-60, ver
+  // lote.controller.ts en el backend y el comentario de la ruta /lotes en
+  // App.tsx) que movió el alta de lotes de Operario de línea a Responsable
+  // de calidad — Operario de línea solo carga mediciones manuales sobre
+  // lotes ya existentes (HU-20), no da de alta el lote en sí. No es una
+  // inconsistencia introducida por HU-36; se hereda de HU-60 y ya está
+  // implementada igual en frontend y backend. Se deja anotado acá para que
+  // quede trazable en el código, no solo en la conversación.
   const puedeCrearLote = user?.rolNombre === "Responsable de calidad";
 
   // HU-63: quién creó el lote y, si aplica, quién lo modificó por última
@@ -240,7 +255,18 @@ export default function LotesPage() {
       .catch(() => setProveedores([]));
   }, []);
 
+  // HU-36: universo completo de tambos de la empresa (GET /tambos, ya
+  // filtrado por activo:true del lado del backend) para resolver
+  // lote.tamboId -> nombre en la tabla, mismo patrón que proveedorMap.
+  useEffect(() => {
+    tamboService
+      .getAll()
+      .then(setTambos)
+      .catch(() => setTambos([]));
+  }, []);
+
   const proveedorMap = new Map(proveedores.map((p) => [p.id, p.razonSocial]));
+  const tamboMap = new Map(tambos.map((t) => [t.id, t.nombre]));
 
   // HU-62 (extensión): filtro client-side por unidad de rendimiento. Vacío
   // ("Todas") no filtra nada; con "" el lote no tiene rendimiento cargado
@@ -359,7 +385,7 @@ export default function LotesPage() {
                       {proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`}
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                      {getTamboMock(lote.id)}
+                      {tamboMap.get(lote.tamboId) ?? `Tambo #${lote.tamboId}`}
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {TIPO_MATERIA_PRIMA_LABEL.get(lote.materiaPrima) ?? lote.materiaPrima}
@@ -544,7 +570,9 @@ export default function LotesPage() {
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
                   <div>
                     <dt className="text-slate-400 dark:text-slate-500">Tambo</dt>
-                    <dd className="text-slate-600 dark:text-slate-400">{getTamboMock(lote.id)}</dd>
+                    <dd className="text-slate-600 dark:text-slate-400">
+                      {tamboMap.get(lote.tamboId) ?? `Tambo #${lote.tamboId}`}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-slate-400 dark:text-slate-500">Materia prima</dt>
@@ -609,6 +637,7 @@ export default function LotesPage() {
         isOpen={loteTrazabilidadId !== null}
         lote={loteTrazabilidad}
         proveedorMap={proveedorMap}
+        tamboMap={tamboMap}
         puedeRegistrarConsumo={puedeRegistrarConsumo}
         onClose={() => setLoteTrazabilidadId(null)}
         onConsumoRegistrado={() => void refetch()}
