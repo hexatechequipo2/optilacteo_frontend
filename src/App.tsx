@@ -104,9 +104,8 @@ function App() {
             {/* CONFIGURACIÓN (HU-09 Umbrales + HU-12 Logo e identidad: solo
                 GERENTE. HU-23 Comparación histórica: GERENTE edita,
                 RESPONSABLE DE CALIDAD solo consulta. HU-61 Conexión
-                PLC/Gateway (mock, sin backend todavía): GERENTE y
-                RESPONSABLE DE PRODUCCIÓN — el gating de qué pestaña ve cada
-                rol vive en ConfiguracionPage.tsx) */}
+                PLC/Gateway: GERENTE y RESPONSABLE DE PRODUCCIÓN — el gating
+                de qué pestaña ve cada rol vive en ConfiguracionPage.tsx) */}
             <Route
               path="/configuracion"
               element={

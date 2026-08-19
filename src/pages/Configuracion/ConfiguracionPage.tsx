@@ -38,10 +38,10 @@ const TABS_RESPONSABLE_CALIDAD: { value: TabConfiguracion; label: string }[] = [
   { value: "comparacion-historica", label: "Comparación histórica" },
 ];
 
-// HU-61: pantalla mock (todavía no hay backend, ver TODOs en
-// PlcGatewayConfigTab.tsx), exclusiva de Responsable de producción además de
-// Gerente. No comparte ninguna otra pestaña de acá: Operario de línea y
-// Responsable de calidad no llegan a ver esta tab.
+// HU-61: conectado al backend real (ver plcConfig.service.ts), exclusiva de
+// Responsable de producción además de Gerente. No comparte ninguna otra
+// pestaña de acá: Operario de línea y Responsable de calidad no llegan a ver
+// esta tab.
 const TABS_RESPONSABLE_PRODUCCION: { value: TabConfiguracion; label: string }[] = [
   { value: "plc-gateway", label: "Conexión PLC/Gateway" },
 ];
