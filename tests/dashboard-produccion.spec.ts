@@ -94,6 +94,9 @@ test.describe("DashboardProduccionPage", () => {
   });
 
   test("muestra las métricas del día cuando los datos cargan", async ({ page }) => {
+    // El filtro por defecto es "semana" (ver useDashboardProduccion), así que
+    // para probar la vista de "hoy" hay que seleccionarla explícitamente.
+    await page.getByRole("button", { name: "Hoy" }).click();
     await expect(page.getByText("Lotes procesados hoy")).toBeVisible();
     await expect(page.locator("p").filter({ hasText: "Alertas activas" })).toBeVisible();
     await expect(page.locator("p").filter({ hasText: "Parámetros críticos" })).toBeVisible();
@@ -130,6 +133,9 @@ test.describe("DashboardProduccionPage", () => {
     });
     await page.goto("/dashboard-produccion");
     await page.waitForLoadState("networkidle");
+    // El filtro por defecto es "semana" (ver useDashboardProduccion), así que
+    // para probar la vista de "hoy" hay que seleccionarla explícitamente.
+    await page.getByRole("button", { name: "Hoy" }).click();
 
     // Las métricas en 0 se muestran igual, sin pantalla de error (AC HU-38)
     await expect(page.getByText("Lotes procesados hoy")).toBeVisible();

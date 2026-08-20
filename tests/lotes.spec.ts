@@ -24,6 +24,20 @@ const PROVEEDORES_MOCK = {
   meta: { page: 1, limit: 100, total: 1, totalPages: 1 },
 };
 
+// HU-36: tambo de origen del proveedor id=1, para el combo encadenado del
+// form de alta de lote (GET /tambos?proveedorId=1).
+const TAMBOS_MOCK = [
+  {
+    id: 1,
+    nombre: "Establecimiento El Roble",
+    ubicacion: "San Rafael",
+    activo: true,
+    empresaId: 10,
+    proveedorId: 1,
+    createdAt: "2026-08-01T00:00:00.000Z",
+  },
+];
+
 // Lote sin clasificación — simula estado recién registrado
 const LOTE_1 = {
   id: 1,
@@ -126,6 +140,19 @@ async function mockLotesDeps(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(PROVEEDORES_MOCK),
+    });
+  });
+
+  // tamboService.getByProveedor → GET /tambos?proveedorId=xxx (HU-36, combo
+  // encadenado del form de alta de lote)
+  await page.route("**/tambos*", async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+      return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(TAMBOS_MOCK),
     });
   });
 
@@ -370,7 +397,9 @@ test.describe("LotesPage", () => {
     await page.getByRole("button", { name: /nuevo lote/i }).click();
 
     await page.getByLabel("Proveedor *").selectOption({ value: "1" });
+    await page.getByLabel("Tambo de origen *").selectOption({ value: "1" });
     await page.getByLabel("Fecha de ingreso *").fill("2026-08-01");
+    await page.getByLabel("Cantidad ingresada (L) *").fill("1000");
     // RadioCard de materia prima — se hace clic en el texto del label
     await page.getByText("Leche cruda").click();
     await page.getByLabel("pH (sin unidad)").fill("6.8");
@@ -402,7 +431,9 @@ test.describe("LotesPage", () => {
     await page.getByRole("button", { name: /nuevo lote/i }).click();
 
     await page.getByLabel("Proveedor *").selectOption({ value: "1" });
+    await page.getByLabel("Tambo de origen *").selectOption({ value: "1" });
     await page.getByLabel("Fecha de ingreso *").fill("2026-08-01");
+    await page.getByLabel("Cantidad ingresada (L) *").fill("1000");
     await page.getByText("Leche cruda").click();
     await page.getByLabel("pH (sin unidad)").fill("6.8");
     await page.getByLabel("Destino inicial *").selectOption({ value: "produccion" });
@@ -543,7 +574,9 @@ async function mockRevisionDeps(page: Page) {
     await loginAsResponsableCalidad(page);
     await page.goto("/lotes/revision");
 
-    await page.getByRole("button", { name: /historial/i }).click();
+    // Nombre exacto: el regex /historial/i ahora también matchea "Historial
+    // de alertas" del Sidebar (HU-28), agregado después de escrito este test.
+    await page.getByRole("button", { name: "Historial de decisiones" }).click();
 
     await expect(
       page.getByText("Todavía no hay decisiones registradas"),
