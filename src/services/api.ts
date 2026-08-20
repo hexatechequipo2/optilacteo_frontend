@@ -75,7 +75,11 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (originalRequest.url?.includes("/refresh") || originalRequest._retry) {
+    if (
+      originalRequest.url?.includes("/refresh") ||
+      originalRequest.url?.includes("/login") ||
+      originalRequest._retry
+    ) {
       clearSession();
       redirectToLogin();
       return Promise.reject(error);
