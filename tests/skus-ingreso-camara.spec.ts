@@ -306,6 +306,29 @@ test.describe("IngresoCamaraPage (HU-67)", () => {
     await expect(dialog).not.toBeVisible();
   });
 
+  test("muestra el mensaje del backend cuando falla el registro", async ({ page }) => {
+    await mockIngresoCamaraDeps(page, SKUS_MOCK, () => ({
+      status: 404,
+      body: { message: "El lote no pertenece a tu empresa" },
+    }));
+
+    await loginAsResponsableProduccion(page);
+    await page.goto("/ingreso-camara");
+
+    await page.getByRole("button", { name: "+ Nuevo ingreso" }).click();
+    const dialog = page.getByRole("dialog");
+
+    await dialog.getByLabel("SKU *").selectOption({ label: "Queso Cremoso" });
+    await dialog.getByLabel("Cantidad *").fill("25");
+    await dialog.getByLabel("Lote de producción de origen").selectOption({ label: "LOT-2026-005" });
+    await dialog.getByLabel("Fecha de ingreso a cámara *").fill("2026-08-11");
+    await dialog.getByRole("button", { name: "Registrar ingreso" }).click();
+
+    // Con response.data.message presente, ingresoCamaraService.
+    // extraerMensajeError() devuelve el mensaje real del backend.
+    await expect(dialog.getByText("El lote no pertenece a tu empresa")).toBeVisible();
+  });
+
   test("el SKU es obligatorio para registrar un ingreso", async ({ page }) => {
     await mockIngresoCamaraDeps(page);
     await loginAsResponsableProduccion(page);

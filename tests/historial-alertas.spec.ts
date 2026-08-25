@@ -196,3 +196,23 @@ test("HistorialAlertasPage - muestra error si el servidor falla al exportar CSV"
   await expect(page.getByText("No se pudo exportar el historial a CSV.")).toBeVisible();
 });
 
+test("HistorialAlertasPage - exporta a CSV y a PDF", async ({ page }) => {
+  await mockHistorialDeps(page, [HISTORIAL_ABIERTA]);
+  await loginAsResponsableCalidad(page);
+  await page.goto("/alertas/historial");
+
+  // El botón dispara descargarBlob() (link temporal + click), que en un
+  // browser real termina en un evento de descarga — esperarlo fuerza que
+  // la función completa corra (URL.createObjectURL, click, revoke), a
+  // diferencia de solo esperar el request de red.
+  const descargaCsv = page.waitForEvent("download");
+  await page.getByRole("button", { name: "CSV" }).click();
+  const csv = await descargaCsv;
+  expect(csv.suggestedFilename()).toMatch(/^historial-alertas-.*\.csv$/);
+
+  const descargaPdf = page.waitForEvent("download");
+  await page.getByRole("button", { name: "PDF" }).click();
+  const pdf = await descargaPdf;
+  expect(pdf.suggestedFilename()).toMatch(/^historial-alertas-.*\.pdf$/);
+});
+

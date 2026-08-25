@@ -168,6 +168,36 @@ test.describe("TambosPage", () => {
     await expect(dialog).not.toBeVisible();
   });
 
+  test("muestra el mensaje del backend cuando falla el alta de un tambo", async ({ page }) => {
+    await mockCatchAll(page);
+    await mockTambosCatalogo(page);
+
+    await page.route("**/tambos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Ya existe un tambo con ese nombre" }),
+      });
+    });
+
+    await loginAsOperario(page);
+    await page.goto("/tambos");
+
+    await page.getByRole("button", { name: "+ Nuevo tambo" }).click();
+    const dialog = page.getByRole("dialog");
+
+    await dialog.getByLabel("Nombre *").fill("Tambo Nuevo");
+    await dialog.getByLabel("Proveedor *").selectOption({ value: "1" });
+    await dialog.getByRole("button", { name: "Registrar tambo" }).click();
+
+    // Con response.data.message presente, tamboService.extraerMensajeError()
+    // devuelve el mensaje real del backend en vez del fallback genérico.
+    await expect(dialog.getByText("Ya existe un tambo con ese nombre")).toBeVisible();
+  });
+
   test("un Gerente edita un tambo con el proveedor deshabilitado", async ({ page }) => {
     await mockCatchAll(page);
 
@@ -198,7 +228,12 @@ test.describe("TambosPage", () => {
     await dialog.getByLabel("Nombre *").fill("El Roble (renombrado)");
     await dialog.getByRole("button", { name: "Guardar cambios" }).click();
 
-    await expect.poll(() => requestBody).toEqual({
+    // El modal recién cierra cuando onSubmit (tamboService.update + refetch)
+    // resolvió del todo — esperar solo el request (como hacía antes acá)
+    // deja sin cubrir el "return data" post-await de update().
+    await expect(dialog).not.toBeVisible();
+
+    expect(requestBody).toEqual({
       nombre: "El Roble (renombrado)",
       ubicacion: "San Rafael",
     });
@@ -218,6 +253,20 @@ test.describe("TambosPage", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ ...TAMBO_1, activo: false }),
+      });
+    });
+
+    // "**/tambos/1" no matchea "/tambos/1/activar" (el "*" no cruza el "/"):
+    // hace falta una ruta dedicada, mismo criterio que el PATCH de edición.
+    await page.route("**/tambos/1/activar", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "PATCH") return route.continue();
+      bajaAplicada = false;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...TAMBO_1, activo: true }),
       });
     });
 
@@ -244,6 +293,11 @@ test.describe("TambosPage", () => {
     await table.getByLabel("Dar de baja Establecimiento El Roble").click();
 
     await expect(table.getByLabel("Reactivar Establecimiento El Roble")).toBeVisible();
+
+    // tamboService.activar() — reactivar de vuelta.
+    await table.getByLabel("Reactivar Establecimiento El Roble").click();
+
+    await expect(table.getByLabel("Dar de baja Establecimiento El Roble")).toBeVisible();
   });
 
   test("un Responsable de calidad no ve el botón de + Nuevo tambo ni acciones de edición", async ({
