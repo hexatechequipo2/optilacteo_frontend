@@ -43,7 +43,17 @@ const TIPO_FILTER_OPTIONS = [
   ...Object.values(TipoSensor).map((t) => ({ value: t, label: TIPO_SENSOR_LABEL[t] })),
 ];
 
-const HEADERS = ["NOMBRE", "MARCA", "TIPO", "PARÁMETRO", "UBICACIÓN", "RANGO FAVORABLE", "ESTADO", ""];
+const HEADERS = [
+  "NOMBRE",
+  "MARCA",
+  "TIPO",
+  "PARÁMETRO",
+  "UBICACIÓN",
+  "RANGO FAVORABLE",
+  "UMBRAL DESCONEXIÓN",
+  "ESTADO",
+  "",
+];
 
 // Mismo criterio que ProveedoresPage: debounce para no mandar un request
 // al backend por cada letra tipeada en el filtro de texto.
@@ -308,6 +318,13 @@ export function RegistroSensoresTab({
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {sensor.rangoMinFavor} – {sensor.rangoMaxFavor}
                     </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {sensor.umbralDesconexionMinutos != null ? (
+                        `${sensor.umbralDesconexionMinutos} min`
+                      ) : (
+                        <span className="text-slate-400 dark:text-slate-500">Usa el de la empresa</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3">
                       <SensorEstadoBadge estado={sensor.estado} />
                     </td>
@@ -460,6 +477,14 @@ export function RegistroSensoresTab({
                     <dt className="text-slate-400 dark:text-slate-500">Rango favorable</dt>
                     <dd className="text-slate-600 dark:text-slate-400">
                       {sensor.rangoMinFavor} – {sensor.rangoMaxFavor}
+                    </dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-slate-400 dark:text-slate-500">Umbral de desconexión</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">
+                      {sensor.umbralDesconexionMinutos != null
+                        ? `${sensor.umbralDesconexionMinutos} min`
+                        : "Usa el de la empresa"}
                     </dd>
                   </div>
                 </dl>

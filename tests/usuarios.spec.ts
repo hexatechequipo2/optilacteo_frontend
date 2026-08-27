@@ -131,12 +131,29 @@ test.describe("UsuariosPage", () => {
     await requestPromise;
   });
 
-  test("desbloquear un usuario bloqueado llama al endpoint correspondiente", async ({ page }) => {
+  test("desbloquear un usuario bloqueado llama al endpoint y refresca la lista", async ({ page }) => {
     await mockUsuariosDeps(page);
     await loginAsAdministrador(page);
-    await page.goto("/usuarios");
 
+    // GET /user con estado mutable: unlockUsuario() llama a fetchUsuarios()
+    // después del PATCH, así que la 2da respuesta de la lista debe reflejar
+    // el desbloqueo para poder comprobar que el flujo se completó de punta
+    // a punta (no solo que se disparó el request).
+    let anaBloqueada = true;
+    await page.route("**/user*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+      const data = USUARIOS_MOCK.data.map((u) =>
+        u.id === 6 ? { ...u, isLocked: anaBloqueada } : u,
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...USUARIOS_MOCK, data }),
+      });
+    });
     await page.route("**/user/6/desbloquear", async (route) => {
+      anaBloqueada = false;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -144,34 +161,60 @@ test.describe("UsuariosPage", () => {
       });
     });
 
-    // El botón de desbloqueo vive en UsuariosTable, que no está en el
-    // contexto que me pasaste — ajustar el selector según el label/icon real.
-    // Ejemplo aproximado (descomentar cuando tengas el selector real):
-    // const unlockPromise = page.waitForRequest(
-    //   (req) => req.url().includes("/user/6/desbloquear") && req.method() === "PATCH",
-    // );
-    // await page.getByRole("button", { name: "Desbloquear Ana García" }).click();
-    // await unlockPromise;
+    await page.goto("/usuarios");
+
+    await expect(page.getByRole("button", { name: "Desbloquear Ana García" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Desbloquear Ana García" }).click();
+
+    await expect(page.getByRole("button", { name: "Desbloquear Ana García" })).not.toBeVisible();
   });
 
   test("crear un usuario nuevo lo agrega a la lista", async ({ page }) => {
     await mockUsuariosDeps(page);
     await loginAsAdministrador(page);
-    await page.goto("/usuarios");
 
+    // createUsuario() llama a fetchUsuarios() después del POST, así que el
+    // GET /user siguiente tiene que devolver la lista con el usuario nuevo
+    // para poder comprobar que el flujo se completó de punta a punta.
+    let usuarioCreado: Record<string, unknown> | null = null;
+    await page.route("**/user*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+      const data = usuarioCreado ? [...USUARIOS_MOCK.data, usuarioCreado] : USUARIOS_MOCK.data;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...USUARIOS_MOCK, data, meta: { ...USUARIOS_MOCK.meta, total: data.length } }),
+      });
+    });
     await page.route("**/user", async (route) => {
       if (route.request().method() !== "POST") return route.continue();
       const body = route.request().postDataJSON();
+      usuarioCreado = { id: 7, isActive: true, isLocked: false, ...body };
       await route.fulfill({
         status: 201,
         contentType: "application/json",
-        body: JSON.stringify({ id: 7, isActive: true, isLocked: false, ...body }),
+        body: JSON.stringify(usuarioCreado),
       });
     });
 
+    await page.goto("/usuarios");
+
     await page.getByRole("button", { name: "+ Nuevo usuario" }).click();
-    // NuevoUsuarioModal no está en el contexto que me pasaste — completar
-    // según los campos reales (nombre, email, rol, empresa) una vez compartido.
+
+    const form = page.locator("#usuario-form");
+    await form.getByPlaceholder("Ej: Lucía Fernández").fill("Lucía Fernández");
+    await form.getByPlaceholder("usuario@empresa.com").fill("lucia@optilacteo.com");
+    await form.getByPlaceholder("Mínimo 8 caracteres").fill("password123");
+    await form.locator("select").selectOption("1");
+    await form.getByText("Operador", { exact: true }).click();
+
+    await page.getByRole("button", { name: "Crear usuario" }).click();
+
+    // El modal se cierra recién cuando onCreate (create + refetch) resolvió.
+    await expect(page.getByRole("heading", { name: "Nuevo usuario" })).not.toBeVisible();
+    await expect(page.getByText("Lucía Fernández").first()).toBeVisible();
   });
 test.describe("NuevoUsuarioModal", () => {
   async function abrirNuevoUsuario(page: Page) {
@@ -416,6 +459,12 @@ test.describe("NuevoUsuarioModal", () => {
       rolId: 3,
       empresaId: 1,
     });
+
+    // waitForRequest solo espera a que el request SALGA, no a que
+    // onCreate (create + refetch) termine de resolver — sin esto el test
+    // termina (y se saca la foto de cobertura) antes de que corran las
+    // líneas post-await de usuariosService.create().
+    await expect(page.getByRole("heading", { name: "Nuevo usuario" })).not.toBeVisible();
   });
 
   test("un error 409 de email se muestra en el campo", async ({ page }) => {
@@ -566,6 +615,132 @@ test.describe("NuevoUsuarioModal", () => {
     await expect(
       form.getByText("Usuario inactivo"),
     ).not.toBeVisible();
+  });
+});
+
+test.describe("EditarUsuarioModal", () => {
+  test("editar un usuario y desactivarlo llama a update y a desactivar", async ({ page }) => {
+    await mockUsuariosDeps(page);
+    await loginAsAdministrador(page);
+
+    let updatePayload: Record<string, unknown> | undefined;
+    let sePidioDesactivar = false;
+    await page.route("**/user/5", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      updatePayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...USUARIOS_MOCK.data[0], ...updatePayload }),
+      });
+    });
+    await page.route("**/user/5/desactivar", async (route) => {
+      sePidioDesactivar = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...USUARIOS_MOCK.data[0], isActive: false }),
+      });
+    });
+
+    await page.goto("/usuarios");
+
+    // Juan Pérez (id 5) está activo en el mock — usuariosService.update()
+    // + usuariosService.deactivate() (ver useUsuarios.updateUsuario).
+    await page.getByRole("button", { name: "Editar Juan Pérez" }).click();
+    await expect(page.getByRole("heading", { name: "Editar usuario" })).toBeVisible();
+
+    const form = page.locator("#usuario-form-edit");
+    await form.locator("select").selectOption("1");
+    await form.getByText("Gerente", { exact: true }).click();
+    await page.getByRole("switch").click(); // activo -> inactivo
+
+    await page.getByRole("button", { name: "Guardar cambios" }).click();
+
+    // El modal se cierra recién cuando onUpdate (update + activate/deactivate
+    // + refetch) termina de resolver.
+    await expect(page.getByRole("heading", { name: "Editar usuario" })).not.toBeVisible();
+
+    expect(updatePayload).toMatchObject({ name: "Juan Pérez", empresaId: 1 });
+    expect(sePidioDesactivar).toBe(true);
+  });
+
+  test("reactivar un usuario inactivo llama a update y a activar", async ({ page }) => {
+    await mockUsuariosDeps(page);
+    await loginAsAdministrador(page);
+
+    // Sobreescribimos el GET /user para que Juan Pérez arranque inactivo.
+    await page.route("**/user*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+      const data = USUARIOS_MOCK.data.map((u) => (u.id === 5 ? { ...u, isActive: false } : u));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...USUARIOS_MOCK, data }) });
+    });
+
+    let sePidioActivar = false;
+    await page.route("**/user/5", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...USUARIOS_MOCK.data[0], isActive: false, ...route.request().postDataJSON() }),
+      });
+    });
+    await page.route("**/user/5/activar", async (route) => {
+      sePidioActivar = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...USUARIOS_MOCK.data[0], isActive: true }),
+      });
+    });
+
+    await page.goto("/usuarios");
+
+    await page.getByRole("button", { name: "Editar Juan Pérez" }).click();
+
+    const form = page.locator("#usuario-form-edit");
+    await form.locator("select").selectOption("1");
+    await form.getByText("Gerente", { exact: true }).click();
+    await page.getByRole("switch").click(); // inactivo -> activo
+
+    await page.getByRole("button", { name: "Guardar cambios" }).click();
+
+    await expect(page.getByRole("heading", { name: "Editar usuario" })).not.toBeVisible();
+    expect(sePidioActivar).toBe(true);
+  });
+});
+
+test.describe("MatrizPermisos", () => {
+  test("cambiar el nivel de acceso de un módulo llama a updatePermiso", async ({ page }) => {
+    await mockUsuariosDeps(page);
+    await loginAsAdministrador(page);
+
+    await page.route("**/rol/2/permisos", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      const payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...ROLES_MOCK[1],
+          permisos: [{ modulo: payload.modulo, canRead: payload.canRead, canWrite: payload.canWrite }],
+        }),
+      });
+    });
+
+    await page.goto("/usuarios");
+
+    // Gerente (id 2) arranca en "Sin acceso" para Dashboard (permisos: []).
+    const boton = page.getByRole("button", { name: "Ver dashboard · Gerente · Sin acceso" });
+    await expect(boton).toBeVisible();
+    await boton.click();
+
+    // El ciclo pasa a "Solo ver" — el aria-label solo cambia una vez que
+    // onTogglePermiso (updatePermiso + merge de estado) resolvió.
+    await expect(
+      page.getByRole("button", { name: "Ver dashboard · Gerente · Solo ver" }),
+    ).toBeVisible();
   });
 });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, ChevronLeft, ChevronRight, History, Pencil } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, History, Pencil, TrendingUp } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { AuditoriaModal } from "../../components/AuditoriaModal";
@@ -8,6 +8,7 @@ import { useEmpresas } from "../../hooks/useEmpresas";
 import { useAuth } from "../../hooks/useAuth";
 import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
 import { ProveedorFormModal } from "./ProveedorFormModal";
+import { DesviosProveedorModal } from "./DesviosProveedorModal";
 import type { Proveedor, TipoProveedor } from "../../types/proveedor.types";
 
 type TabTipo = "Todos" | "Tambo" | "Transporte" | "Insumos" | "Laboratorio";
@@ -106,6 +107,8 @@ export default function ProveedoresPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [proveedorEnEdicion, setProveedorEnEdicion] = useState<Proveedor | null>(null);
   const [proveedorAuditoria, setProveedorAuditoria] = useState<Proveedor | null>(null);
+  // HU-66: histórico de desvíos comprometido (remito) vs. real.
+  const [proveedorDesvios, setProveedorDesvios] = useState<Proveedor | null>(null);
 
   const empresaMap = useMemo(
     () => new Map(empresas.map((e) => [e.id, e.name])),
@@ -275,6 +278,15 @@ export default function ProveedoresPage() {
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => setProveedorDesvios(p)}
+                            aria-label={`Historial de desvíos de ${p.razonSocial}`}
+                            className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                            title="Historial de desvíos"
+                          >
+                            <TrendingUp className="h-4 w-4" />
+                          </button>
                           {puedeVerAuditoriaProveedor && p.auditoria && (
                             <button
                               type="button"
@@ -325,6 +337,15 @@ export default function ProveedoresPage() {
                         className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
                       >
                         <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProveedorDesvios(p)}
+                        aria-label={`Historial de desvíos de ${p.razonSocial}`}
+                        className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                        title="Historial de desvíos"
+                      >
+                        <TrendingUp className="h-4 w-4" />
                       </button>
                       {puedeVerAuditoriaProveedor && p.auditoria && (
                         <button
@@ -431,6 +452,12 @@ export default function ProveedoresPage() {
         titulo={`Auditoría — ${proveedorAuditoria?.razonSocial ?? ""}`}
         auditoria={proveedorAuditoria?.auditoria}
         onClose={() => setProveedorAuditoria(null)}
+      />
+
+      <DesviosProveedorModal
+        isOpen={proveedorDesvios !== null}
+        proveedor={proveedorDesvios}
+        onClose={() => setProveedorDesvios(null)}
       />
     </Layout>
   );

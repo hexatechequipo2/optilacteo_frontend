@@ -76,6 +76,27 @@ async function mockLoginEndpoint(page: Page, user: MockUser) {
       }),
     });
   });
+
+  // El access_token vive solo en memoria (ver tokenStore/AuthContext): un
+  // page.goto() a mitad de test es una recarga dura que lo pierde, y
+  // AuthContext dispara un POST /refresh silencioso para restaurar la
+  // sesión a partir del refresh_token guardado. Sin este mock esa llamada
+  // caía en el catch-all genérico de cada spec (200 []), dejaba
+  // isAuthenticated en false y ProtectedRoute redirigía a /login a mitad
+  // de test.
+  await page.route("**/refresh", async (route) => {
+    if (route.request().method() !== "POST") {
+      return route.continue();
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        access_token: "fake-access-token-refreshed",
+        refresh_token: "fake-refresh-token",
+      }),
+    });
+  });
 }
 
 /**

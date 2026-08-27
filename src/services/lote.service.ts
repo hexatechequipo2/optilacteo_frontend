@@ -12,6 +12,8 @@ import type {
   UpdateLoteDto,
 } from "../types/lote.types";
 import type { ComparacionHistoricaLote } from "../types/comparacionHistorica.types";
+import type { DesvioProveedorLote } from "../types/desvioProveedor.types";
+import type { TrazabilidadLoteResponse } from "../types/trazabilidad.types";
 
 // El backend valida existencia del proveedor, rangos de parámetros y unicidad
 // del código directamente (404/400/409 con mensaje); no hace falta duplicar
@@ -86,6 +88,28 @@ export const loteService = {
     const { data } = await api.get<ComparacionHistoricaLote>(
       `/lotes/${id}/comparacion-historica`,
     );
+    return data;
+  },
+
+  // HU-66: histórico de desvíos comprometido (remito) vs. real de un
+  // proveedor. El backend filtra solo lotes con cantidadComprometidaKg
+  // cargado (array vacío si no hay desvíos, 404 si el proveedor no existe o
+  // es de otra empresa — extraerMensajeError ya cubre ese caso).
+  getDesviosPorProveedor: async (proveedorId: number): Promise<DesvioProveedorLote[]> => {
+    const { data } = await api.get<DesvioProveedorLote[]>(
+      `/lotes/proveedor/${proveedorId}/desvios`,
+    );
+    return data;
+  },
+
+  // HU-32: historial completo e inmutable de trazabilidad del lote —
+  // recepción, clasificaciones, revisiones de calidad, cambios de
+  // ubicación, ingresos a cámara, consumos parciales y finalización, ya
+  // ordenado cronológicamente por el backend. 404 si el id no existe o es
+  // de otra empresa (propagado tal cual vía extraerMensajeError, ver
+  // useTrazabilidadLote).
+  getTrazabilidad: async (id: number): Promise<TrazabilidadLoteResponse> => {
+    const { data } = await api.get<TrazabilidadLoteResponse>(`/lotes/${id}/trazabilidad`);
     return data;
   },
 };

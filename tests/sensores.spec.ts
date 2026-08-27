@@ -150,6 +150,52 @@ test.describe("SensoresPage", () => {
       page.getByRole("button", { name: "+ Agregar sensor" }),
     ).not.toBeVisible();
   });
+
+  test("da de baja un sensor activo y lo reactiva (sensorService.desactivar/activar)", async ({ page }) => {
+    await mockSensoresDeps(page);
+    await loginAsResponsableProduccion(page);
+
+    await page.route("**/sensores/1", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "DELETE") return route.fallback();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...SENSOR_1, estado: "inactivo" }),
+      });
+    });
+    await page.route("**/sensores/1/activar", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "PATCH") return route.fallback();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...SENSOR_1, estado: "activo" }),
+      });
+    });
+
+    await page.goto("/sensores");
+
+    // Escopeamos a la fila de escritorio (hay una versión mobile en cards
+    // sin role="row" al lado) para no chocar con el sensor 2, que ya
+    // arranca inactivo en el mock.
+    const fila = page.getByRole("row", { name: /Sensor pH Laboratorio/ });
+
+    await fila.getByTitle("Dar de baja sensor").click();
+    await expect(page.getByRole("heading", { name: "¿Dar de baja este sensor?" })).toBeVisible();
+    await page.getByRole("button", { name: "Dar de baja", exact: true }).click();
+
+    // El estado local se actualiza in-place (sin refetch, ver
+    // useSensores.desactivarSensor) recién cuando el PATCH... DELETE
+    // resolvió — esperar el ícono nuevo fuerza esa espera.
+    await expect(fila.getByTitle("Reactivar sensor")).toBeVisible();
+
+    await fila.getByTitle("Reactivar sensor").click();
+
+    await expect(fila.getByTitle("Dar de baja sensor")).toBeVisible();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -572,7 +618,10 @@ test.describe("SensoresPage › SensorLoteHistorialModal", () => {
     await page.getByLabel("Lote nuevo").selectOption({ label: "LOT-2026-001" });
     await page.getByRole("button", { name: "Asociar" }).click();
 
-    await expect(page.getByText("Seleccioná un lote para asociar.")).not.toBeVisible();
+    // El error nunca llegó a mostrarse, así que esa aserción sola no prueba
+    // que la llamada terminó — el select vuelve a "" recién cuando
+    // asociarLote (sensorService.asociarALote) resolvió (ver handleAsociar).
+    await expect(page.getByLabel("Lote nuevo")).toHaveValue("");
   });
 
   test("muestra error del servidor al fallar la asociación", async ({ page }) => {
@@ -580,14 +629,21 @@ test.describe("SensoresPage › SensorLoteHistorialModal", () => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
       if (route.request().method() !== "PATCH") return route.fallback(); // 🔧 antes: continue()
-      await route.fulfill({ status: 500, body: "" });
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "El sensor ya está asociado a ese lote." }),
+      });
     });
 
     await page.getByLabel("Lote nuevo").selectOption({ label: "LOT-2026-001" });
     await page.getByRole("button", { name: "Asociar" }).click();
 
+    // Con response.data.message presente, extraerMensajeError() devuelve el
+    // mensaje real del backend en vez del fallback genérico (ver rama
+    // "axios.isAxiosError" en sensor.service.ts).
     await expect(
-      page.getByText("No se pudo asociar el sensor a ese lote."),
+      page.getByText("El sensor ya está asociado a ese lote."),
     ).toBeVisible();
   });
 });
@@ -779,6 +835,24 @@ test.describe("SensoresPage › HistorialMedicionesTab", () => {
     await expect(
       page.getByRole("button", { name: "Limpiar filtros" }),
     ).not.toBeVisible();
+  });
+
+  test("exporta el historial a CSV", async ({ page }) => {
+    await page.route("**/sensores/lecturas/historial-mediciones/export*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback();
+      await route.fulfill({ status: 200, contentType: "text/csv", body: "fecha,valor\n" });
+    });
+
+    // Esperar el evento de descarga real (en vez de solo el request) fuerza
+    // que historialMedicionesService.exportCsv() corra completo —
+    // createObjectURL/click/revoke incluidos.
+    const descarga = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Exportar CSV" }).click();
+    const download = await descarga;
+
+    expect(download.suggestedFilename()).toMatch(/^historial-mediciones-.*\.csv$/);
   });
 });
 

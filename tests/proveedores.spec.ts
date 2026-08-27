@@ -149,14 +149,39 @@ test.describe("ProveedoresPage", () => {
     await expect(page.getByText("No se encontraron proveedores")).toBeVisible();
   });
 
-  test("editar un proveedor abre el modal de edición", async ({ page }) => {
+  test("editar un proveedor y guardar llama a proveedoresService.update", async ({ page }) => {
     await mockProveedoresAndEmpresas(page);
     await loginAsAdministrador(page);
+
+    let updatePayload: Record<string, unknown> | undefined;
+    await page.route("**/proveedores/1", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      updatePayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...PROVEEDORES_MOCK.data[0], ...updatePayload }),
+      });
+    });
+
     await page.goto("/proveedores");
 
     await page.getByRole("button", { name: "Editar Tambo El Roble" }).click();
-    // ProveedorFormModal no está en el contexto que me pasaste — completar
-    // según los campos reales una vez que lo compartas.
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "Editar proveedor" })).toBeVisible();
+
+    // Los campos ya vienen precargados y válidos (ver "editar un proveedor
+    // carga sus datos actuales"): alcanza con tocar uno y guardar.
+    await dialog.getByLabel("Teléfono").fill("3534009999");
+    await dialog.getByRole("button", { name: "Guardar cambios" }).click();
+
+    // El modal se cierra recién cuando onSubmit (update + refetch) resolvió
+    // — sin este wait, proveedoresService.update() queda sin cubrir más
+    // allá del arranque de la función (ver mismo patrón en usuarios.spec.ts).
+    await expect(dialog).not.toBeVisible();
+
+    expect(updatePayload).toMatchObject({ telefono: "3534009999", razonSocial: "Tambo El Roble" });
   });
   test.describe("ProveedorFormModal", () => {
   test.beforeEach(async ({ page }) => {
@@ -382,6 +407,11 @@ test.describe("ProveedoresPage", () => {
       provincia: "Cordoba",
       capacidad: 6000,
     });
+
+    // expect.poll ya resuelve apenas requestBody se asigna (antes de que
+    // route.fulfill() termine) — esperar el cierre del modal fuerza a que
+    // proveedoresService.create() corra hasta el final (return data).
+    await expect(dialog).not.toBeVisible();
   });
 
   test("no envía campos opcionales vacíos", async ({ page }) => {

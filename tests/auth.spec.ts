@@ -1,4 +1,5 @@
 import { test, expect } from "./fixtures/coverageFixtures.ts";
+import { loginAsAdministrador } from "./fixtures/mockAuth.ts";
 
 test.describe("LoginPage", () => {
   test("muestra errores de validación con campos vacíos", async ({ page }) => {
@@ -218,6 +219,130 @@ test.describe("ResetPasswordPage", () => {
       page.getByText("¡Contraseña actualizada correctamente!"),
     ).toBeVisible();
     await page.getByRole("button", { name: "Ir al login" }).click();
+    await expect(page).toHaveURL("/login");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Interceptor de refresh de token (api.ts) — ningún otro spec dispara nunca
+// un 401 en un request YA autenticado (loginAsAdministrador solo mockea el
+// refresh "silencioso" post-goto, no la reacción a un 401 real), así que
+// refreshAccessToken() y el retry automático quedaban sin cubrir.
+// ---------------------------------------------------------------------------
+
+async function mockCatchAllYNotificaciones(page: Parameters<typeof loginAsAdministrador>[0]) {
+  await page.route("**/*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt === "xhr" || rt === "fetch") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    }
+    return route.continue();
+  });
+
+  // Sin esto, Layout crashea (notificaciones.filter sobre undefined) al
+  // llegar a /dashboard con el catch-all genérico devolviendo un array
+  // plano en vez de {data, meta} — ver mismo fix en planes.spec.ts.
+  await page.route("**/notificacion*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } }),
+    });
+  });
+}
+
+test.describe("Interceptor de refresh de token (401)", () => {
+  test("un 401 en un request dispara un refresh automático y reintenta con el token nuevo", async ({ page }) => {
+    await mockCatchAllYNotificaciones(page);
+
+    // "armed" evita que el 401 lo dispare, sin que lo controlemos, el
+    // fetch de contadores que hace el Sidebar apenas aterriza en
+    // /dashboard durante el login — recién se activa antes del goto a
+    // /empresas, que es el request que queremos ver reintentado.
+    let armed = false;
+    let empresaCalls = 0;
+    await page.route("**/empresa*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.continue();
+      if (!armed) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } }),
+        });
+      }
+      empresaCalls++;
+      if (empresaCalls === 1) {
+        return route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "Token expirado" }),
+        });
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [{ id: 1, name: "Tambo San José", cuit: "30-12345678-9", plan: "pro", isActive: true }],
+          meta: { page: 1, limit: 10, total: 1, totalPages: 1 },
+        }),
+      });
+    });
+
+    await loginAsAdministrador(page);
+    armed = true;
+    await page.goto("/empresas");
+
+    // Sin el interceptor, ese 401 hubiese cerrado la sesión — en cambio la
+    // lista carga normal porque refreshAccessToken() + api(originalRequest)
+    // reintentaron solos, sin que el usuario note nada.
+    await expect(page.getByText("Tambo San José").first()).toBeVisible();
+    expect(empresaCalls).toBeGreaterThanOrEqual(2);
+  });
+
+  test("si el refresh también falla con 401, cierra la sesión y redirige a /login", async ({ page }) => {
+    await mockCatchAllYNotificaciones(page);
+
+    let armed = false;
+    await page.route("**/empresa*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.continue();
+      if (!armed) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } }),
+        });
+      }
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Token expirado" }),
+      });
+    });
+
+    await loginAsAdministrador(page);
+
+    // Pisa el mock de /refresh que registra loginAsAdministrador (siempre
+    // 200): acá el refresh token guardado también está vencido/inválido.
+    await page.route("**/refresh", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Refresh token inválido" }),
+      });
+    });
+    armed = true;
+
+    await page.goto("/empresas");
+
+    // clearSession() + redirectToLogin() — recarga dura a /login.
     await expect(page).toHaveURL("/login");
   });
 });

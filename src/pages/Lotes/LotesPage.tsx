@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FlaskConical, History, Pencil } from "lucide-react";
+import { CheckCircle2, FlaskConical, GitMerge, History, Pencil, Route } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
@@ -9,12 +9,17 @@ import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
 import { proveedoresService } from "../../services/proveedores.service";
+import { tamboService } from "../../services/tambo.service";
 import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
 import { TIPO_MATERIA_PRIMA_TABS } from "../Configuracion/constants/parametrosCalidad";
+import { UBICACION_LABEL } from "../Sensores/constants/parametroSensor";
 import { DestinoLote, EstadoLote, UnidadRendimiento, type Lote } from "../../types/lote.types";
 import type { Proveedor } from "../../types/proveedor.types";
+import type { Tambo } from "../../types/tambo.types";
 import { LoteFormModal } from "./LoteFormModal";
 import { LoteMedicionesModal } from "./components/LoteMedicionesModal";
+import { TrazabilidadLoteModal } from "./components/TrazabilidadLoteModal";
+import { HistorialTrazabilidadModal } from "./components/HistorialTrazabilidadModal";
 import { FinalizarLoteModal } from "./components/FinalizarLoteModal";
 import {
   UNIDAD_RENDIMIENTO_LABEL,
@@ -32,7 +37,20 @@ const DESTINO_LABEL: Record<DestinoLote, string> = {
   [DestinoLote.DESCARTE]: "Descarte",
 };
 
-const HEADERS_BASE = ["LOTE", "PROVEEDOR", "MATERIA PRIMA", "INGRESO", "DESTINO", "RENDIMIENTO"];
+// HU-36: se agregan TAMBO (dato real, lote.tamboId resuelto contra
+// tamboMap — reemplaza el mock de la Parte 1/2 ahora que el backend ya lo
+// modela) y UBICACIÓN (dato real, lote.ubicacionInicial, que ya viajaba del
+// backend pero no se mostraba en esta tabla).
+const HEADERS_BASE = [
+  "LOTE",
+  "PROVEEDOR",
+  "TAMBO",
+  "MATERIA PRIMA",
+  "UBICACIÓN",
+  "INGRESO",
+  "DESTINO",
+  "RENDIMIENTO",
+];
 
 // HU-62: solo tiene sentido mostrar el rendimiento una vez que el lote está
 // finalizado (es cuando el backend permite cargarlo). Antes de eso, "—"
@@ -75,16 +93,31 @@ export default function LotesPage() {
   const { user } = useAuth();
   const { sensores } = useSensores();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [tambos, setTambos] = useState<Tambo[]>([]);
   const [filtroUnidadRendimiento, setFiltroUnidadRendimiento] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
   const [loteMediciones, setLoteMediciones] = useState<Lote | null>(null);
   const [loteAFinalizar, setLoteAFinalizar] = useState<Lote | null>(null);
   const [loteAuditoria, setLoteAuditoria] = useState<Lote | null>(null);
+  const [loteTrazabilidadId, setLoteTrazabilidadId] = useState<number | null>(null);
+  const [loteHistorialId, setLoteHistorialId] = useState<number | null>(null);
 
   // Solo Responsable de calidad puede registrar/editar lotes (POST y PATCH
   // /lotes en el backend); Gerente/Administrador acceden a esta pantalla en
   // modo lectura.
+  //
+  // HU-36 (trazabilidad de origen del lote) redacta el criterio como "Como
+  // operario de línea, quiero registrar el proveedor y tambo de origen...".
+  // Verificado con el usuario al implementar esta HU: ese texto quedó
+  // desactualizado por una decisión de producto anterior (HU-60, ver
+  // lote.controller.ts en el backend y el comentario de la ruta /lotes en
+  // App.tsx) que movió el alta de lotes de Operario de línea a Responsable
+  // de calidad — Operario de línea solo carga mediciones manuales sobre
+  // lotes ya existentes (HU-20), no da de alta el lote en sí. No es una
+  // inconsistencia introducida por HU-36; se hereda de HU-60 y ya está
+  // implementada igual en frontend y backend. Se deja anotado acá para que
+  // quede trazable en el código, no solo en la conversación.
   const puedeCrearLote = user?.rolNombre === "Responsable de calidad";
 
   // HU-63: quién creó el lote y, si aplica, quién lo modificó por última
@@ -169,6 +202,37 @@ export default function LotesPage() {
     return rol === "responsable de producción" || rol === "gerente" || rol === "administrador";
   }, [user?.rolNombre]);
 
+  // HU-68: GET /lotes/:id/consumos (backend) — Responsable de calidad,
+  // Responsable de producción, Gerente y Administrador. Mismo set de roles
+  // que GET /lotes/producciones, así que alcanza con esta única flag para
+  // decidir si se ofrece el ícono de trazabilidad.
+  const puedeVerTrazabilidad = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return (
+      rol === "responsable de calidad" ||
+      rol === "responsable de producción" ||
+      rol === "gerente" ||
+      rol === "administrador"
+    );
+  }, [user?.rolNombre]);
+
+  // HU-68: POST /lotes/:id/consumos (backend) — solo Responsable de calidad
+  // y Responsable de producción pueden registrar un consumo parcial;
+  // Gerente/Administrador ven el panel de trazabilidad en modo lectura.
+  const puedeRegistrarConsumo = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return rol === "responsable de calidad" || rol === "responsable de producción";
+  }, [user?.rolNombre]);
+
+  // HU-32: GET /lotes/:id/trazabilidad (backend) — Responsable de calidad,
+  // Gerente, Administrador. A diferencia de puedeVerTrazabilidad (que gatea
+  // el panel de consumo parcial de HU-68), este NO incluye a Responsable de
+  // producción — ver lote.controller.ts.
+  const puedeVerTrazabilidadCompleta = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return rol === "responsable de calidad" || rol === "gerente" || rol === "administrador";
+  }, [user?.rolNombre]);
+
   // El ícono de la acción se ofrece si hay al menos una de las tres
   // capacidades (escribir, ver historial o ver clasificación automática);
   // qué pestañas quedan habilitadas adentro del modal se resuelve por lote
@@ -202,7 +266,18 @@ export default function LotesPage() {
       .catch(() => setProveedores([]));
   }, []);
 
+  // HU-36: universo completo de tambos de la empresa (GET /tambos, ya
+  // filtrado por activo:true del lado del backend) para resolver
+  // lote.tamboId -> nombre en la tabla, mismo patrón que proveedorMap.
+  useEffect(() => {
+    tamboService
+      .getAll()
+      .then(setTambos)
+      .catch(() => setTambos([]));
+  }, []);
+
   const proveedorMap = new Map(proveedores.map((p) => [p.id, p.razonSocial]));
+  const tamboMap = new Map(tambos.map((t) => [t.id, t.nombre]));
 
   // HU-62 (extensión): filtro client-side por unidad de rendimiento. Vacío
   // ("Todas") no filtra nada; con "" el lote no tiene rendimiento cargado
@@ -211,6 +286,15 @@ export default function LotesPage() {
     if (filtroUnidadRendimiento === "") return lotes;
     return lotes.filter((lote) => lote.unidadRendimiento === filtroUnidadRendimiento);
   }, [lotes, filtroUnidadRendimiento]);
+
+  // HU-68: se busca por id en la lista ya cargada (no un GET /lotes/:id
+  // aparte) para que, tras registrar un consumo y refetchear /lotes, el
+  // panel reciba el lote con cantidadDisponible actualizado sin depender de
+  // un endpoint que no incluye a Responsable de Producción entre sus roles.
+  const loteTrazabilidad = useMemo(
+    () => lotes.find((l) => l.id === loteTrazabilidadId) ?? null,
+    [lotes, loteTrazabilidadId],
+  );
 
   const headers = useMemo(() => {
     const list = [...HEADERS_BASE];
@@ -312,7 +396,13 @@ export default function LotesPage() {
                       {proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`}
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {tamboMap.get(lote.tamboId) ?? `Tambo #${lote.tamboId}`}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {TIPO_MATERIA_PRIMA_LABEL.get(lote.materiaPrima) ?? lote.materiaPrima}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {lote.ubicacionInicial ? UBICACION_LABEL[lote.ubicacionInicial] : "—"}
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {new Date(lote.fechaIngreso).toLocaleDateString("es-AR")}
@@ -332,8 +422,8 @@ export default function LotesPage() {
                         )}
                       </td>
                     )}
-                    <td className="px-5 py-3">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
                         {puedeAbrirMediciones && (
                           <button
                             type="button"
@@ -348,6 +438,26 @@ export default function LotesPage() {
                             }
                           >
                             <FlaskConical className="h-4 w-4" />
+                          </button>
+                        )}
+                        {puedeVerTrazabilidad && (
+                          <button
+                            type="button"
+                            onClick={() => setLoteTrazabilidadId(lote.id)}
+                            className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                            title="Trazabilidad y consumo parcial"
+                          >
+                            <Route className="h-4 w-4" />
+                          </button>
+                        )}
+                        {puedeVerTrazabilidadCompleta && (
+                          <button
+                            type="button"
+                            onClick={() => setLoteHistorialId(lote.id)}
+                            className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                            title="Historial de trazabilidad completo"
+                          >
+                            <GitMerge className="h-4 w-4" />
                           </button>
                         )}
                         {puedeCrearLote && (
@@ -422,6 +532,26 @@ export default function LotesPage() {
                         <FlaskConical className="h-4 w-4" />
                       </button>
                     )}
+                    {puedeVerTrazabilidad && (
+                      <button
+                        type="button"
+                        onClick={() => setLoteTrazabilidadId(lote.id)}
+                        className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                        title="Trazabilidad y consumo parcial"
+                      >
+                        <Route className="h-4 w-4" />
+                      </button>
+                    )}
+                    {puedeVerTrazabilidadCompleta && (
+                      <button
+                        type="button"
+                        onClick={() => setLoteHistorialId(lote.id)}
+                        className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                        title="Historial de trazabilidad completo"
+                      >
+                        <GitMerge className="h-4 w-4" />
+                      </button>
+                    )}
                     {puedeCrearLote && (
                       <button
                         type="button"
@@ -470,9 +600,21 @@ export default function LotesPage() {
 
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
                   <div>
+                    <dt className="text-slate-400 dark:text-slate-500">Tambo</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">
+                      {tamboMap.get(lote.tamboId) ?? `Tambo #${lote.tamboId}`}
+                    </dd>
+                  </div>
+                  <div>
                     <dt className="text-slate-400 dark:text-slate-500">Materia prima</dt>
                     <dd className="text-slate-600 dark:text-slate-400">
                       {TIPO_MATERIA_PRIMA_LABEL.get(lote.materiaPrima) ?? lote.materiaPrima}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-400 dark:text-slate-500">Ubicación</dt>
+                    <dd className="text-slate-600 dark:text-slate-400">
+                      {lote.ubicacionInicial ? UBICACION_LABEL[lote.ubicacionInicial] : "—"}
                     </dd>
                   </div>
                   <div>
@@ -520,6 +662,22 @@ export default function LotesPage() {
         puedeVerClasificacion={puedeVerClasificacion}
         puedeVerComparacionHistorica={puedeVerComparacionHistorica}
         onClose={() => setLoteMediciones(null)}
+      />
+
+      <TrazabilidadLoteModal
+        isOpen={loteTrazabilidadId !== null}
+        lote={loteTrazabilidad}
+        proveedorMap={proveedorMap}
+        tamboMap={tamboMap}
+        puedeRegistrarConsumo={puedeRegistrarConsumo}
+        onClose={() => setLoteTrazabilidadId(null)}
+        onConsumoRegistrado={() => void refetch()}
+      />
+
+      <HistorialTrazabilidadModal
+        isOpen={loteHistorialId !== null}
+        loteId={loteHistorialId}
+        onClose={() => setLoteHistorialId(null)}
       />
 
       <FinalizarLoteModal

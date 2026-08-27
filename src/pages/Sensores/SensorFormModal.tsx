@@ -20,6 +20,11 @@ export interface SensorFormValues {
   ubicacion: Ubicacion;
   rangoMinFavor: number;
   rangoMaxFavor: number;
+  // HU-31: override opcional del umbral de desconexión (minutos) de este
+  // sensor. undefined/null = usa el umbral configurado a nivel empresa.
+  // Solo tiene sentido en edición — el backend no lo acepta en el alta
+  // (no forma parte de CreateSensorDto, ver sensor.types.ts).
+  umbralDesconexionMinutos?: number | null;
 }
 
 const TIPO_OPTIONS = [
@@ -45,6 +50,10 @@ interface FormValues {
   ubicacion: Ubicacion | "";
   rangoMinFavor: string;
   rangoMaxFavor: string;
+  // HU-31: string vacío = "usa el umbral de la empresa" (equivale a
+  // null/undefined en el DTO), igual criterio que el resto de los inputs
+  // numéricos de este form mientras están controlados como texto.
+  umbralDesconexionMinutos: string;
 }
 
 interface FormErrors {
@@ -55,6 +64,7 @@ interface FormErrors {
   ubicacion?: string;
   rangoMinFavor?: string;
   rangoMaxFavor?: string;
+  umbralDesconexionMinutos?: string;
 }
 
 function buildInitialValues(sensor?: Sensor): FormValues {
@@ -67,6 +77,7 @@ function buildInitialValues(sensor?: Sensor): FormValues {
       ubicacion: "",
       rangoMinFavor: "",
       rangoMaxFavor: "",
+      umbralDesconexionMinutos: "",
     };
   }
   return {
@@ -77,6 +88,8 @@ function buildInitialValues(sensor?: Sensor): FormValues {
     ubicacion: sensor.ubicacion,
     rangoMinFavor: String(sensor.rangoMinFavor),
     rangoMaxFavor: String(sensor.rangoMaxFavor),
+    umbralDesconexionMinutos:
+      sensor.umbralDesconexionMinutos != null ? String(sensor.umbralDesconexionMinutos) : "",
   };
 }
 
@@ -106,6 +119,15 @@ function validate(values: FormValues, esEdicion: boolean): FormErrors {
     Number(values.rangoMinFavor) >= Number(values.rangoMaxFavor)
   ) {
     errors.rangoMaxFavor = "Debe ser mayor al rango mínimo";
+  }
+
+  // HU-31: opcional — vacío es válido (usa el umbral de la empresa). Solo
+  // se valida si se completó algo.
+  if (values.umbralDesconexionMinutos.trim() !== "") {
+    const umbral = Number(values.umbralDesconexionMinutos);
+    if (!Number.isInteger(umbral) || umbral < 1) {
+      errors.umbralDesconexionMinutos = "Debe ser un número entero mayor o igual a 1";
+    }
   }
 
   return errors;
@@ -156,6 +178,18 @@ export function SensorFormModal({
         ubicacion: values.ubicacion as Ubicacion,
         rangoMinFavor: Number(values.rangoMinFavor),
         rangoMaxFavor: Number(values.rangoMaxFavor),
+        // HU-31: el campo (y su input) solo existen en edición — CreateSensorDto
+        // no lo acepta en el backend, así que en el alta directamente no se
+        // manda (undefined en vez de forzar null). "" -> null = vuelve a usar
+        // el umbral de la empresa.
+        ...(esEdicion
+          ? {
+              umbralDesconexionMinutos:
+                values.umbralDesconexionMinutos.trim() === ""
+                  ? null
+                  : Number(values.umbralDesconexionMinutos),
+            }
+          : {}),
       });
       onClose();
     } catch (err) {
@@ -267,6 +301,30 @@ export function SensorFormModal({
             />
           </div>
         </div>
+
+        {esEdicion && (
+          <div className="flex flex-col gap-3">
+            <SectionHeader>ALERTA DE DESCONEXIÓN (HU-31)</SectionHeader>
+            <Input
+              id="sensor-umbralDesconexionMinutos"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              label="Umbral propio (minutos)"
+              placeholder="Usa el umbral de la empresa"
+              value={values.umbralDesconexionMinutos}
+              onChange={(e) =>
+                setValues((prev) => ({ ...prev, umbralDesconexionMinutos: e.target.value }))
+              }
+              error={errors.umbralDesconexionMinutos}
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Vacío = usa el umbral configurado a nivel empresa (Alertas → Destinatarios).
+              Completalo solo si este sensor puntual necesita un tiempo distinto antes de
+              considerarse desconectado.
+            </p>
+          </div>
+        )}
 
         {serverError && (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">

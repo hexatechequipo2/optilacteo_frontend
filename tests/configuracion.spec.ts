@@ -165,17 +165,58 @@ test.describe("ConfiguracionPage", () => {
       const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
       await pHCard.locator("input").nth(0).fill("6");
       await pHCard.locator("input").nth(1).fill("7.5");
-
-      // Verifica que el backend fue llamado al salir del campo
-      const savePromise = page.waitForRequest(
-        (req) => req.url().includes("/config-parametros") && req.method() === "POST",
-      );
       await pHCard.locator("input").nth(1).blur();
-      await savePromise;
+
+      // El input se deshabilita mientras isSaving es true (ver
+      // ParametroCard.tsx) — esperar a que vuelva a habilitarse fuerza que
+      // saveConfig (configParametroService.create + setConfigs) termine de
+      // resolver, a diferencia de solo esperar el request de red.
+      await expect(pHCard.locator("input").nth(1)).toBeEnabled();
 
       await expect(
         pHCard.getByText("No se pudo guardar. Intentá nuevamente."),
       ).not.toBeVisible();
+    });
+
+    test("edita un umbral existente (configParametroService.update)", async ({ page }) => {
+      // A diferencia del test anterior, acá YA existe una config guardada
+      // (con id) para pH/leche_cruda: saveConfig() toma la rama update()
+      // (PUT), no create() (POST) — ver useConfigParametros.saveConfig.
+      await page.route("**/config-parametros*", async (route) => {
+        const rt = route.request().resourceType();
+        if (rt !== "fetch" && rt !== "xhr") return route.continue();
+        if (route.request().method() !== "GET") return route.continue();
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([PH_CONFIG_LECHE]),
+        });
+      });
+      await page.goto("/configuracion");
+      await page.waitForLoadState("networkidle");
+      await page.getByRole("button", { name: "Umbrales de calidad" }).click();
+      await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
+
+      let updateUrl: string | undefined;
+      await page.route("**/config-parametros/1", async (route) => {
+        const rt = route.request().resourceType();
+        if (rt !== "fetch" && rt !== "xhr") return route.continue();
+        if (route.request().method() !== "PUT") return route.continue();
+        updateUrl = route.request().url();
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ ...PH_CONFIG_LECHE, umbralMax: 7.8 }),
+        });
+      });
+
+      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
+      await expect(pHCard.locator("input").nth(1)).toHaveValue("7.5");
+      await pHCard.locator("input").nth(1).fill("7.8");
+      await pHCard.locator("input").nth(1).blur();
+
+      await expect(pHCard.locator("input").nth(1)).toBeEnabled();
+      expect(updateUrl).toContain("/config-parametros/1");
     });
 
     test("los umbrales de distintos tipos de materia prima son independientes", async ({ page }) => {
@@ -221,6 +262,30 @@ test.describe("ConfiguracionPage", () => {
 
       await expect(
         pHCard.getByText("No se pudo guardar. Intentá nuevamente."),
+      ).toBeVisible();
+    });
+
+    test("muestra el mensaje del backend cuando el guardado falla con un mensaje explícito", async ({ page }) => {
+      await page.route("**/config-parametros*", async (route) => {
+        const rt = route.request().resourceType();
+        if (rt !== "fetch" && rt !== "xhr") return route.continue();
+        if (route.request().method() !== "POST") return route.continue();
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "El umbral máximo supera el límite permitido para pH" }),
+        });
+      });
+
+      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
+      await pHCard.locator("input").nth(0).fill("6");
+      await pHCard.locator("input").nth(1).fill("7.5");
+      await pHCard.locator("input").nth(1).blur();
+
+      // Con response.data.message presente, configParametroService.
+      // extraerMensajeError() devuelve el mensaje real en vez del fallback.
+      await expect(
+        pHCard.getByText("El umbral máximo supera el límite permitido para pH"),
       ).toBeVisible();
     });
   });

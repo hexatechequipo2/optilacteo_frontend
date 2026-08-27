@@ -15,10 +15,15 @@ import EmpresasPage from "./pages/Empresas/EmpresasPage";
 import ConfiguracionPage from "./pages/Configuracion/ConfiguracionPage";
 import PlanesPage from "./pages/Planes/PlanesPage";
 import ProveedoresPage from "./pages/Proveedores/ProveedoresPage";
+import TambosPage from "./pages/Tambos/TambosPage";
 import LotesPage from "./pages/Lotes/LotesPage";
 import RevisionLotesPage from "./pages/Lotes/RevisionLotesPage";
 import MedicionManualPage from "./pages/MedicionManual/MedicionManualPage";
 import SensoresPage from "./pages/Sensores/SensoresPage";
+import DestinatariosAlertasPage from "./pages/Alertas/DestinatariosAlertasPage";
+import AlertasPage from "./pages/Alertas/AlertasPage";
+import HistorialAlertasPage from "./pages/Alertas/HistorialAlertasPage";
+import IngresoCamaraPage from "./pages/IngresoCamara/IngresoCamaraPage";
 import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
 import { InactivityMonitor } from "./components/layout/InactivityMonitor";
@@ -98,12 +103,15 @@ function App() {
 
             {/* CONFIGURACIÓN (HU-09 Umbrales + HU-12 Logo e identidad: solo
                 GERENTE. HU-23 Comparación histórica: GERENTE edita,
-                RESPONSABLE DE CALIDAD solo consulta — el gating de qué
-                pestaña ve cada rol vive en ConfiguracionPage.tsx) */}
+                RESPONSABLE DE CALIDAD solo consulta. HU-61 Conexión
+                PLC/Gateway: GERENTE y RESPONSABLE DE PRODUCCIÓN — el gating
+                de qué pestaña ve cada rol vive en ConfiguracionPage.tsx) */}
             <Route
               path="/configuracion"
               element={
-                <ProtectedRoute allowedRoles={["Gerente", "Responsable de calidad"]}>
+                <ProtectedRoute
+                  allowedRoles={["Gerente", "Responsable de calidad", "Responsable de producción"]}
+                >
                   <ConfiguracionPage />
                 </ProtectedRoute>
               }
@@ -135,6 +143,33 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={["Gerente", "Administrador"]}>
                   <ProveedoresPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* TAMBOS (HU-36: tambo de origen del lote, entidad propia bajo un
+                proveedor). GET /tambos en el backend (tambo.controller.ts)
+                habilita los 5 roles; el gating fino de qué puede hacer cada
+                uno (alta, edición, baja/reactivación) vive dentro de
+                TambosPage.tsx, no acá: POST es exclusivo de Operario de
+                línea/Gerente, PATCH/activar/baja son exclusivos de
+                Gerente/Administrador — a propósito distinto del gate de
+                /proveedores (solo Gerente/Administrador), porque acá
+                Operario de línea sí necesita poder entrar a cargar un tambo
+                nuevo sin tener acceso a la gestión de proveedores. */}
+            <Route
+              path="/tambos"
+              element={
+                <ProtectedRoute
+                  allowedRoles={[
+                    "Responsable de calidad",
+                    "Gerente",
+                    "Administrador",
+                    "Operario de línea",
+                    "Responsable de producción",
+                  ]}
+                >
+                  <TambosPage />
                 </ProtectedRoute>
               }
             />
@@ -208,6 +243,66 @@ function App() {
                   ]}
                 >
                   <SensoresPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* INGRESO A CÁMARA (HU-67: conectado a GET/POST /ingresos-camara
+                y al catálogo real de SKU vía GET /skus) — Responsable de
+                producción es quien registra el ingreso de producto
+                terminado a cámara (único rol habilitado por el backend para
+                POST /ingresos-camara). */}
+            <Route
+              path="/ingreso-camara"
+              element={
+                <ProtectedRoute allowedRoles={["Responsable de producción"]}>
+                  <IngresoCamaraPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ALERTAS — Destinatarios (HU-29): conectado a
+                GET/POST/DELETE /notificaciones/configuracion. Administrador
+                y Gerente configuran quién recibe cada nivel de alerta, por
+                rol o por usuario puntual (AC1/AC2/AC4 del backlog). */}
+            <Route
+              path="/alertas/destinatarios"
+              element={
+                <ProtectedRoute allowedRoles={["Administrador", "Gerente"]}>
+                  <DestinatariosAlertasPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ALERTAS (HU-25): pantalla "Monitoreo y Alertas", exclusiva de
+                Responsable de producción — es quien reacciona a los desvíos
+                de calidad detectados sobre los parámetros de los lotes.
+                Backend real: extiende el módulo de notificaciones (HU-21)
+                con tipo "alerta_umbral" — GET/PATCH /notificaciones + WS
+                /notificaciones, evento "notificacion:nueva" (ver
+                hooks/useAlertas.ts). */}
+            <Route
+              path="/alertas"
+              element={
+                <ProtectedRoute allowedRoles={["Responsable de producción"]}>
+                  <AlertasPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ALERTAS — Historial (HU-28): consulta retrospectiva por lote/
+                nivel/período para análisis de patrones de desvío e informes
+                regulatorios, exclusiva de Responsable de calidad. A
+                diferencia de /alertas (HU-25, bandeja de trabajo en vivo de
+                Responsable de producción) no depende del WS de
+                notificaciones ni de un "no leída" — es de solo lectura sobre
+                el histórico. Todavía sin conexión al backend, ver
+                TODO(backend) en services/historialAlertas.service.ts. */}
+            <Route
+              path="/alertas/historial"
+              element={
+                <ProtectedRoute allowedRoles={["Responsable de calidad"]}>
+                  <HistorialAlertasPage />
                 </ProtectedRoute>
               }
             />

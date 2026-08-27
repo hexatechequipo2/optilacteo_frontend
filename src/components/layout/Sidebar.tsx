@@ -13,6 +13,11 @@ import {
   ClipboardCheck,
   Cpu,
   FlaskConical,
+  Bell,
+  Siren,
+  History,
+  Snowflake,
+  Droplets,
   X,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
@@ -47,9 +52,24 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const puedeVerEmpresas = esAdmin;
   // HU-23: Responsable de calidad entra en modo solo lectura (ver
   // ConfiguracionPage.tsx / App.tsx).
-  const puedeVerConfiguracion = esGerente || user?.rolNombre === "Responsable de calidad";
+  // HU-61: Responsable de producción entra solo para la pestaña "Conexión
+  // PLC/Gateway" (ver PlcGatewayConfigTab.tsx).
+  const puedeVerConfiguracion =
+    esGerente || user?.rolNombre === "Responsable de calidad" || esResponsableProduccion;
   const puedeVerPlanes = esAdmin;
   const puedeVerProveedores = esAdmin || esGerente;
+  // HU-36: mismo set de roles que @Roles en GET /tambos (tambo.controller.ts
+  // del backend) — a propósito más amplio que puedeVerProveedores, porque
+  // Operario de línea/Responsable de producción/Responsable de calidad
+  // también necesitan ver (y, según el rol, cargar) el tambo de origen sin
+  // tener acceso a la gestión de proveedores en sí. El gating fino de qué
+  // acción puede hacer cada rol dentro de la pantalla vive en TambosPage.tsx.
+  const puedeVerTambos =
+    esAdmin ||
+    esGerente ||
+    user?.rolNombre === "Operario de línea" ||
+    user?.rolNombre === "Responsable de calidad" ||
+    user?.rolNombre === "Responsable de producción";
   // HU-20 suma Operario de línea (carga manual) y Responsable de producción
   // (historial) además de Responsable de calidad/Gerente/Administrador
   // (HU-60).
@@ -69,6 +89,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   // HU-20: vista standalone de medición manual, exclusiva de Operario de
   // línea (ver comentario en App.tsx sobre por qué no reusa /lotes).
   const puedeVerMedicionManual = user?.rolNombre === "Operario de línea";
+  // HU-67 Parte 1/2: mock data, exclusiva de Responsable de producción (ver
+  // allowedRoles en App.tsx).
+  const puedeVerIngresoCamara = esResponsableProduccion;
   // GET /sensores (backend) habilita también a Responsable de producción y
   // Operario de línea, ver sensor.controller.ts.
   const puedeVerSensores =
@@ -77,6 +100,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     user?.rolNombre === "Responsable de calidad" ||
     user?.rolNombre === "Responsable de producción" ||
     user?.rolNombre === "Operario de línea";
+  // HU-29: Administrador y Gerente configuran destinatarios de alertas
+  // (AC1/AC4 del backlog — ver allowedRoles en App.tsx para la ruta
+  // protegida).
+  const puedeVerAlertasDestinatarios = esAdmin || esGerente;
+  // HU-25: pantalla "Monitoreo y Alertas", exclusiva de Responsable de
+  // producción (ver allowedRoles en App.tsx).
+  const puedeVerAlertasMonitoreo = esResponsableProduccion;
+  // HU-28: historial de alertas por lote/período, exclusivo de Responsable
+  // de calidad (ver allowedRoles en App.tsx).
+  const puedeVerHistorialAlertas = user?.rolNombre === "Responsable de calidad";
 
   const [counts, setCounts] = useState({
     empresas: 0,
@@ -173,11 +206,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(puedeVerProveedores
       ? [{ label: "Proveedores", icon: Home, count: counts.proveedores, path: "/proveedores" }]
       : []),
+    ...(puedeVerTambos ? [{ label: "Tambos", icon: Droplets, path: "/tambos" }] : []),
     ...(puedeVerLotes
       ? [{ label: "Lotes", icon: ClipboardList, count: counts.lotes, path: "/lotes" }]
       : []),
     ...(puedeVerMedicionManual
       ? [{ label: "Medición manual", icon: FlaskConical, path: "/mediciones-manuales" }]
+      : []),
+    ...(puedeVerIngresoCamara
+      ? [{ label: "Ingreso a cámara", icon: Snowflake, path: "/ingreso-camara" }]
       : []),
     ...(puedeVerRevisionCalidad
       ? [
@@ -191,6 +228,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       : []),
     ...(puedeVerSensores
       ? [{ label: "Sensores", icon: Cpu, count: counts.sensores, path: "/sensores" }]
+      : []),
+    ...(puedeVerAlertasDestinatarios
+      ? [{ label: "Alertas", icon: Bell, path: "/alertas/destinatarios" }]
+      : []),
+    ...(puedeVerAlertasMonitoreo
+      ? [{ label: "Alertas", icon: Siren, path: "/alertas" }]
+      : []),
+    ...(puedeVerHistorialAlertas
+      ? [{ label: "Historial de alertas", icon: History, path: "/alertas/historial" }]
       : []),
   ];
 
