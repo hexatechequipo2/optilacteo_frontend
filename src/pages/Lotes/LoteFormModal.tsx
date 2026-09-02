@@ -7,9 +7,17 @@ import { SectionHeader } from "../../components/ui/SectionHeader";
 import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
 import { extraerMensajeError } from "../../services/lote.service";
-import { sensorService, extraerMensajeError as extraerMensajeErrorSensor } from "../../services/sensor.service";
+import {
+  sensorService,
+  extraerMensajeError as extraerMensajeErrorSensor,
+} from "../../services/sensor.service";
 import { useConfigParametros } from "../../hooks/useConfigParametros";
 import { useTambosPorProveedor } from "../../hooks/useTambos";
+import {
+  RecomendacionDestinoCard,
+  JUSTIFICACION_MIN_LENGTH,
+} from "./components/RecomendacionDestinoCard";
+import type { RecomendacionDestinoIA } from "../../types/recomendacionDestino.types";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -32,15 +40,25 @@ import type { Proveedor } from "../../types/proveedor.types";
 
 const UBICACION_OPTIONS = [
   { value: "", label: "Sin definir" },
-  ...Object.values(Ubicacion).map((u) => ({ value: u, label: UBICACION_LABEL[u] })),
+  ...Object.values(Ubicacion).map((u) => ({
+    value: u,
+    label: UBICACION_LABEL[u],
+  })),
 ];
+
+const DESTINO_LABEL: Record<DestinoLote, string> = {
+  [DestinoLote.PRODUCCION]: "Producción",
+  [DestinoLote.ALMACENAMIENTO]: "Almacenamiento",
+  [DestinoLote.TRATAMIENTO]: "Tratamiento",
+  [DestinoLote.DESCARTE]: "Descarte",
+};
 
 const DESTINO_OPTIONS = [
   { value: "", label: "Seleccioná un destino" },
-  { value: DestinoLote.PRODUCCION, label: "Producción" },
-  { value: DestinoLote.ALMACENAMIENTO, label: "Almacenamiento" },
-  { value: DestinoLote.TRATAMIENTO, label: "Tratamiento" },
-  { value: DestinoLote.DESCARTE, label: "Descarte" },
+  ...Object.values(DestinoLote).map((destino) => ({
+    value: destino,
+    label: DESTINO_LABEL[destino],
+  })),
 ];
 
 interface FormValues {
@@ -58,6 +76,10 @@ interface FormValues {
   // ellos.
   cantidadComprometida: string;
   parametrosComprometidos: Record<ParametroVisible, string>;
+  // HU-49: solo se completa si el destino elegido diverge del recomendado
+  // por el modelo de ML. Todavía no se manda al backend (no hay endpoint ni
+  // columna para esto) — queda como estado local, ver RecomendacionDestinoCard.
+  justificacionDivergencia: string;
 }
 
 interface FormErrors {
@@ -70,6 +92,7 @@ interface FormErrors {
   parametrosGeneral?: string;
   cantidadComprometida?: string;
   parametrosComprometidos?: Partial<Record<ParametroVisible, string>>;
+  justificacionDivergencia?: string;
 }
 
 function buildParametrosVacios(): Record<ParametroVisible, string> {
@@ -92,6 +115,7 @@ function buildInitialValues(lote?: Lote): FormValues {
       ubicacionInicial: "",
       cantidadComprometida: "",
       parametrosComprometidos: buildParametrosVacios(),
+      justificacionDivergencia: "",
     };
   }
   return {
@@ -108,6 +132,7 @@ function buildInitialValues(lote?: Lote): FormValues {
     // HU-66: tampoco editable en PATCH /lotes/:id.
     cantidadComprometida: "",
     parametrosComprometidos: buildParametrosVacios(),
+    justificacionDivergencia: "",
   };
 }
 
@@ -119,18 +144,40 @@ function buscarConfig(
   parametro: ParametroVisible,
   materiaPrima: TipoMateriaPrima,
 ): ConfigParametro | undefined {
-  return configs.find((c) => c.parametro === parametro && c.tipoMateriaPrima === materiaPrima);
+  return configs.find(
+    (c) => c.parametro === parametro && c.tipoMateriaPrima === materiaPrima,
+  );
 }
 
-function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boolean): FormErrors {
+function validate(
+  values: FormValues,
+  configs: ConfigParametro[],
+  esEdicion: boolean,
+  recomendacionDestino: RecomendacionDestinoIA | null,
+): FormErrors {
   const errors: FormErrors = {};
 
   if (!values.proveedorId) errors.proveedorId = "El proveedor es obligatorio";
   // HU-36 AC1/AC4: tambo de origen obligatorio, igual de estricto que
   // proveedorId (CreateLoteDto.tamboId en el backend no tiene @IsOptional).
   if (!values.tamboId) errors.tamboId = "El tambo de origen es obligatorio";
-  if (!values.fechaIngreso) errors.fechaIngreso = "La fecha de ingreso es obligatoria";
-  if (!values.destinoInicial) errors.destinoInicial = "El destino inicial es obligatorio";
+  if (!values.fechaIngreso)
+    errors.fechaIngreso = "La fecha de ingreso es obligatoria";
+  if (!values.destinoInicial)
+    errors.destinoInicial = "El destino inicial es obligatorio";
+
+  // HU-49 (AC4): elegir un destino distinto al recomendado por el modelo
+  // exige justificar la divergencia. Hoy `recomendacionDestino` siempre
+  // llega en null (sin backend de ML todavía), así que esto no se dispara
+  // en la práctica — queda listo para cuando exista una recomendación real.
+  if (
+    recomendacionDestino &&
+    values.destinoInicial &&
+    values.destinoInicial !== recomendacionDestino.destinoSugerido &&
+    values.justificacionDivergencia.trim().length < JUSTIFICACION_MIN_LENGTH
+  ) {
+    errors.justificacionDivergencia = `Contá al menos ${JUSTIFICACION_MIN_LENGTH} caracteres`;
+  }
 
   // PATCH /lotes/:id no acepta cantidad ni parametros (ver UpdateLoteDto /
   // LoteService.update en el backend): en edición no hay nada más que
@@ -141,7 +188,10 @@ function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boo
   // habilita el consumo parcial posterior de este lote.
   if (values.cantidad.trim() === "") {
     errors.cantidad = "La cantidad ingresada es obligatoria";
-  } else if (Number.isNaN(Number(values.cantidad)) || Number(values.cantidad) <= 0) {
+  } else if (
+    Number.isNaN(Number(values.cantidad)) ||
+    Number(values.cantidad) <= 0
+  ) {
     errors.cantidad = "Debe ser un número mayor a 0";
   }
 
@@ -169,11 +219,14 @@ function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boo
     // validar el rango real en el POST /lotes y devuelve el error ahí.
     const config = buscarConfig(configs, parametro, values.materiaPrima);
     if (config && (valor < config.umbralMin || valor > config.umbralMax)) {
-      parametrosErrors[parametro] = `Debe estar entre ${config.umbralMin} y ${config.umbralMax}`;
+      parametrosErrors[parametro] =
+        `Debe estar entre ${config.umbralMin} y ${config.umbralMax}`;
     }
   }
-  if (Object.keys(parametrosErrors).length > 0) errors.parametros = parametrosErrors;
-  if (!algunoCargado) errors.parametrosGeneral = "Cargá al menos un parámetro de calidad";
+  if (Object.keys(parametrosErrors).length > 0)
+    errors.parametros = parametrosErrors;
+  if (!algunoCargado)
+    errors.parametrosGeneral = "Cargá al menos un parámetro de calidad";
 
   // HU-66: datos del remito, opcionales (AC4) — solo se valida formato de
   // lo que sí se cargó.
@@ -199,7 +252,8 @@ function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boo
     // hay item donde mandar el comprometido (se perdería el dato). La UI ya
     // deshabilita el input en ese caso, pero se valida igual por las dudas.
     if (values.parametros[parametro].trim() === "") {
-      comprometidosErrors[parametro] = "Cargá primero el valor real medido de este parámetro";
+      comprometidosErrors[parametro] =
+        "Cargá primero el valor real medido de este parámetro";
     }
   }
   if (Object.keys(comprometidosErrors).length > 0) {
@@ -232,7 +286,16 @@ export function LoteFormModal({
 }: LoteFormModalProps) {
   const esEdicion = !!lote;
   const { configs } = useConfigParametros();
-  const [values, setValues] = useState<FormValues>(() => buildInitialValues(lote));
+  // HU-49 (Sprint 4, mock visual): todavía no existe el endpoint de
+  // recomendación por ML — queda en null hasta que el backend lo tenga.
+  // RecomendacionDestinoCard ya sabe renderizar el estado "sin recomendación
+  // disponible" para este caso. `useState` (en vez de un const literal) para
+  // que TypeScript no lo trate como "siempre null" y quede tipado igual que
+  // el día que se conecte una llamada real acá.
+  const [recomendacionDestino] = useState<RecomendacionDestinoIA | null>(null);
+  const [values, setValues] = useState<FormValues>(() =>
+    buildInitialValues(lote),
+  );
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState("");
 
@@ -242,7 +305,9 @@ export function LoteFormModal({
   const [paso, setPaso] = useState<Paso>("form");
   const [loteCreadoId, setLoteCreadoId] = useState<number | null>(null);
   const [sensoresDisponibles, setSensoresDisponibles] = useState<Sensor[]>([]);
-  const [sensoresSeleccionados, setSensoresSeleccionados] = useState<Set<number>>(new Set());
+  const [sensoresSeleccionados, setSensoresSeleccionados] = useState<
+    Set<number>
+  >(new Set());
   const [isAsociando, setIsAsociando] = useState(false);
   const [asociarError, setAsociarError] = useState("");
 
@@ -283,13 +348,18 @@ export function LoteFormModal({
 
   const proveedorOptions = [
     { value: "", label: "Seleccioná un proveedor" },
-    ...proveedores.map((p) => ({ value: String(p.id), label: `${p.razonSocial} (${p.cuit})` })),
+    ...proveedores.map((p) => ({
+      value: String(p.id),
+      label: `${p.razonSocial} (${p.cuit})`,
+    })),
   ];
 
   const tamboOptions = [
     {
       value: "",
-      label: values.proveedorId ? "Seleccioná un tambo" : "Elegí primero un proveedor",
+      label: values.proveedorId
+        ? "Seleccioná un tambo"
+        : "Elegí primero un proveedor",
     },
     ...tambos.map((t) => ({ value: String(t.id), label: t.nombre })),
   ];
@@ -310,17 +380,28 @@ export function LoteFormModal({
     });
   };
 
-  const setParametroComprometido = (parametro: ParametroVisible, valor: string) => {
+  const setParametroComprometido = (
+    parametro: ParametroVisible,
+    valor: string,
+  ) => {
     setValues((prev) => ({
       ...prev,
-      parametrosComprometidos: { ...prev.parametrosComprometidos, [parametro]: valor },
+      parametrosComprometidos: {
+        ...prev.parametrosComprometidos,
+        [parametro]: valor,
+      },
     }));
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setServerError("");
-    const validationErrors = validate(values, configs, esEdicion);
+    const validationErrors = validate(
+      values,
+      configs,
+      esEdicion,
+      recomendacionDestino,
+    );
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
@@ -330,12 +411,19 @@ export function LoteFormModal({
         // no se puede editar proveedor, ubicacionInicial ni parametros.
         await onUpdate(lote!.id, {
           materiaPrima: values.materiaPrima,
-          fechaIngreso: new Date(`${values.fechaIngreso}T12:00:00`).toISOString(),
+          fechaIngreso: new Date(
+            `${values.fechaIngreso}T12:00:00`,
+          ).toISOString(),
           destinoInicial: values.destinoInicial as DestinoLote,
         });
         onClose();
       } catch (err) {
-        setServerError(extraerMensajeError(err, "No se pudo actualizar el lote. Intentá nuevamente."));
+        setServerError(
+          extraerMensajeError(
+            err,
+            "No se pudo actualizar el lote. Intentá nuevamente.",
+          ),
+        );
       }
       return;
     }
@@ -348,7 +436,9 @@ export function LoteFormModal({
         parametro,
         valor: Number(values.parametros[parametro]),
         // HU-66: opcional (AC4) — solo viaja si se cargó el valor comprometido.
-        ...(comprometido !== "" ? { valorComprometido: Number(comprometido) } : {}),
+        ...(comprometido !== ""
+          ? { valorComprometido: Number(comprometido) }
+          : {}),
       };
     });
 
@@ -380,7 +470,12 @@ export function LoteFormModal({
         onClose();
       }
     } catch (err) {
-      setServerError(extraerMensajeError(err, "No se pudo registrar el lote. Intentá nuevamente."));
+      setServerError(
+        extraerMensajeError(
+          err,
+          "No se pudo registrar el lote. Intentá nuevamente.",
+        ),
+      );
     }
   };
 
@@ -402,11 +497,16 @@ export function LoteFormModal({
     setAsociarError("");
     setIsAsociando(true);
     try {
-      await sensorService.asociarALote(loteCreadoId, [...sensoresSeleccionados]);
+      await sensorService.asociarALote(loteCreadoId, [
+        ...sensoresSeleccionados,
+      ]);
       onClose();
     } catch (err) {
       setAsociarError(
-        extraerMensajeErrorSensor(err, "No se pudieron asociar los sensores seleccionados."),
+        extraerMensajeErrorSensor(
+          err,
+          "No se pudieron asociar los sensores seleccionados.",
+        ),
       );
     } finally {
       setIsAsociando(false);
@@ -526,13 +626,36 @@ export function LoteFormModal({
           >
             Cancelar
           </button>
-          <Button type="submit" form="lote-form" isLoading={isSubmitting} className="!w-auto px-6">
-            {esEdicion ? "Guardar cambios" : "Registrar lote"}
+          <Button
+            type="submit"
+            form="lote-form"
+            isLoading={isSubmitting}
+            className="!w-auto px-6"
+          >
+            {esEdicion ? "Guardar destino" : "Registrar lote"}
           </Button>
+          {/* HU-49 (mock visual): botón del prototipo, todavía sin lógica —
+              a propósito no reemplaza ni reutiliza el flujo real de
+              "Finalizar lote" (FinalizarLoteModal, HU-62). */}
+          {esEdicion && (
+            <button
+              type="button"
+              disabled
+              title="Próximamente — pendiente de conexión con el backend"
+              className="cursor-not-allowed rounded-lg bg-[#3d6fcf] px-4 py-2 text-sm font-semibold text-white opacity-50"
+            >
+              Cerrar ciclo del lote
+            </button>
+          )}
         </div>
       }
     >
-      <form id="lote-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
+      <form
+        id="lote-form"
+        onSubmit={handleSubmit}
+        noValidate
+        className="flex flex-col gap-6"
+      >
         {/* Datos del lote */}
         <div className="flex flex-col gap-3">
           <SectionHeader>DATOS DEL LOTE</SectionHeader>
@@ -564,7 +687,11 @@ export function LoteFormModal({
               // Cambiar de proveedor invalida el tambo ya elegido (pertenece
               // al proveedor anterior): se limpia para forzar una nueva
               // selección dentro de la lista encadenada correcta.
-              setValues((prev) => ({ ...prev, proveedorId: e.target.value, tamboId: "" }))
+              setValues((prev) => ({
+                ...prev,
+                proveedorId: e.target.value,
+                tamboId: "",
+              }))
             }
             error={errors.proveedorId}
           />
@@ -582,7 +709,9 @@ export function LoteFormModal({
             options={tamboOptions}
             value={values.tamboId}
             disabled={esEdicion || !values.proveedorId || isLoadingTambos}
-            onChange={(e) => setValues((prev) => ({ ...prev, tamboId: e.target.value }))}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, tamboId: e.target.value }))
+            }
             error={errors.tamboId}
           />
           {esEdicion && (
@@ -604,7 +733,10 @@ export function LoteFormModal({
                   label={tab.label}
                   checked={values.materiaPrima === tab.value}
                   onChange={(value) =>
-                    setValues((prev) => ({ ...prev, materiaPrima: value as TipoMateriaPrima }))
+                    setValues((prev) => ({
+                      ...prev,
+                      materiaPrima: value as TipoMateriaPrima,
+                    }))
                   }
                 />
               ))}
@@ -616,7 +748,9 @@ export function LoteFormModal({
             type="date"
             label="Fecha de ingreso *"
             value={values.fechaIngreso}
-            onChange={(e) => setValues((prev) => ({ ...prev, fechaIngreso: e.target.value }))}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, fechaIngreso: e.target.value }))
+            }
             error={errors.fechaIngreso}
           />
 
@@ -628,7 +762,9 @@ export function LoteFormModal({
                 Cantidad ingresada
               </span>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                {lote!.cantidad != null ? `${lote!.cantidad} L` : "No registrada"}
+                {lote!.cantidad != null
+                  ? `${lote!.cantidad} L`
+                  : "No registrada"}
               </p>
             </div>
           ) : (
@@ -638,7 +774,9 @@ export function LoteFormModal({
               inputMode="decimal"
               label="Cantidad ingresada (L) *"
               value={values.cantidad}
-              onChange={(e) => setValues((prev) => ({ ...prev, cantidad: e.target.value }))}
+              onChange={(e) =>
+                setValues((prev) => ({ ...prev, cantidad: e.target.value }))
+              }
               error={errors.cantidad}
             />
           )}
@@ -648,7 +786,9 @@ export function LoteFormModal({
             UpdateLoteDto), así que en edición se muestran de solo lectura. */}
         <div className="flex flex-col gap-3">
           <SectionHeader>
-            {esEdicion ? "PARÁMETROS DE CALIDAD" : "PARÁMETROS DE CALIDAD (opcional, al menos uno)"}
+            {esEdicion
+              ? "PARÁMETROS DE CALIDAD"
+              : "PARÁMETROS DE CALIDAD (opcional, al menos uno)"}
           </SectionHeader>
           {esEdicion ? (
             lote!.parametros.length > 0 ? (
@@ -659,9 +799,12 @@ export function LoteFormModal({
                     className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800"
                   >
                     <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      {PARAMETROS_META[p.parametro as ParametroVisible]?.label ?? p.parametro}
+                      {PARAMETROS_META[p.parametro as ParametroVisible]
+                        ?.label ?? p.parametro}
                     </p>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white">{p.valor}</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                      {p.valor}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -673,12 +816,18 @@ export function LoteFormModal({
           ) : (
             <>
               {errors.parametrosGeneral && (
-                <p className="text-sm text-red-600 dark:text-red-400">{errors.parametrosGeneral}</p>
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {errors.parametrosGeneral}
+                </p>
               )}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {ORDEN_PARAMETROS.map((parametro) => {
                   const meta = PARAMETROS_META[parametro];
-                  const config = buscarConfig(configs, parametro, values.materiaPrima);
+                  const config = buscarConfig(
+                    configs,
+                    parametro,
+                    values.materiaPrima,
+                  );
                   return (
                     <Input
                       key={parametro}
@@ -686,7 +835,11 @@ export function LoteFormModal({
                       label={`${meta.label} (${meta.unidad})`}
                       type="number"
                       inputMode="decimal"
-                      placeholder={config ? `${config.umbralMin} a ${config.umbralMax}` : ""}
+                      placeholder={
+                        config
+                          ? `${config.umbralMin} a ${config.umbralMax}`
+                          : ""
+                      }
                       value={values.parametros[parametro]}
                       onChange={(e) => setParametro(parametro, e.target.value)}
                       error={errors.parametros?.[parametro]}
@@ -723,9 +876,10 @@ export function LoteFormModal({
             {remitoAbierto && (
               <div className="flex flex-col gap-3 border-l-2 border-slate-100 pl-4 dark:border-slate-800">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Cargá lo comprometido por el proveedor según el remito para detectar desvíos
-                  contra lo efectivamente recibido. Si no contás con el remito todavía, podés
-                  dejar esta sección vacía y el lote se guarda igual.
+                  Cargá lo comprometido por el proveedor según el remito para
+                  detectar desvíos contra lo efectivamente recibido. Si no
+                  contás con el remito todavía, podés dejar esta sección vacía y
+                  el lote se guarda igual.
                 </p>
 
                 <Input
@@ -735,7 +889,10 @@ export function LoteFormModal({
                   label="Cantidad comprometida según remito"
                   value={values.cantidadComprometida}
                   onChange={(e) =>
-                    setValues((prev) => ({ ...prev, cantidadComprometida: e.target.value }))
+                    setValues((prev) => ({
+                      ...prev,
+                      cantidadComprometida: e.target.value,
+                    }))
                   }
                   error={errors.cantidadComprometida}
                 />
@@ -743,7 +900,8 @@ export function LoteFormModal({
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {ORDEN_PARAMETROS.map((parametro) => {
                     const meta = PARAMETROS_META[parametro];
-                    const tieneValorReal = values.parametros[parametro].trim() !== "";
+                    const tieneValorReal =
+                      values.parametros[parametro].trim() !== "";
                     return (
                       <Input
                         key={`comprometido-${parametro}`}
@@ -752,9 +910,13 @@ export function LoteFormModal({
                         type="number"
                         inputMode="decimal"
                         disabled={!tieneValorReal}
-                        placeholder={tieneValorReal ? "" : "Cargá primero el valor real"}
+                        placeholder={
+                          tieneValorReal ? "" : "Cargá primero el valor real"
+                        }
                         value={values.parametrosComprometidos[parametro]}
-                        onChange={(e) => setParametroComprometido(parametro, e.target.value)}
+                        onChange={(e) =>
+                          setParametroComprometido(parametro, e.target.value)
+                        }
                         error={errors.parametrosComprometidos?.[parametro]}
                         className={!tieneValorReal ? "opacity-60" : ""}
                       />
@@ -768,14 +930,36 @@ export function LoteFormModal({
 
         {/* Destino */}
         <div className="flex flex-col gap-3">
-          <SectionHeader>DESTINO</SectionHeader>
+          <SectionHeader>DESTINO PRODUCTIVO</SectionHeader>
+          {esEdicion && (
+            <RecomendacionDestinoCard
+              recomendacion={recomendacionDestino}
+              destinoLabel={DESTINO_LABEL}
+              destinoSeleccionado={values.destinoInicial}
+              onAceptarRecomendacion={() =>
+                recomendacionDestino &&
+                setValues((prev) => ({
+                  ...prev,
+                  destinoInicial: recomendacionDestino.destinoSugerido,
+                }))
+              }
+              justificacion={values.justificacionDivergencia}
+              onJustificacionChange={(justificacionDivergencia) =>
+                setValues((prev) => ({ ...prev, justificacionDivergencia }))
+              }
+              errorJustificacion={errors.justificacionDivergencia}
+            />
+          )}
           <Select
             id="lote-destino"
             label="Destino inicial *"
             options={DESTINO_OPTIONS}
             value={values.destinoInicial}
             onChange={(e) =>
-              setValues((prev) => ({ ...prev, destinoInicial: e.target.value as DestinoLote }))
+              setValues((prev) => ({
+                ...prev,
+                destinoInicial: e.target.value as DestinoLote,
+              }))
             }
             error={errors.destinoInicial}
           />
@@ -786,7 +970,10 @@ export function LoteFormModal({
             value={values.ubicacionInicial}
             disabled={esEdicion}
             onChange={(e) =>
-              setValues((prev) => ({ ...prev, ubicacionInicial: e.target.value as Ubicacion }))
+              setValues((prev) => ({
+                ...prev,
+                ubicacionInicial: e.target.value as Ubicacion,
+              }))
             }
           />
           {esEdicion && (
