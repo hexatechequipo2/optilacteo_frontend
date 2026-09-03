@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from "react";
-import { Mic } from "lucide-react";
 import { Input } from "../../../components/ui/Input";
 import { Button } from "../../../components/ui/Button";
 import { Badge } from "../../../components/ui/Badge";
@@ -12,15 +11,10 @@ import { Parametro } from "../../../types/configParametro.types";
 import { EstadoLectura } from "../../../types/historialMediciones.types";
 import type { MedicionManualItem } from "../../../types/medicionManual.types";
 import type { Lote } from "../../../types/lote.types";
-import type {
-  EstadoDictadoVoz,
-  ParametroCapturadoVoz,
-} from "../../../types/dictadoVoz.types";
 import {
   PARAMETRO_LABEL,
   UNIDAD_POR_PARAMETRO,
 } from "../../Sensores/constants/parametroSensor";
-import { DictadoVozModal } from "../../MedicionManual/components/DictadoVozModal";
 
 const ESTADO_LABEL: Record<EstadoLectura, string> = {
   [EstadoLectura.NORMAL]: "Normal",
@@ -52,14 +46,6 @@ export function RegistrarMedicionManualTab({
   const [formError, setFormError] = useState("");
   const [serverError, setServerError] = useState("");
   const [resultado, setResultado] = useState<MedicionManualItem[] | null>(null);
-
-  // HU-55 (Sprint 4, mock visual): todavía sin reconocimiento de voz real
-  // ni conexión a backend. `parametrosCapturadosVoz` queda vacío hasta que
-  // se conecte el micrófono real (Web Speech API) — ver DictadoVozModal.
-  const [dictadoVozAbierto, setDictadoVozAbierto] = useState(false);
-  const [estadoDictadoVoz, setEstadoDictadoVoz] =
-    useState<EstadoDictadoVoz>("escuchando");
-  const [parametrosCapturadosVoz] = useState<ParametroCapturadoVoz[]>([]);
 
   const { registrar, isSubmitting } = useMedicionManual();
   const { disponible: obligatoriosDisponibles, infoPorParametro } =
@@ -119,121 +105,88 @@ export function RegistrarMedicionManualTab({
   };
 
   return (
-    <>
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
-        <div className="flex flex-col gap-3">
-          <SectionHeader>TIPO DE MATERIA PRIMA</SectionHeader>
-          <TipoMateriaPrimaSelector
-            value={tipoMateriaPrima}
-            onChange={setTipoMateriaPrima}
-          />
-        </div>
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <SectionHeader>TIPO DE MATERIA PRIMA</SectionHeader>
+        <TipoMateriaPrimaSelector
+          value={tipoMateriaPrima}
+          onChange={setTipoMateriaPrima}
+        />
+      </div>
 
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <SectionHeader>PARÁMETROS MEDIDOS</SectionHeader>
-            <button
-              type="button"
-              onClick={() => setDictadoVozAbierto(true)}
-              className="flex shrink-0 items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              <Mic className="h-3.5 w-3.5" /> Dictar por voz
-            </button>
-          </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Completá los parámetros que hayas medido manualmente. Los que sean
-            obligatorios para este tipo de materia prima se validan al guardar.
-          </p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {Object.values(Parametro).map((parametro) => {
-              const info = infoPorParametro[parametro];
-              const unidad = UNIDAD_POR_PARAMETRO[parametro];
-              const label = `${PARAMETRO_LABEL[parametro]}${info.obligatorio ? " *" : ""}${
-                unidad ? ` (${unidad})` : ""
-              }`;
-              return (
-                <Input
-                  key={parametro}
-                  id={`medicion-manual-${parametro}`}
-                  type="text"
-                  inputMode="decimal"
-                  label={label}
-                  value={valores[parametro] ?? ""}
-                  onChange={(e) => handleValorChange(parametro, e.target.value)}
-                  error={fieldErrors[parametro]}
-                />
-              );
-            })}
-          </div>
-          {obligatoriosDisponibles && (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              * Obligatorio para este tipo de materia prima.
-            </p>
-          )}
+      <div className="flex flex-col gap-3">
+        <SectionHeader>PARÁMETROS MEDIDOS</SectionHeader>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Completá los parámetros que hayas medido manualmente. Los que sean
+          obligatorios para este tipo de materia prima se validan al guardar.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {Object.values(Parametro).map((parametro) => {
+            const info = infoPorParametro[parametro];
+            const unidad = UNIDAD_POR_PARAMETRO[parametro];
+            const label = `${PARAMETRO_LABEL[parametro]}${info.obligatorio ? " *" : ""}${
+              unidad ? ` (${unidad})` : ""
+            }`;
+            return (
+              <Input
+                key={parametro}
+                id={`medicion-manual-${parametro}`}
+                type="text"
+                inputMode="decimal"
+                label={label}
+                value={valores[parametro] ?? ""}
+                onChange={(e) => handleValorChange(parametro, e.target.value)}
+                error={fieldErrors[parametro]}
+              />
+            );
+          })}
         </div>
-
-        {formError && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
-            {formError}
+        {obligatoriosDisponibles && (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            * Obligatorio para este tipo de materia prima.
           </p>
         )}
+      </div>
 
-        {serverError && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
-            {serverError}
-          </p>
-        )}
+      {formError && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
+          {formError}
+        </p>
+      )}
 
-        {resultado && (
-          <div className="flex flex-col gap-3 rounded-md border border-slate-200 p-4 dark:border-slate-800">
-            <SectionHeader>MEDICIÓN REGISTRADA</SectionHeader>
-            <ul className="flex flex-col gap-2">
-              {resultado.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="text-slate-700 dark:text-slate-300">
-                    {PARAMETRO_LABEL[item.parametro] ?? item.parametro}:{" "}
-                    {item.valor}
-                  </span>
-                  <Badge variant={ESTADO_VARIANT[item.estado]}>
-                    {ESTADO_LABEL[item.estado]}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+      {serverError && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
+          {serverError}
+        </p>
+      )}
 
-        <div className="flex justify-end">
-          <Button
-            type="submit"
-            isLoading={isSubmitting}
-            className="!w-auto px-6"
-          >
-            Registrar medición
-          </Button>
+      {resultado && (
+        <div className="flex flex-col gap-3 rounded-md border border-slate-200 p-4 dark:border-slate-800">
+          <SectionHeader>MEDICIÓN REGISTRADA</SectionHeader>
+          <ul className="flex flex-col gap-2">
+            {resultado.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center justify-between text-sm"
+              >
+                <span className="text-slate-700 dark:text-slate-300">
+                  {PARAMETRO_LABEL[item.parametro] ?? item.parametro}:{" "}
+                  {item.valor}
+                </span>
+                <Badge variant={ESTADO_VARIANT[item.estado]}>
+                  {ESTADO_LABEL[item.estado]}
+                </Badge>
+              </li>
+            ))}
+          </ul>
         </div>
-      </form>
+      )}
 
-      <DictadoVozModal
-        isOpen={dictadoVozAbierto}
-        estado={estadoDictadoVoz}
-        transcripcionEnVivo=""
-        parametrosCapturados={parametrosCapturadosVoz}
-        totalParametrosEsperados={Object.values(Parametro).length}
-        onClose={() => {
-          setDictadoVozAbierto(false);
-          setEstadoDictadoVoz("escuchando");
-        }}
-        onPausarOReanudar={() =>
-          setEstadoDictadoVoz((prev) =>
-            prev === "escuchando" ? "pausado" : "escuchando",
-          )
-        }
-        onConfirmar={() => setDictadoVozAbierto(false)}
-      />
-    </>
+      <div className="flex justify-end">
+        <Button type="submit" isLoading={isSubmitting} className="!w-auto px-6">
+          Registrar medición
+        </Button>
+      </div>
+    </form>
   );
 }
