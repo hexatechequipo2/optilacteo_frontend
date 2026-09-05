@@ -1,15 +1,37 @@
-import type { DestinoLote } from "./lote.types";
+import type { DestinoProductivo } from "./destinoProductivo.types";
 
-// HU-49 (Sprint 4): tipos de UI para la recomendación de destino productivo
-// por ML. Todavía no existe el modelo ni el endpoint en el backend — no hay
-// entidad equivalente ahí. Cuando se conecte, debería alcanzar con mapear la
-// respuesta real a esta forma sin tocar RecomendacionDestinoCard.
+// HU-49: tipos de UI para la recomendación de destino productivo por ML.
+// Espeja RecomendacionPendienteResponseDto del backend (GET
+// /recomendaciones/lote/:loteId, ver ml/dto/recomendacion-pendiente-
+// response.dto.ts). El backend no manda "lotesComparables" ni un nivel de
+// confianza — eso lo inventó un mock de UI anterior; se derivan acá.
+export type EstadoRecomendacion = "pendiente" | "aceptada" | "rechazada";
+
+export interface RecomendacionDestinoIA {
+  id: number;
+  destinoRecomendado: DestinoProductivo;
+  confianza: number; // 0-100
+  estado: EstadoRecomendacion;
+  destinoReal: DestinoProductivo | null;
+}
 
 export type NivelConfianzaRecomendacion = "alta" | "media" | "baja";
 
-export interface RecomendacionDestinoIA {
-  destinoSugerido: DestinoLote;
-  confianza: number; // 0-100
-  nivelConfianza: NivelConfianzaRecomendacion;
-  lotesComparables: number;
+// Cortes de confianza para el badge de la tarjeta: decisión de UI, el
+// backend solo manda `confianza` como número 0-100. Documentado acá para
+// que quede a la vista si se quiere ajustar en el futuro.
+export const CORTE_NIVEL_CONFIANZA = {
+  ALTA: 80, // confianza >= 80 -> "alta"
+  MEDIA: 50, // confianza >= 50 y < 80 -> "media"; < 50 -> "baja"
+} as const;
+
+export function derivarNivelConfianza(confianza: number): NivelConfianzaRecomendacion {
+  if (confianza >= CORTE_NIVEL_CONFIANZA.ALTA) return "alta";
+  if (confianza >= CORTE_NIVEL_CONFIANZA.MEDIA) return "media";
+  return "baja";
+}
+
+export interface ResponderRecomendacionDto {
+  aceptada: boolean;
+  destinoRealId?: number; // requerido solo si aceptada = false
 }

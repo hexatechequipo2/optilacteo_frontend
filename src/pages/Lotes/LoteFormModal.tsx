@@ -13,11 +13,7 @@ import {
 } from "../../services/sensor.service";
 import { useConfigParametros } from "../../hooks/useConfigParametros";
 import { useTambosPorProveedor } from "../../hooks/useTambos";
-import {
-  RecomendacionDestinoCard,
-  JUSTIFICACION_MIN_LENGTH,
-} from "./components/RecomendacionDestinoCard";
-import type { RecomendacionDestinoIA } from "../../types/recomendacionDestino.types";
+import { RecomendacionDestinoCard } from "./components/RecomendacionDestinoCard";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -76,10 +72,6 @@ interface FormValues {
   // ellos.
   cantidadComprometida: string;
   parametrosComprometidos: Record<ParametroVisible, string>;
-  // HU-49: solo se completa si el destino elegido diverge del recomendado
-  // por el modelo de ML. Todavía no se manda al backend (no hay endpoint ni
-  // columna para esto) — queda como estado local, ver RecomendacionDestinoCard.
-  justificacionDivergencia: string;
 }
 
 interface FormErrors {
@@ -92,7 +84,6 @@ interface FormErrors {
   parametrosGeneral?: string;
   cantidadComprometida?: string;
   parametrosComprometidos?: Partial<Record<ParametroVisible, string>>;
-  justificacionDivergencia?: string;
 }
 
 function buildParametrosVacios(): Record<ParametroVisible, string> {
@@ -115,7 +106,6 @@ function buildInitialValues(lote?: Lote): FormValues {
       ubicacionInicial: "",
       cantidadComprometida: "",
       parametrosComprometidos: buildParametrosVacios(),
-      justificacionDivergencia: "",
     };
   }
   return {
@@ -132,7 +122,6 @@ function buildInitialValues(lote?: Lote): FormValues {
     // HU-66: tampoco editable en PATCH /lotes/:id.
     cantidadComprometida: "",
     parametrosComprometidos: buildParametrosVacios(),
-    justificacionDivergencia: "",
   };
 }
 
@@ -153,7 +142,6 @@ function validate(
   values: FormValues,
   configs: ConfigParametro[],
   esEdicion: boolean,
-  recomendacionDestino: RecomendacionDestinoIA | null,
 ): FormErrors {
   const errors: FormErrors = {};
 
@@ -165,19 +153,6 @@ function validate(
     errors.fechaIngreso = "La fecha de ingreso es obligatoria";
   if (!values.destinoInicial)
     errors.destinoInicial = "El destino inicial es obligatorio";
-
-  // HU-49 (AC4): elegir un destino distinto al recomendado por el modelo
-  // exige justificar la divergencia. Hoy `recomendacionDestino` siempre
-  // llega en null (sin backend de ML todavía), así que esto no se dispara
-  // en la práctica — queda listo para cuando exista una recomendación real.
-  if (
-    recomendacionDestino &&
-    values.destinoInicial &&
-    values.destinoInicial !== recomendacionDestino.destinoSugerido &&
-    values.justificacionDivergencia.trim().length < JUSTIFICACION_MIN_LENGTH
-  ) {
-    errors.justificacionDivergencia = `Contá al menos ${JUSTIFICACION_MIN_LENGTH} caracteres`;
-  }
 
   // PATCH /lotes/:id no acepta cantidad ni parametros (ver UpdateLoteDto /
   // LoteService.update en el backend): en edición no hay nada más que
@@ -286,13 +261,6 @@ export function LoteFormModal({
 }: LoteFormModalProps) {
   const esEdicion = !!lote;
   const { configs } = useConfigParametros();
-  // HU-49 (Sprint 4, mock visual): todavía no existe el endpoint de
-  // recomendación por ML — queda en null hasta que el backend lo tenga.
-  // RecomendacionDestinoCard ya sabe renderizar el estado "sin recomendación
-  // disponible" para este caso. `useState` (en vez de un const literal) para
-  // que TypeScript no lo trate como "siempre null" y quede tipado igual que
-  // el día que se conecte una llamada real acá.
-  const [recomendacionDestino] = useState<RecomendacionDestinoIA | null>(null);
   const [values, setValues] = useState<FormValues>(() =>
     buildInitialValues(lote),
   );
@@ -396,12 +364,7 @@ export function LoteFormModal({
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setServerError("");
-    const validationErrors = validate(
-      values,
-      configs,
-      esEdicion,
-      recomendacionDestino,
-    );
+    const validationErrors = validate(values, configs, esEdicion);
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
@@ -931,25 +894,7 @@ export function LoteFormModal({
         {/* Destino */}
         <div className="flex flex-col gap-3">
           <SectionHeader>DESTINO PRODUCTIVO</SectionHeader>
-          {esEdicion && (
-            <RecomendacionDestinoCard
-              recomendacion={recomendacionDestino}
-              destinoLabel={DESTINO_LABEL}
-              destinoSeleccionado={values.destinoInicial}
-              onAceptarRecomendacion={() =>
-                recomendacionDestino &&
-                setValues((prev) => ({
-                  ...prev,
-                  destinoInicial: recomendacionDestino.destinoSugerido,
-                }))
-              }
-              justificacion={values.justificacionDivergencia}
-              onJustificacionChange={(justificacionDivergencia) =>
-                setValues((prev) => ({ ...prev, justificacionDivergencia }))
-              }
-              errorJustificacion={errors.justificacionDivergencia}
-            />
-          )}
+          {esEdicion && <RecomendacionDestinoCard loteId={lote!.id} />}
           <Select
             id="lote-destino"
             label="Destino inicial *"
