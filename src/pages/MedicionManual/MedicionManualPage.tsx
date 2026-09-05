@@ -6,14 +6,9 @@ import { LoteActivoSelector } from "../../components/LoteActivoSelector";
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { EstadoLote } from "../../types/lote.types";
-import { Parametro } from "../../types/configParametro.types";
-import type {
-  EstadoDictadoVoz,
-  ParametroCapturadoVoz,
-} from "../../types/dictadoVoz.types";
 import { RegistrarMedicionManualTab } from "../Lotes/components/RegistrarMedicionManualTab";
 import { HistorialMedicionesManualesTab } from "../Lotes/components/HistorialMedicionesManualesTab";
-import { DictadoVozModal } from "./components/DictadoVozModal";
+import { DictadoVozFlow } from "./components/DictadoVozFlow";
 
 type TabMedicionManual = "registro" | "historial";
 
@@ -30,14 +25,11 @@ export default function MedicionManualPage() {
   );
   const [tabActiva, setTabActiva] = useState<TabMedicionManual>("registro");
 
-  // HU-55 (Sprint 4, mock visual): sin reconocimiento de voz real ni
-  // conexión a backend todavía. Feedback de Jimena tras el primer merge: el
-  // botón tiene que ser visible y prominente (antes era chico, al lado de
-  // "Parámetros medidos"), no depender de la pestaña "Registrar medición".
+  // HU-55: dictado por voz conectado a la Web Speech API y al backend real
+  // (ver DictadoVozFlow). Feedback de Jimena tras el primer merge del mock:
+  // el botón tiene que ser visible y prominente (antes era chico, al lado
+  // de "Parámetros medidos"), no depender de la pestaña "Registrar medición".
   const [dictadoVozAbierto, setDictadoVozAbierto] = useState(false);
-  const [estadoDictadoVoz, setEstadoDictadoVoz] =
-    useState<EstadoDictadoVoz>("escuchando");
-  const [parametrosCapturadosVoz] = useState<ParametroCapturadoVoz[]>([]);
 
   // HU-20 es respaldo TOTAL: solo aplica a lotes sin ningún sensor asociado
   // (si tiene uno, corresponde HU-15, ingreso manual por sensor puntual).
@@ -98,13 +90,15 @@ export default function MedicionManualPage() {
         <button
           type="button"
           onClick={() => setDictadoVozAbierto(true)}
-          className="flex items-center gap-2 rounded-xl bg-[#3d6fcf] px-6 py-3 text-base font-semibold text-white shadow-md transition hover:bg-[#3460b5]"
+          disabled={!loteSeleccionado}
+          className="flex items-center gap-2 rounded-xl bg-[#3d6fcf] px-6 py-3 text-base font-semibold text-white shadow-md transition hover:bg-[#3460b5] disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Mic className="h-5 w-5" /> Dictar valores
         </button>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Modo alternativo, con las manos ocupadas. El formulario de abajo sigue
-          disponible para cargar a mano.
+          {loteSeleccionado
+            ? "Modo alternativo, con las manos ocupadas. El formulario de abajo sigue disponible para cargar a mano."
+            : "Elegí un lote de la lista de abajo para poder dictar sus valores."}
         </p>
       </div>
 
@@ -162,22 +156,11 @@ export default function MedicionManualPage() {
         </div>
       )}
 
-      <DictadoVozModal
+      <DictadoVozFlow
         isOpen={dictadoVozAbierto}
-        estado={estadoDictadoVoz}
-        transcripcionEnVivo=""
-        parametrosCapturados={parametrosCapturadosVoz}
-        totalParametrosEsperados={Object.values(Parametro).length}
-        onClose={() => {
-          setDictadoVozAbierto(false);
-          setEstadoDictadoVoz("escuchando");
-        }}
-        onPausarOReanudar={() =>
-          setEstadoDictadoVoz((prev) =>
-            prev === "escuchando" ? "pausado" : "escuchando",
-          )
-        }
-        onConfirmar={() => setDictadoVozAbierto(false)}
+        lotes={lotesElegibles}
+        loteInicial={loteSeleccionado}
+        onClose={() => setDictadoVozAbierto(false)}
       />
     </Layout>
   );
