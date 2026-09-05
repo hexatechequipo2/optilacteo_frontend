@@ -4,6 +4,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { useTheme } from "../../hooks/useTheme";
 import { useNotificaciones } from "../../hooks/useNotificaciones";
 import { Bell, Moon, Sun, Menu } from "lucide-react";
+import { FloatingDictadoVozButton } from "../FloatingDictadoVozButton";
 
 interface LayoutProps {
   breadcrumb: string;
@@ -124,7 +125,9 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
                             <li
                               key={n.id}
                               className={`flex flex-col gap-1.5 px-4 py-3 ${
-                                n.leida ? "" : "bg-blue-50/60 dark:bg-blue-500/10"
+                                n.leida
+                                  ? ""
+                                  : "bg-blue-50/60 dark:bg-blue-500/10"
                               }`}
                             >
                               <span className="text-sm text-slate-700 dark:text-slate-300">
@@ -132,7 +135,9 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
                               </span>
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-xs text-slate-400 dark:text-slate-500">
-                                  {new Date(n.createdAt).toLocaleString("es-AR")}
+                                  {new Date(n.createdAt).toLocaleString(
+                                    "es-AR",
+                                  )}
                                 </span>
                                 {!n.leida && (
                                   <button
@@ -176,6 +181,12 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
 
         <main className="flex-1 p-6">{children}</main>
       </div>
+
+      {/* HU-55: botón flotante de dictado por voz, gateado por rol adentro
+          del propio componente (mismo criterio que Sidebar.tsx). Vive acá,
+          fuera de <main>, para quedar fijo en pantalla sin importar el
+          scroll del contenido de cada página. */}
+      <FloatingDictadoVozButton />
     </div>
   );
 }
