@@ -23,10 +23,26 @@ export function useRoles() {
     fetchRoles();
   }, []);
 
-  const updatePermiso = async (rolId: number, payload: UpdatePermisoDto) => {
-    const rolActualizado = await updatePermisoService(rolId, payload);
+  const updatePermiso = async (permisoId: number, payload: UpdatePermisoDto) => {
+    const permisoActualizado = await updatePermisoService(permisoId, payload);
+
     setRoles((prev) =>
-      prev.map((rol) => (rol.id === rolId ? rolActualizado : rol)),
+      prev.map((rol) => {
+        if (rol.id !== permisoActualizado.rol.id) return rol;
+        return {
+          ...rol,
+          permisos: rol.permisos.map((p) =>
+            p.id === permisoActualizado.id
+              ? {
+                  id: permisoActualizado.id,
+                  modulo: permisoActualizado.modulo,
+                  canRead: permisoActualizado.canRead,
+                  canWrite: permisoActualizado.canWrite,
+                }
+              : p,
+          ),
+        };
+      }),
     );
   };
 
