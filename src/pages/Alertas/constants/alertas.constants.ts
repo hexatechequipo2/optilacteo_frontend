@@ -1,5 +1,6 @@
 import { AlertOctagon, AlertTriangle, CircleCheck, EyeOff, type LucideIcon, Info } from "lucide-react";
 import { NivelAlerta, TipoDesvioAnomalia } from "../../../types/notificacion.types";
+import type { NivelConfianza } from "../../../utils/confianza";
 import { EstadoAlerta } from "../../../types/alertaCierre.types";
 // Reutilizamos los labels/unidades ya definidos para Sensores en vez de
 // duplicarlos: son el mismo Parametro (configParametro.types.ts) en las dos
@@ -68,6 +69,20 @@ export const TIPO_DESVIO_LABEL: Record<TipoDesvioAnomalia, string> = {
   [TipoDesvioAnomalia.TENDENCIA]: "Tendencia",
   [TipoDesvioAnomalia.VARIANZA_ATIPICA]: "Varianza atípica",
   [TipoDesvioAnomalia.NIVEL_ATIPICO]: "Nivel atípico",
+};
+
+// HU-50 criterio 3: badge de confianza del modelo ML (AlertaAnomaliaCard,
+// AlertaAnomaliaDetallePanel). Mismos colores por nivel que
+// RecomendacionDestinoCard.tsx (HU-49: alta=success, media=warning,
+// baja=danger) para mantener consistencia visual entre ambas HU de ML —
+// esa card no expone estos labels/variants para importar (recibe
+// nivelConfianza ya resuelto por prop), así que se declaran de nuevo acá en
+// vez de acoplar este módulo al de Lotes. Los cortes en sí viven en
+// utils/confianza.ts (getNivelConfianza), no acá.
+export const NIVEL_CONFIANZA_META: Record<NivelConfianza, { label: string; badgeVariant: "success" | "warning" | "danger" }> = {
+  alta: { label: "Confianza alta", badgeVariant: "success" },
+  media: { label: "Confianza media", badgeVariant: "warning" },
+  baja: { label: "Confianza baja", badgeVariant: "danger" },
 };
 
 // Tabs del header (Figura 1, Sprint 3): "Todas / Críticas / Preventivas /

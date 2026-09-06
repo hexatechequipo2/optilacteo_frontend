@@ -6,7 +6,13 @@ import { useAlertas } from "../../hooks/useAlertas";
 import { useLotes } from "../../hooks/useLotes";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import { useAuth } from "../../hooks/useAuth";
-import { NivelAlerta, TipoNotificacion, esAlertaUmbral } from "../../types/notificacion.types";
+import {
+  NivelAlerta,
+  TipoNotificacion,
+  esAlertaUmbral,
+  esAlertaSensorDesconectado,
+  esAlertaAnomalia,
+} from "../../types/notificacion.types";
 import { EstadoAlerta } from "../../types/alertaCierre.types";
 import { TABS_ALERTAS, TAB_A_NIVEL, type TabAlertas } from "./constants/alertas.constants";
 import { ContadoresAlertas } from "./components/ContadoresAlertas";
@@ -15,6 +21,8 @@ import { AlertaCard } from "./components/AlertaCard";
 import { AlertaDetallePanel } from "./components/AlertaDetallePanel";
 import { AlertaSensorDesconectadoCard } from "./components/AlertaSensorDesconectadoCard";
 import { AlertaSensorDesconectadoDetallePanel } from "./components/AlertaSensorDesconectadoDetallePanel";
+import { AlertaAnomaliaCard } from "./components/AlertaAnomaliaCard";
+import { AlertaAnomaliaDetallePanel } from "./components/AlertaAnomaliaDetallePanel";
 import { ReglasActivasPanel } from "./components/ReglasActivasPanel";
 
 // HU-27: mismo rol que ya filtra toda la ruta /alertas (App.tsx) — se repite
@@ -95,12 +103,14 @@ export default function AlertasPage() {
     () => alertas.find((a) => a.id === alertaSeleccionadaId) ?? null,
     [alertas, alertaSeleccionadaId],
   );
-  // HU-31: angostado por tipo para cada panel — ver comentario donde se
+  // HU-31/50: angostado por tipo para cada panel — ver comentario donde se
   // renderizan más abajo.
   const alertaSeleccionadaUmbral =
     alertaSeleccionada && esAlertaUmbral(alertaSeleccionada) ? alertaSeleccionada : null;
   const alertaSeleccionadaSensor =
-    alertaSeleccionada && !esAlertaUmbral(alertaSeleccionada) ? alertaSeleccionada : null;
+    alertaSeleccionada && esAlertaSensorDesconectado(alertaSeleccionada) ? alertaSeleccionada : null;
+  const alertaSeleccionadaAnomalia =
+    alertaSeleccionada && esAlertaAnomalia(alertaSeleccionada) ? alertaSeleccionada : null;
 
   const contadores = useMemo(
     () => ({
@@ -196,6 +206,13 @@ export default function AlertasPage() {
                   onMarcarLeida={marcarLeida}
                   onSeleccionar={(a) => setAlertaSeleccionadaId(a.id)}
                 />
+              ) : alerta.tipo === TipoNotificacion.ALERTA_ANOMALIA ? (
+                <AlertaAnomaliaCard
+                  key={alerta.id}
+                  alerta={alerta}
+                  onMarcarLeida={marcarLeida}
+                  onSeleccionar={(a) => setAlertaSeleccionadaId(a.id)}
+                />
               ) : (
                 <AlertaSensorDesconectadoCard
                   key={alerta.id}
@@ -214,12 +231,16 @@ export default function AlertasPage() {
         <ReglasActivasPanel alertas={alertas.filter(esAlertaUmbral)} />
       </div>
 
-      {/* HU-31: dos paneles en vez de uno ramificado adentro — cada uno ya
-          sabe devolver null si su `alerta` no corresponde (mismo patrón que
-          ya tenían con `alerta: AlertaConCierre | null`). Evita narrowing
-          frágil de TS sobre una condición compuesta en un ternario. */}
+      {/* HU-31/50: paneles separados en vez de uno ramificado adentro — cada
+          uno ya sabe devolver null si su `alerta` no corresponde (mismo
+          patrón que ya tenían con `alerta: AlertaConCierre | null`). Evita
+          narrowing frágil de TS sobre una condición compuesta en un ternario. */}
       <AlertaSensorDesconectadoDetallePanel
         alerta={alertaSeleccionadaSensor}
+        onClose={() => setAlertaSeleccionadaId(null)}
+      />
+      <AlertaAnomaliaDetallePanel
+        alerta={alertaSeleccionadaAnomalia}
         onClose={() => setAlertaSeleccionadaId(null)}
       />
       <AlertaDetallePanel
