@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useAuth } from "../../../hooks/useAuth";
-import type { RolType, ModuloSistema, UpdatePermisoDto } from "../../../types/rol.types";
+import type { RolType, ModuloSistema, PermisoType, UpdatePermisoDto } from "../../../types/rol.types";
 
 interface MatrizPermisosProps {
   roles: RolType[];
-  onTogglePermiso: (rolId: number, payload: UpdatePermisoDto) => Promise<void>;
+  onTogglePermiso: (permisoId: number, payload: UpdatePermisoDto) => Promise<void>;
 }
 
 const MODULOS: { key: ModuloSistema; label: string }[] = [
@@ -39,15 +39,16 @@ const NIVEL_CONFIG: Record<NivelAcceso, { label: string; swatchClass: string }> 
   },
 };
 
-function getPermiso(rol: RolType, modulo: ModuloSistema) {
-  return rol.permisos.find((p) => p.modulo === modulo) ?? {
-    modulo,
-    canRead: false,
-    canWrite: false,
-  };
+// Devuelve undefined si el permiso no existe para ese rol+módulo. En teoría
+// no debería pasar (el backfill de la migración crea las 8 filas para cada
+// rol+empresa), pero sin el id de la fila no hay a qué PATCH /permiso/:id
+// apuntar, así que no podemos inventar un fallback editable como antes.
+function getPermiso(rol: RolType, modulo: ModuloSistema): PermisoType | undefined {
+  return rol.permisos.find((p) => p.modulo === modulo);
 }
 
-function getNivel(permiso: { canRead: boolean; canWrite: boolean }): NivelAcceso {
+function getNivel(permiso: { canRead: boolean; canWrite: boolean } | undefined): NivelAcceso {
+  if (!permiso) return "sin_acceso";
   if (permiso.canWrite) return "lectura_escritura";
   if (permiso.canRead) return "solo_lectura";
   return "sin_acceso";
@@ -59,6 +60,8 @@ function nivelAPermiso(nivel: NivelAcceso): { canRead: boolean; canWrite: boolea
   return { canRead: false, canWrite: false };
 }
 
+// Key en vuelo: usamos rolId:modulo (no el permisoId) para que el estado
+// "pendiente" se pueda calcular sin depender de que el permiso exista.
 function permisoKey(rolId: number, modulo: ModuloSistema): string {
   return `${rolId}:${modulo}`;
 }
@@ -75,7 +78,7 @@ export function MatrizPermisos({ roles, onTogglePermiso }: MatrizPermisosProps) 
 
   // Un Gerente puede editar los permisos de roles de empleados, pero no los
   // de Administrador ni los de su propio rol (el backend aplica la misma
-  // restricción en PATCH /rol/:id/permisos).
+  // restricción en PATCH /permiso/:id).
   const esRolBloqueado = (rol: RolType) =>
     esGerente && ["administrador", "gerente"].includes(rol.nombre.trim().toLowerCase());
 
@@ -86,15 +89,26 @@ export function MatrizPermisos({ roles, onTogglePermiso }: MatrizPermisosProps) 
 
   const handleClick = async (rol: RolType, modulo: ModuloSistema) => {
     if (esRolBloqueado(rol)) return;
+
+    const permiso = getPermiso(rol, modulo);
+    if (!permiso) {
+      // No debería ocurrir con el backfill actual, pero sin id de fila no
+      // hay forma de hacer PATCH /permiso/:id — evitamos romper la UI.
+      console.error(
+        `No existe fila de permiso para rol ${rol.id} + módulo "${modulo}". Falta crearla en el backend.`,
+      );
+      return;
+    }
+
     const key = permisoKey(rol.id, modulo);
     if (pendingKey === key) return;
 
-    const nivelActual = getNivel(getPermiso(rol, modulo));
+    const nivelActual = getNivel(permiso);
     const siguiente = CICLO[(CICLO.indexOf(nivelActual) + 1) % CICLO.length];
 
     setPendingKey(key);
     try {
-      await onTogglePermiso(rol.id, { modulo, ...nivelAPermiso(siguiente) });
+      await onTogglePermiso(permiso.id, { modulo, ...nivelAPermiso(siguiente) });
     } finally {
       setPendingKey(null);
     }
