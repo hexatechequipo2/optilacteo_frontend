@@ -4,6 +4,7 @@ import { Layout } from "../../components/layout/Layout";
 import { Tabs } from "../../components/ui/Tabs";
 import { LoteActivoSelector } from "../../components/LoteActivoSelector";
 import { useLotes } from "../../hooks/useLotes";
+import { useLoteContexto } from "../../hooks/useLoteContexto";
 import { useSensores } from "../../hooks/useSensores";
 import { EstadoLote } from "../../types/lote.types";
 import { RegistrarMedicionManualTab } from "../Lotes/components/RegistrarMedicionManualTab";
@@ -20,6 +21,7 @@ const TABS: { value: TabMedicionManual; label: string }[] = [
 export default function MedicionManualPage() {
   const { lotes, isLoading, error, refetch } = useLotes();
   const { sensores } = useSensores();
+  const { setLoteEnContexto } = useLoteContexto();
   const [loteSeleccionadoId, setLoteSeleccionadoId] = useState<number | null>(
     null,
   );
@@ -73,6 +75,15 @@ export default function MedicionManualPage() {
 
   const loteSeleccionado =
     lotesElegibles.find((l) => l.id === loteSeleccionadoId) ?? null;
+
+  // HU-55 (botón flotante global): mientras esta pantalla ya tiene un lote
+  // elegido, el botón fijo de dictado (ver FloatingDictadoVozButton, montado
+  // en Layout) lo usa directo, sin volver a mostrar su propio selector. Se
+  // limpia al desmontar para no arrastrar este lote a otra pantalla.
+  useEffect(() => {
+    setLoteEnContexto(loteSeleccionado);
+    return () => setLoteEnContexto(null);
+  }, [loteSeleccionado, setLoteEnContexto]);
 
   return (
     <Layout breadcrumb="Consola > Medición manual">

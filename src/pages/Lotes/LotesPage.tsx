@@ -119,6 +119,9 @@ export default function LotesPage() {
   // implementada igual en frontend y backend. Se deja anotado acá para que
   // quede trazable en el código, no solo en la conversación.
   const puedeCrearLote = user?.rolNombre === "Responsable de calidad";
+  const puedeEditarLote =
+    user?.rolNombre === "Responsable de calidad" ||
+    user?.rolNombre === "Responsable de producción";
 
   // HU-63: quién creó el lote y, si aplica, quién lo modificó por última
   // vez. El backend manda el bloque `auditoria` para cualquier rol que
@@ -460,7 +463,7 @@ export default function LotesPage() {
                             <GitMerge className="h-4 w-4" />
                           </button>
                         )}
-                        {puedeCrearLote && (
+                        {puedeEditarLote && (
                           <button
                             type="button"
                             onClick={() => abrirEdicion(lote)}
@@ -552,7 +555,7 @@ export default function LotesPage() {
                         <GitMerge className="h-4 w-4" />
                       </button>
                     )}
-                    {puedeCrearLote && (
+                    {puedeEditarLote && (
                       <button
                         type="button"
                         onClick={() => abrirEdicion(lote)}
@@ -640,7 +643,7 @@ export default function LotesPage() {
         </>
       )}
 
-      {puedeCrearLote && (
+      {puedeEditarLote && (
         <LoteFormModal
           isOpen={isModalOpen}
           proveedores={proveedores}
