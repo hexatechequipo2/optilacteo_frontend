@@ -38,7 +38,8 @@ const ROL_QUE_PUEDE_CERRAR = "Responsable de producción";
 // real sin recargar): useAlertas ya deja el array actualizado en vivo, así
 // que cualquier filtro/contador acá es puramente derivado con useMemo.
 export default function AlertasPage() {
-  const { alertas, isLoading, error, isRealtimeConnected, marcarLeida, cerrarAlerta } = useAlertas();
+  const { alertas, isLoading, error, isRealtimeConnected, marcarLeida, cerrarAlerta, marcarFalsoPositivo } =
+    useAlertas();
   const { lotes } = useLotes();
   const { empresa } = useEmpresaActual();
   const { user } = useAuth();
@@ -242,6 +243,8 @@ export default function AlertasPage() {
       <AlertaAnomaliaDetallePanel
         alerta={alertaSeleccionadaAnomalia}
         onClose={() => setAlertaSeleccionadaId(null)}
+        onMarcarFalsoPositivo={marcarFalsoPositivo}
+        puedeMarcarFalsoPositivo={user?.rolNombre === ROL_QUE_PUEDE_CERRAR}
       />
       <AlertaDetallePanel
         alerta={alertaSeleccionadaUmbral}
