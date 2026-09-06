@@ -10,6 +10,7 @@ import {
   EstadoAlerta as EstadoAlertaDeNotificacion,
   type AlertaNotificacion,
   type AlertaSensorDesconectadoNotificacion,
+  type AlertaAnomaliaNotificacion,
 } from "./notificacion.types";
 
 export const EstadoAlerta = EstadoAlertaDeNotificacion;
@@ -35,6 +36,16 @@ export interface AlertaSensorDesconectadoConCierre
   extends AlertaSensorDesconectadoNotificacion,
     CierreAlerta {}
 
-// Unión: AlertasPage (HU-25/31) maneja los dos tipos en un mismo listado.
+// HU-50: mismo criterio que AlertaSensorDesconectadoConCierre arriba. El
+// cierre de una alerta_anomalia nunca pasa por accionCorrectiva/fechaResolucion
+// (esos quedan siempre null para este tipo, ver AlertaDetallePanel.tsx —
+// intacto, no se usa para este tipo): la única transición posible es a
+// FALSO_POSITIVO vía marcadaFalsoPositivoPorId/fechaMarcadoFalsoPositivo.
+export interface AlertaAnomaliaConCierre extends AlertaAnomaliaNotificacion, CierreAlerta {}
+
+// Unión: AlertasPage (HU-25/31/50) maneja los tres tipos en un mismo listado.
 // Discriminar por `tipo` (TipoNotificacion) para angostar a uno u otro.
-export type AlertaConCierre = AlertaUmbralConCierre | AlertaSensorDesconectadoConCierre;
+export type AlertaConCierre =
+  | AlertaUmbralConCierre
+  | AlertaSensorDesconectadoConCierre
+  | AlertaAnomaliaConCierre;

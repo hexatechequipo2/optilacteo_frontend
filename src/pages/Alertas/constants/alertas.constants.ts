@@ -1,5 +1,5 @@
-import { AlertOctagon, AlertTriangle, CircleCheck, Info, type LucideIcon } from "lucide-react";
-import { NivelAlerta } from "../../../types/notificacion.types";
+import { AlertOctagon, AlertTriangle, CircleCheck, EyeOff, type LucideIcon, Info } from "lucide-react";
+import { NivelAlerta, TipoDesvioAnomalia } from "../../../types/notificacion.types";
 import { EstadoAlerta } from "../../../types/alertaCierre.types";
 // Reutilizamos los labels/unidades ya definidos para Sensores en vez de
 // duplicarlos: son el mismo Parametro (configParametro.types.ts) en las dos
@@ -50,9 +50,24 @@ export const NIVEL_ALERTA_META: Record<NivelAlerta, NivelAlertaMeta> = {
 // HU-27: estado de cierre (mockeado, ver alertaCierre.service.ts). Mismo
 // shape reducido que NIVEL_ALERTA_META, sin className/iconClassName porque
 // esto solo se usa en un Badge chico (AlertaCard, AlertaDetallePanel).
-export const ESTADO_ALERTA_META: Record<EstadoAlerta, { label: string; icon: LucideIcon; badgeVariant: "warning" | "success" }> = {
+// HU-50: se suma FALSO_POSITIVO (badgeVariant ampliado a "neutral" para
+// este caso) — solo alcanzable por alerta_anomalia, ver AlertaAnomaliaCard.
+export const ESTADO_ALERTA_META: Record<
+  EstadoAlerta,
+  { label: string; icon: LucideIcon; badgeVariant: "warning" | "success" | "neutral" }
+> = {
   [EstadoAlerta.ABIERTA]: { label: "Abierta", icon: AlertTriangle, badgeVariant: "warning" },
   [EstadoAlerta.CERRADA]: { label: "Cerrada", icon: CircleCheck, badgeVariant: "success" },
+  [EstadoAlerta.FALSO_POSITIVO]: { label: "Falso positivo", icon: EyeOff, badgeVariant: "neutral" },
+};
+
+// HU-50 criterio 3: traducción de TipoDesvioAnomalia para el badge "Anomalía
+// detectada" (AlertaAnomaliaCard) y el panel de detalle.
+export const TIPO_DESVIO_LABEL: Record<TipoDesvioAnomalia, string> = {
+  [TipoDesvioAnomalia.PICO]: "Pico",
+  [TipoDesvioAnomalia.TENDENCIA]: "Tendencia",
+  [TipoDesvioAnomalia.VARIANZA_ATIPICA]: "Varianza atípica",
+  [TipoDesvioAnomalia.NIVEL_ATIPICO]: "Nivel atípico",
 };
 
 // Tabs del header (Figura 1, Sprint 3): "Todas / Críticas / Preventivas /
