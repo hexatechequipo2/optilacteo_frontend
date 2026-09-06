@@ -83,10 +83,11 @@ export interface Notificacion {
   accionCorrectiva?: string | null;
   fechaResolucion?: string | null;
   // NotificacionMapper.toResponse (backend) siempre manda estos 4 campos a
-  // nivel raíz, no solo para ALERTA_UMBRAL/ALERTA_SENSOR_DESCONECTADO — para
-  // el resto de tipos (ej. lote_no_apto) quedan en null. loteId/loteCodigo/
-  // parametro solo se completan para ALERTA_UMBRAL; sensorId solo para
-  // ALERTA_SENSOR_DESCONECTADO (HU-31).
+  // nivel raíz, no solo para ALERTA_UMBRAL/ALERTA_SENSOR_DESCONECTADO/
+  // ALERTA_ANOMALIA — para el resto de tipos (ej. lote_no_apto) quedan en
+  // null. loteId/loteCodigo/parametro se completan para ALERTA_UMBRAL y
+  // ALERTA_ANOMALIA (ver AnomaliaService.evaluarAnomalia, backend); sensorId
+  // solo para ALERTA_SENSOR_DESCONECTADO (HU-31).
   loteId?: number | null;
   loteCodigo?: string | null;
   parametro?: string | null;
