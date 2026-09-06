@@ -1,9 +1,37 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { Badge } from "../../../components/ui/Badge";
 import type { HistorialAlertaItem } from "../../../types/historialAlertas.types";
+import { TipoNotificacion } from "../../../types/notificacion.types";
 import { NIVEL_ALERTA_META, ESTADO_ALERTA_META, PARAMETRO_LABEL } from "../constants/alertas.constants";
 
 const HEADERS = ["FECHA", "LOTE", "PARÁMETRO", "NIVEL", "ESTADO", "ACCIÓN CORRECTIVA"];
+
+// HU-50 fix: alerta_sensor_desconectado no tiene lote/parámetro (su `data`
+// trae sensorId/sensorNombre en su lugar) y alerta_anomalia nunca completa
+// nivelAlerta (el modelo ML no compara contra un umbral) — antes de esto la
+// tabla asumía la forma de alerta_umbral para las tres, y
+// NIVEL_ALERTA_META[null] rompía el render entero (pantalla en blanco) apenas
+// aparecía una anomalía. Mismo criterio de discriminar por `tipo` que ya usa
+// AlertasPage.tsx sobre esta misma unión (AlertaConCierre).
+function loteYParametro(item: HistorialAlertaItem): { lote: string; parametro: string } {
+  if (item.tipo === TipoNotificacion.ALERTA_SENSOR_DESCONECTADO) {
+    return { lote: `Sensor: ${item.data.sensorNombre}`, parametro: "—" };
+  }
+  return { lote: item.data.loteCodigo, parametro: PARAMETRO_LABEL[item.data.parametro] };
+}
+
+function NivelBadge({ item }: { item: HistorialAlertaItem }) {
+  if (item.tipo === TipoNotificacion.ALERTA_ANOMALIA) {
+    return (
+      <Badge variant="info">
+        <Sparkles className="h-3 w-3" />
+        Anomalía
+      </Badge>
+    );
+  }
+  const meta = NIVEL_ALERTA_META[item.nivelAlerta];
+  return <Badge variant={meta.badgeVariant}>{meta.label}</Badge>;
+}
 
 interface HistorialAlertasTablaProps {
   items: HistorialAlertaItem[];
@@ -65,76 +93,74 @@ export function HistorialAlertasTabla({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {items.map((item) => (
-              <tr key={item.id} className="text-sm">
-                <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                  {new Date(item.createdAt).toLocaleString("es-AR")}
-                </td>
-                <td className="px-5 py-3 font-mono text-xs font-medium text-slate-900 dark:text-white">
-                  {item.data.loteCodigo}
-                </td>
-                <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                  {PARAMETRO_LABEL[item.data.parametro]}
-                </td>
-                <td className="px-5 py-3">
-                  <Badge variant={NIVEL_ALERTA_META[item.nivelAlerta].badgeVariant}>
-                    {NIVEL_ALERTA_META[item.nivelAlerta].label}
-                  </Badge>
-                </td>
-                <td className="px-5 py-3">
-                  <Badge variant={ESTADO_ALERTA_META[item.estado].badgeVariant}>
-                    {ESTADO_ALERTA_META[item.estado].label}
-                  </Badge>
-                </td>
-                <td className="max-w-xs px-5 py-3 text-slate-600 dark:text-slate-400">
-                  {item.accionCorrectiva ?? <span className="text-slate-300 dark:text-slate-600">—</span>}
-                </td>
-              </tr>
-            ))}
+            {items.map((item) => {
+              const { lote, parametro } = loteYParametro(item);
+              return (
+                <tr key={item.id} className="text-sm">
+                  <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                    {new Date(item.createdAt).toLocaleString("es-AR")}
+                  </td>
+                  <td className="px-5 py-3 font-mono text-xs font-medium text-slate-900 dark:text-white">
+                    {lote}
+                  </td>
+                  <td className="px-5 py-3 text-slate-600 dark:text-slate-400">{parametro}</td>
+                  <td className="px-5 py-3">
+                    <NivelBadge item={item} />
+                  </td>
+                  <td className="px-5 py-3">
+                    <Badge variant={ESTADO_ALERTA_META[item.estado].badgeVariant}>
+                      {ESTADO_ALERTA_META[item.estado].label}
+                    </Badge>
+                  </td>
+                  <td className="max-w-xs px-5 py-3 text-slate-600 dark:text-slate-400">
+                    {item.accionCorrectiva ?? <span className="text-slate-300 dark:text-slate-600">—</span>}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {/* Cards (mobile) */}
       <div className="flex flex-col gap-3 md:hidden">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate font-mono text-xs font-medium text-slate-900 dark:text-white">
-                  {item.data.loteCodigo}
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {new Date(item.createdAt).toLocaleString("es-AR")}
-                </p>
+        {items.map((item) => {
+          const { lote, parametro } = loteYParametro(item);
+          return (
+            <div
+              key={item.id}
+              className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-xs font-medium text-slate-900 dark:text-white">
+                    {lote}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {new Date(item.createdAt).toLocaleString("es-AR")}
+                  </p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <NivelBadge item={item} />
+                  <Badge variant={ESTADO_ALERTA_META[item.estado].badgeVariant}>
+                    {ESTADO_ALERTA_META[item.estado].label}
+                  </Badge>
+                </div>
               </div>
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <Badge variant={NIVEL_ALERTA_META[item.nivelAlerta].badgeVariant}>
-                  {NIVEL_ALERTA_META[item.nivelAlerta].label}
-                </Badge>
-                <Badge variant={ESTADO_ALERTA_META[item.estado].badgeVariant}>
-                  {ESTADO_ALERTA_META[item.estado].label}
-                </Badge>
-              </div>
-            </div>
 
-            <dl className="grid grid-cols-1 gap-x-3 gap-y-2 text-xs">
-              <div>
-                <dt className="text-slate-400 dark:text-slate-500">Parámetro</dt>
-                <dd className="text-slate-600 dark:text-slate-400">
-                  {PARAMETRO_LABEL[item.data.parametro]}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-400 dark:text-slate-500">Acción correctiva</dt>
-                <dd className="text-slate-600 dark:text-slate-400">{item.accionCorrectiva ?? "—"}</dd>
-              </div>
-            </dl>
-          </div>
-        ))}
+              <dl className="grid grid-cols-1 gap-x-3 gap-y-2 text-xs">
+                <div>
+                  <dt className="text-slate-400 dark:text-slate-500">Parámetro</dt>
+                  <dd className="text-slate-600 dark:text-slate-400">{parametro}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400 dark:text-slate-500">Acción correctiva</dt>
+                  <dd className="text-slate-600 dark:text-slate-400">{item.accionCorrectiva ?? "—"}</dd>
+                </div>
+              </dl>
+            </div>
+          );
+        })}
       </div>
 
       <div className="flex items-center justify-end border-t border-slate-200 pt-4 dark:border-slate-800">

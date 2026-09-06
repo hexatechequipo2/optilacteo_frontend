@@ -6,15 +6,28 @@ import { useAlertas } from "../../hooks/useAlertas";
 import { useLotes } from "../../hooks/useLotes";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import { useAuth } from "../../hooks/useAuth";
-import { NivelAlerta, TipoNotificacion, esAlertaUmbral } from "../../types/notificacion.types";
+import {
+  NivelAlerta,
+  TipoNotificacion,
+  esAlertaUmbral,
+  esAlertaSensorDesconectado,
+  esAlertaAnomalia,
+} from "../../types/notificacion.types";
 import { EstadoAlerta } from "../../types/alertaCierre.types";
 import { TABS_ALERTAS, TAB_A_NIVEL, type TabAlertas } from "./constants/alertas.constants";
 import { ContadoresAlertas } from "./components/ContadoresAlertas";
-import { AlertasFiltros, type EstadoAlertaFiltro } from "./components/AlertasFiltros";
+import {
+  AlertasFiltros,
+  type EstadoAlertaFiltro,
+  type TipoDesvioFiltro,
+  type ParametroFiltro,
+} from "./components/AlertasFiltros";
 import { AlertaCard } from "./components/AlertaCard";
 import { AlertaDetallePanel } from "./components/AlertaDetallePanel";
 import { AlertaSensorDesconectadoCard } from "./components/AlertaSensorDesconectadoCard";
 import { AlertaSensorDesconectadoDetallePanel } from "./components/AlertaSensorDesconectadoDetallePanel";
+import { AlertaAnomaliaCard } from "./components/AlertaAnomaliaCard";
+import { AlertaAnomaliaDetallePanel } from "./components/AlertaAnomaliaDetallePanel";
 import { ReglasActivasPanel } from "./components/ReglasActivasPanel";
 
 // HU-27: mismo rol que ya filtra toda la ruta /alertas (App.tsx) — se repite
@@ -30,7 +43,8 @@ const ROL_QUE_PUEDE_CERRAR = "Responsable de producción";
 // real sin recargar): useAlertas ya deja el array actualizado en vivo, así
 // que cualquier filtro/contador acá es puramente derivado con useMemo.
 export default function AlertasPage() {
-  const { alertas, isLoading, error, isRealtimeConnected, marcarLeida, cerrarAlerta } = useAlertas();
+  const { alertas, isLoading, error, isRealtimeConnected, marcarLeida, cerrarAlerta, marcarFalsoPositivo } =
+    useAlertas();
   const { lotes } = useLotes();
   const { empresa } = useEmpresaActual();
   const { user } = useAuth();
@@ -41,6 +55,8 @@ export default function AlertasPage() {
   const [fechaHasta, setFechaHasta] = useState("");
   const [soloNoLeidas, setSoloNoLeidas] = useState(true);
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoAlertaFiltro>("todas");
+  const [tipoDesvioFiltro, setTipoDesvioFiltro] = useState<TipoDesvioFiltro>("todos");
+  const [parametroFiltro, setParametroFiltro] = useState<ParametroFiltro>("todos");
   // HU-27: id de la alerta seleccionada para el panel lateral (null =
   // cerrado). Se guarda el id, no el objeto, para que el panel siempre
   // refleje el estado más reciente de `alertas` (ej. si se marca leída desde
@@ -65,17 +81,34 @@ export default function AlertasPage() {
   // esté activa).
   const alertasFiltradas = useMemo(() => {
     return alertas.filter((alerta) => {
-      // HU-31: alerta_sensor_desconectado no tiene loteId (no está atada a
-      // ningún lote) — filtrar por un lote puntual la deja afuera, pero
-      // sigue visible con "Todos los lotes" (default del selector).
-      if (loteId !== "todos") {
-        if (!esAlertaUmbral(alerta) || String(alerta.data.loteId) !== loteId) return false;
-      }
-      // cerrarAlerta() también marca la alerta como leída (HU-27), así que
-      // "Solo no leídas" + estado "Cerradas" siempre daría vacío si se
-      // aplicaran los dos filtros a la vez. El toggle de leída solo tiene
-      // sentido para alertas abiertas.
-      if (soloNoLeidas && alerta.leida && estadoFiltro !== EstadoAlerta.CERRADA) return false;
+      // HU-31/50: alerta_sensor_desconectado no tiene loteId (no está atada
+      // a ningún lote) — filtrar por un lote puntual la deja afuera, pero
+      // sigue visible con "Todos los lotes" (default del selector). Antes
+      // esto comparaba con esAlertaUmbral(alerta) en vez de loteId directo,
+      // así que también dejaba afuera a alerta_anomalia (que SÍ tiene
+      // loteId a nivel raíz — ver AnomaliaService.evaluarAnomalia, backend):
+      // loteId vive en Notificacion misma, no hace falta angostar por tipo.
+      if (loteId !== "todos" && String(alerta.loteId) !== loteId) return false;
+      // HU-50 criterio 8: solo alerta_anomalia tiene tipoDesvio — el resto
+      // queda afuera al elegir un valor puntual, mismo criterio que loteId
+      // arriba para alerta_sensor_desconectado.
+      if (tipoDesvioFiltro !== "todos" && alerta.tipoDesvio !== tipoDesvioFiltro) return false;
+      // HU-50 criterio 8: parámetro afectado (alerta_umbral y
+      // alerta_anomalia) — alerta_sensor_desconectado no tiene, queda
+      // afuera al elegir un valor puntual.
+      if (parametroFiltro !== "todos" && alerta.parametro !== parametroFiltro) return false;
+      // cerrarAlerta() y marcarFalsoPositivo() también marcan la alerta
+      // como leída (HU-27/50), así que "Solo no leídas" + estado "Cerradas"
+      // o "Falso positivo" siempre daría vacío si se aplicaran los dos
+      // filtros a la vez. El toggle de leída solo tiene sentido para
+      // alertas abiertas.
+      if (
+        soloNoLeidas &&
+        alerta.leida &&
+        estadoFiltro !== EstadoAlerta.CERRADA &&
+        estadoFiltro !== EstadoAlerta.FALSO_POSITIVO
+      )
+        return false;
       if (estadoFiltro !== "todas" && alerta.estado !== estadoFiltro) return false;
 
       const fecha = new Date(alerta.createdAt);
@@ -87,7 +120,16 @@ export default function AlertasPage() {
       }
       return true;
     });
-  }, [alertas, loteId, soloNoLeidas, estadoFiltro, fechaDesde, fechaHasta]);
+  }, [
+    alertas,
+    loteId,
+    tipoDesvioFiltro,
+    parametroFiltro,
+    soloNoLeidas,
+    estadoFiltro,
+    fechaDesde,
+    fechaHasta,
+  ]);
 
   // HU-27: se deriva de `alertas` (no un objeto guardado en el click) para
   // que el panel siempre muestre el estado más reciente de la alerta.
@@ -95,12 +137,14 @@ export default function AlertasPage() {
     () => alertas.find((a) => a.id === alertaSeleccionadaId) ?? null,
     [alertas, alertaSeleccionadaId],
   );
-  // HU-31: angostado por tipo para cada panel — ver comentario donde se
+  // HU-31/50: angostado por tipo para cada panel — ver comentario donde se
   // renderizan más abajo.
   const alertaSeleccionadaUmbral =
     alertaSeleccionada && esAlertaUmbral(alertaSeleccionada) ? alertaSeleccionada : null;
   const alertaSeleccionadaSensor =
-    alertaSeleccionada && !esAlertaUmbral(alertaSeleccionada) ? alertaSeleccionada : null;
+    alertaSeleccionada && esAlertaSensorDesconectado(alertaSeleccionada) ? alertaSeleccionada : null;
+  const alertaSeleccionadaAnomalia =
+    alertaSeleccionada && esAlertaAnomalia(alertaSeleccionada) ? alertaSeleccionada : null;
 
   const contadores = useMemo(
     () => ({
@@ -173,6 +217,10 @@ export default function AlertasPage() {
         onSoloNoLeidasChange={setSoloNoLeidas}
         estado={estadoFiltro}
         onEstadoChange={setEstadoFiltro}
+        tipoDesvio={tipoDesvioFiltro}
+        onTipoDesvioChange={setTipoDesvioFiltro}
+        parametro={parametroFiltro}
+        onParametroChange={setParametroFiltro}
       />
 
       <div className="flex flex-col gap-6 lg:flex-row">
@@ -196,6 +244,13 @@ export default function AlertasPage() {
                   onMarcarLeida={marcarLeida}
                   onSeleccionar={(a) => setAlertaSeleccionadaId(a.id)}
                 />
+              ) : alerta.tipo === TipoNotificacion.ALERTA_ANOMALIA ? (
+                <AlertaAnomaliaCard
+                  key={alerta.id}
+                  alerta={alerta}
+                  onMarcarLeida={marcarLeida}
+                  onSeleccionar={(a) => setAlertaSeleccionadaId(a.id)}
+                />
               ) : (
                 <AlertaSensorDesconectadoCard
                   key={alerta.id}
@@ -214,13 +269,19 @@ export default function AlertasPage() {
         <ReglasActivasPanel alertas={alertas.filter(esAlertaUmbral)} />
       </div>
 
-      {/* HU-31: dos paneles en vez de uno ramificado adentro — cada uno ya
-          sabe devolver null si su `alerta` no corresponde (mismo patrón que
-          ya tenían con `alerta: AlertaConCierre | null`). Evita narrowing
-          frágil de TS sobre una condición compuesta en un ternario. */}
+      {/* HU-31/50: paneles separados en vez de uno ramificado adentro — cada
+          uno ya sabe devolver null si su `alerta` no corresponde (mismo
+          patrón que ya tenían con `alerta: AlertaConCierre | null`). Evita
+          narrowing frágil de TS sobre una condición compuesta en un ternario. */}
       <AlertaSensorDesconectadoDetallePanel
         alerta={alertaSeleccionadaSensor}
         onClose={() => setAlertaSeleccionadaId(null)}
+      />
+      <AlertaAnomaliaDetallePanel
+        alerta={alertaSeleccionadaAnomalia}
+        onClose={() => setAlertaSeleccionadaId(null)}
+        onMarcarFalsoPositivo={marcarFalsoPositivo}
+        puedeMarcarFalsoPositivo={user?.rolNombre === ROL_QUE_PUEDE_CERRAR}
       />
       <AlertaDetallePanel
         alerta={alertaSeleccionadaUmbral}

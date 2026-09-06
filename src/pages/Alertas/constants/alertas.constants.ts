@@ -1,5 +1,6 @@
-import { AlertOctagon, AlertTriangle, CircleCheck, Info, type LucideIcon } from "lucide-react";
-import { NivelAlerta } from "../../../types/notificacion.types";
+import { AlertOctagon, AlertTriangle, CircleCheck, EyeOff, type LucideIcon, Info } from "lucide-react";
+import { NivelAlerta, TipoDesvioAnomalia } from "../../../types/notificacion.types";
+import type { NivelConfianza } from "../../../utils/confianza";
 import { EstadoAlerta } from "../../../types/alertaCierre.types";
 // Reutilizamos los labels/unidades ya definidos para Sensores en vez de
 // duplicarlos: son el mismo Parametro (configParametro.types.ts) en las dos
@@ -50,9 +51,38 @@ export const NIVEL_ALERTA_META: Record<NivelAlerta, NivelAlertaMeta> = {
 // HU-27: estado de cierre (mockeado, ver alertaCierre.service.ts). Mismo
 // shape reducido que NIVEL_ALERTA_META, sin className/iconClassName porque
 // esto solo se usa en un Badge chico (AlertaCard, AlertaDetallePanel).
-export const ESTADO_ALERTA_META: Record<EstadoAlerta, { label: string; icon: LucideIcon; badgeVariant: "warning" | "success" }> = {
+// HU-50: se suma FALSO_POSITIVO (badgeVariant ampliado a "neutral" para
+// este caso) — solo alcanzable por alerta_anomalia, ver AlertaAnomaliaCard.
+export const ESTADO_ALERTA_META: Record<
+  EstadoAlerta,
+  { label: string; icon: LucideIcon; badgeVariant: "warning" | "success" | "neutral" }
+> = {
   [EstadoAlerta.ABIERTA]: { label: "Abierta", icon: AlertTriangle, badgeVariant: "warning" },
   [EstadoAlerta.CERRADA]: { label: "Cerrada", icon: CircleCheck, badgeVariant: "success" },
+  [EstadoAlerta.FALSO_POSITIVO]: { label: "Falso positivo", icon: EyeOff, badgeVariant: "neutral" },
+};
+
+// HU-50 criterio 3: traducción de TipoDesvioAnomalia para el badge "Anomalía
+// detectada" (AlertaAnomaliaCard) y el panel de detalle.
+export const TIPO_DESVIO_LABEL: Record<TipoDesvioAnomalia, string> = {
+  [TipoDesvioAnomalia.PICO]: "Pico",
+  [TipoDesvioAnomalia.TENDENCIA]: "Tendencia",
+  [TipoDesvioAnomalia.VARIANZA_ATIPICA]: "Varianza atípica",
+  [TipoDesvioAnomalia.NIVEL_ATIPICO]: "Nivel atípico",
+};
+
+// HU-50 criterio 3: badge de confianza del modelo ML (AlertaAnomaliaCard,
+// AlertaAnomaliaDetallePanel). Mismos colores por nivel que
+// RecomendacionDestinoCard.tsx (HU-49: alta=success, media=warning,
+// baja=danger) para mantener consistencia visual entre ambas HU de ML —
+// esa card no expone estos labels/variants para importar (recibe
+// nivelConfianza ya resuelto por prop), así que se declaran de nuevo acá en
+// vez de acoplar este módulo al de Lotes. Los cortes en sí viven en
+// utils/confianza.ts (getNivelConfianza), no acá.
+export const NIVEL_CONFIANZA_META: Record<NivelConfianza, { label: string; badgeVariant: "success" | "warning" | "danger" }> = {
+  alta: { label: "Confianza alta", badgeVariant: "success" },
+  media: { label: "Confianza media", badgeVariant: "warning" },
+  baja: { label: "Confianza baja", badgeVariant: "danger" },
 };
 
 // Tabs del header (Figura 1, Sprint 3): "Todas / Críticas / Preventivas /
