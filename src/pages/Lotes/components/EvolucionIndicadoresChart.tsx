@@ -1,5 +1,9 @@
-import { forwardRef, useState } from "react";
-import type { IndicadorEvolucionConfig, PuntoSerieEvolucion, TipoGraficoEvolucion } from "../../../types/indicadorEvolucion.types";
+import { useState } from "react";
+import type {
+  IndicadorEvolucionConfig,
+  PuntoSerieEvolucion,
+  TipoGraficoEvolucion,
+} from "../../../types/indicadorEvolucion.types";
 
 interface EvolucionIndicadoresChartProps {
   puntos: PuntoSerieEvolucion[];
@@ -17,45 +21,48 @@ const COLOR_EJE_TEXTO = "#94a3b8";
 // ve en el tooltip y en la leyenda/chips, no en el eje. El gráfico se
 // renderiza siempre con paleta clara (sin dark:) porque también es la
 // imagen que se exporta a PNG para informes (AC4).
-export const EvolucionIndicadoresChart = forwardRef<SVGSVGElement, EvolucionIndicadoresChartProps>(
-  function EvolucionIndicadoresChart({ puntos, indicadores, tipo }, ref) {
-    const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+export function EvolucionIndicadoresChart({
+  puntos,
+  indicadores,
+  tipo,
+}: EvolucionIndicadoresChartProps) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-    const n = puntos.length;
-    const rangosPorIndicador = new Map(
-      indicadores.map((indicador) => {
-        const valores = puntos
-          .map((p) => p.valores[indicador.id])
-          .filter((v): v is number => v != null);
-        const min = valores.length ? Math.min(...valores) : 0;
-        const max = valores.length ? Math.max(...valores) : 1;
-        return [indicador.id, { min, max: max === min ? min + 1 : max }];
-      }),
-    );
+  const n = puntos.length;
+  const rangosPorIndicador = new Map(
+    indicadores.map((indicador) => {
+      const valores = puntos
+        .map((p) => p.valores[indicador.id])
+        .filter((v): v is number => v != null);
+      const min = valores.length ? Math.min(...valores) : 0;
+      const max = valores.length ? Math.max(...valores) : 1;
+      return [indicador.id, { min, max: max === min ? min + 1 : max }];
+    }),
+  );
 
-    const xDe = (i: number) => (n <= 1 ? 50 : (i / (n - 1)) * 100);
-    const yDe = (indicadorId: IndicadorEvolucionConfig["id"], valor: number) => {
-      const r = rangosPorIndicador.get(indicadorId);
-      if (!r) return 50;
-      return 100 - ((valor - r.min) / (r.max - r.min)) * 100;
-    };
+  const xDe = (i: number) => (n <= 1 ? 50 : (i / (n - 1)) * 100);
+  const yDe = (indicadorId: IndicadorEvolucionConfig["id"], valor: number) => {
+    const r = rangosPorIndicador.get(indicadorId);
+    if (!r) return 50;
+    return 100 - ((valor - r.min) / (r.max - r.min)) * 100;
+  };
 
-    const anchoBarraGrupo = n > 0 ? 100 / n : 100;
-    const anchoBarra = indicadores.length > 0 ? (anchoBarraGrupo * 0.6) / indicadores.length : 0;
+  const anchoBarraGrupo = n > 0 ? 100 / n : 100;
+  const anchoBarra =
+    indicadores.length > 0 ? (anchoBarraGrupo * 0.6) / indicadores.length : 0;
 
-    const hovered = hoverIndex != null ? puntos[hoverIndex] : null;
-    const hoveredX = hoverIndex != null ? xDe(hoverIndex) : null;
+  const hovered = hoverIndex != null ? puntos[hoverIndex] : null;
+  const hoveredX = hoverIndex != null ? xDe(hoverIndex) : null;
 
-    return (
-      // El contenedor con position:relative que ancla los marcadores/tooltip
-      // (posicionados con top/left en %) tiene que medir EXACTAMENTE lo
-      // mismo que el <svg> (h-72). Si la fila de etiquetas del eje X viviera
-      // adentro de este mismo div, sumaría su alto al cálculo del % y
-      // corriría los marcadores hacia abajo respecto de la línea/barras.
-      <div>
-        <div className="relative h-72 w-full">
+  return (
+    // El contenedor con position:relative que ancla los marcadores/tooltip
+    // (posicionados con top/left en %) tiene que medir EXACTAMENTE lo
+    // mismo que el <svg> (h-72). Si la fila de etiquetas del eje X viviera
+    // adentro de este mismo div, sumaría su alto al cálculo del % y
+    // corriría los marcadores hacia abajo respecto de la línea/barras.
+    <div>
+      <div className="relative h-72 w-full">
         <svg
-          ref={ref}
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
           className="block h-full w-full overflow-visible"
@@ -81,7 +88,9 @@ export const EvolucionIndicadoresChart = forwardRef<SVGSVGElement, EvolucionIndi
                 const valor = punto.valores[indicador.id];
                 if (valor == null) return null;
                 const alturaY = yDe(indicador.id, valor);
-                const indiceIndicador = indicadores.findIndex((ind) => ind.id === indicador.id);
+                const indiceIndicador = indicadores.findIndex(
+                  (ind) => ind.id === indicador.id,
+                );
                 const x =
                   i * anchoBarraGrupo +
                   (anchoBarraGrupo - indicadores.length * anchoBarra) / 2 +
@@ -102,7 +111,9 @@ export const EvolucionIndicadoresChart = forwardRef<SVGSVGElement, EvolucionIndi
 
             const puntosValidos = puntos
               .map((p, i) => ({ i, valor: p.valores[indicador.id] }))
-              .filter((p): p is { i: number; valor: number } => p.valor != null);
+              .filter(
+                (p): p is { i: number; valor: number } => p.valor != null,
+              );
 
             if (puntosValidos.length === 0) return null;
 
@@ -207,16 +218,21 @@ export const EvolucionIndicadoresChart = forwardRef<SVGSVGElement, EvolucionIndi
             })}
           </div>
         )}
-        </div>
-
-        <div className="mt-1 flex justify-between text-[10px]" style={{ color: COLOR_EJE_TEXTO }}>
-          {puntos.map((p, i) => (
-            <span key={p.timestamp} className={i % Math.ceil(n / 12 || 1) === 0 ? "" : "opacity-0"}>
-              {p.etiqueta}
-            </span>
-          ))}
-        </div>
       </div>
-    );
-  },
-);
+
+      <div
+        className="mt-1 flex justify-between text-[10px]"
+        style={{ color: COLOR_EJE_TEXTO }}
+      >
+        {puntos.map((p, i) => (
+          <span
+            key={p.timestamp}
+            className={i % Math.ceil(n / 12 || 1) === 0 ? "" : "opacity-0"}
+          >
+            {p.etiqueta}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}

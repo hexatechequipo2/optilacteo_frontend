@@ -1,11 +1,23 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Download, TrendingUp } from "lucide-react";
 import { Input } from "../../../components/ui/Input";
-import { useEvolucionIndicadores, type RangoPersonalizado } from "../../../hooks/useEvolucionIndicadores";
+import {
+  useEvolucionIndicadores,
+  type RangoPersonalizado,
+} from "../../../hooks/useEvolucionIndicadores";
 import { INDICADORES_EVOLUCION } from "../../../utils/mockEvolucionIndicadores";
-import { exportarSvgComoPng } from "../../../utils/exportarSvgComoPng";
-import type { IndicadorEvolucionId, PeriodoEvolucion, TipoGraficoEvolucion } from "../../../types/indicadorEvolucion.types";
+import { exportarGraficoEvolucionPng } from "../../../utils/exportarGraficoEvolucionPng";
+import type {
+  IndicadorEvolucionId,
+  PeriodoEvolucion,
+  TipoGraficoEvolucion,
+} from "../../../types/indicadorEvolucion.types";
 import { EvolucionIndicadoresChart } from "./EvolucionIndicadoresChart";
+
+function formatFecha(iso: string): string {
+  const [anio, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${anio}`;
+}
 
 const PERIODOS: { value: PeriodoEvolucion; label: string }[] = [
   { value: "dia", label: "Día" },
@@ -58,15 +70,23 @@ export function EvolucionIndicadoresTab() {
   const [periodo, setPeriodo] = useState<PeriodoEvolucion>("mes");
   const [rango, setRango] = useState<RangoPersonalizado>(RANGO_VACIO);
   const [tipoGrafico, setTipoGrafico] = useState<TipoGraficoEvolucion>("linea");
-  const [seleccionados, setSeleccionados] = useState<IndicadorEvolucionId[]>(["grasa", "proteina"]);
-  const svgRef = useRef<SVGSVGElement>(null);
+  const [seleccionados, setSeleccionados] = useState<IndicadorEvolucionId[]>([
+    "grasa",
+    "proteina",
+  ]);
 
-  const { puntos, agregado, granularidad, estaVacio, rangoInvalido, sinIndicadores } =
-    useEvolucionIndicadores({
-      periodo,
-      rangoPersonalizado: rango,
-      indicadoresSeleccionados: seleccionados,
-    });
+  const {
+    puntos,
+    agregado,
+    granularidad,
+    estaVacio,
+    rangoInvalido,
+    sinIndicadores,
+  } = useEvolucionIndicadores({
+    periodo,
+    rangoPersonalizado: rango,
+    indicadoresSeleccionados: seleccionados,
+  });
 
   const indicadoresSeleccionadosConfig = INDICADORES_EVOLUCION.filter((i) =>
     seleccionados.includes(i.id),
@@ -78,13 +98,24 @@ export function EvolucionIndicadoresTab() {
     );
   };
 
+  const periodoLabel =
+    periodo === "rango" && rango.desde && rango.hasta
+      ? `Rango personalizado (${formatFecha(rango.desde)} – ${formatFecha(rango.hasta)})`
+      : (PERIODOS.find((p) => p.value === periodo)?.label ?? "");
+
   const exportarPng = () => {
-    if (!svgRef.current) return;
     const fecha = new Date().toISOString().slice(0, 10);
-    exportarSvgComoPng(svgRef.current, `evolucion-indicadores-${fecha}.png`);
+    exportarGraficoEvolucionPng({
+      puntos,
+      indicadores: indicadoresSeleccionadosConfig,
+      tipo: tipoGrafico,
+      periodoLabel,
+      nombreArchivo: `evolucion-indicadores-${fecha}.png`,
+    });
   };
 
-  const puedeExportar = !estaVacio && !rangoInvalido && !sinIndicadores && puntos.length > 0;
+  const puedeExportar =
+    !estaVacio && !rangoInvalido && !sinIndicadores && puntos.length > 0;
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -99,7 +130,8 @@ export function EvolucionIndicadoresTab() {
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {indicadoresSeleccionadosConfig.length} indicador
-              {indicadoresSeleccionadosConfig.length === 1 ? "" : "es"} comparado
+              {indicadoresSeleccionadosConfig.length === 1 ? "" : "es"}{" "}
+              comparado
               {indicadoresSeleccionadosConfig.length === 1 ? "" : "s"}
             </p>
           </div>
@@ -122,14 +154,22 @@ export function EvolucionIndicadoresTab() {
             <p className="mb-1.5 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500">
               PERÍODO
             </p>
-            <SegmentedControl opciones={PERIODOS} valor={periodo} onChange={setPeriodo} />
+            <SegmentedControl
+              opciones={PERIODOS}
+              valor={periodo}
+              onChange={setPeriodo}
+            />
           </div>
 
           <div>
             <p className="mb-1.5 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500">
               TIPO DE GRÁFICO
             </p>
-            <SegmentedControl opciones={TIPOS_GRAFICO} valor={tipoGrafico} onChange={setTipoGrafico} />
+            <SegmentedControl
+              opciones={TIPOS_GRAFICO}
+              valor={tipoGrafico}
+              onChange={setTipoGrafico}
+            />
           </div>
 
           {periodo === "rango" && (
@@ -138,13 +178,17 @@ export function EvolucionIndicadoresTab() {
                 label="Desde"
                 type="date"
                 value={rango.desde}
-                onChange={(e) => setRango((r) => ({ ...r, desde: e.target.value }))}
+                onChange={(e) =>
+                  setRango((r) => ({ ...r, desde: e.target.value }))
+                }
               />
               <Input
                 label="Hasta"
                 type="date"
                 value={rango.hasta}
-                onChange={(e) => setRango((r) => ({ ...r, hasta: e.target.value }))}
+                onChange={(e) =>
+                  setRango((r) => ({ ...r, hasta: e.target.value }))
+                }
               />
             </div>
           )}
@@ -167,11 +211,15 @@ export function EvolucionIndicadoresTab() {
                       ? "border-transparent text-white"
                       : "border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400"
                   }`}
-                  style={activo ? { backgroundColor: indicador.color } : undefined}
+                  style={
+                    activo ? { backgroundColor: indicador.color } : undefined
+                  }
                 >
                   <span
                     className="h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: activo ? "#ffffff" : indicador.color }}
+                    style={{
+                      backgroundColor: activo ? "#ffffff" : indicador.color,
+                    }}
                   />
                   {indicador.label} {indicador.unidad}
                 </button>
@@ -208,12 +256,12 @@ export function EvolucionIndicadoresTab() {
           <>
             {agregado && (
               <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-                Rango extenso: los puntos se agregan por {granularidad === "mes" ? "mes" : "semana"}{" "}
-                para preservar el rendimiento.
+                Rango extenso: los puntos se agregan por{" "}
+                {granularidad === "mes" ? "mes" : "semana"} para preservar el
+                rendimiento.
               </p>
             )}
             <EvolucionIndicadoresChart
-              ref={svgRef}
               puntos={puntos}
               indicadores={indicadoresSeleccionadosConfig}
               tipo={tipoGrafico}
