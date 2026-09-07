@@ -48,16 +48,27 @@ function hashSemilla(texto: string): number {
   return Math.abs(h);
 }
 
+// Fase propia por indicador (derivada del hash de su id) para que las curvas
+// de distintos indicadores no queden todas en fase entre sí.
+function faseIndicador(indicador: IndicadorEvolucionConfig): number {
+  return (hashSemilla(indicador.id) % 628) / 100;
+}
+
 function valorMock(indicador: IndicadorEvolucionConfig, fecha: Date): number {
   const [min, max] = indicador.rango;
   const centro = (min + max) / 2;
   const amplitud = (max - min) / 2;
   const inicioAnio = new Date(fecha.getFullYear(), 0, 0).getTime();
   const diaDelAnio = Math.floor((fecha.getTime() - inicioAnio) / 86_400_000);
-  const oscilacion = Math.sin((diaDelAnio / 30) * Math.PI) * amplitud * 0.5;
+  const fase = faseIndicador(indicador);
+  // Dos ondas de período distinto (mensual + semanal) en vez de ruido puro:
+  // da una curva con textura pero sin saltos bruscos día a día, más parecida
+  // a una tendencia real que a ruido aleatorio (ver captura del mockup).
+  const ondaMensual = Math.sin((diaDelAnio / 30) * Math.PI + fase) * amplitud * 0.35;
+  const ondaSemanal = Math.sin((diaDelAnio / 3.5) * Math.PI + fase) * amplitud * 0.12;
   const semilla = hashSemilla(`${indicador.id}:${fecha.toISOString().slice(0, 13)}`);
-  const ruido = ((semilla % 1000) / 1000 - 0.5) * amplitud * 0.6;
-  const valor = centro + oscilacion + ruido;
+  const ruido = ((semilla % 1000) / 1000 - 0.5) * amplitud * 0.12;
+  const valor = centro + ondaMensual + ondaSemanal + ruido;
   return Math.min(max, Math.max(min, valor));
 }
 

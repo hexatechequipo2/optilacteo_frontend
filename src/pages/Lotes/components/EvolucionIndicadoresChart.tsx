@@ -47,12 +47,18 @@ export const EvolucionIndicadoresChart = forwardRef<SVGSVGElement, EvolucionIndi
     const hoveredX = hoverIndex != null ? xDe(hoverIndex) : null;
 
     return (
-      <div className="relative">
+      // El contenedor con position:relative que ancla los marcadores/tooltip
+      // (posicionados con top/left en %) tiene que medir EXACTAMENTE lo
+      // mismo que el <svg> (h-72). Si la fila de etiquetas del eje X viviera
+      // adentro de este mismo div, sumaría su alto al cálculo del % y
+      // corriría los marcadores hacia abajo respecto de la línea/barras.
+      <div>
+        <div className="relative h-72 w-full">
         <svg
           ref={ref}
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
-          className="h-72 w-full overflow-visible"
+          className="block h-full w-full overflow-visible"
           style={{ background: "#ffffff" }}
         >
           {[0, 50, 100].map((y) => (
@@ -105,27 +111,16 @@ export const EvolucionIndicadoresChart = forwardRef<SVGSVGElement, EvolucionIndi
               .join(" ");
 
             return (
-              <g key={indicador.id}>
-                <polyline
-                  points={pathPoints}
-                  fill="none"
-                  stroke={indicador.color}
-                  strokeWidth="2"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  vectorEffect="non-scaling-stroke"
-                />
-                {puntosValidos.map(({ i, valor }) => (
-                  <circle
-                    key={i}
-                    cx={xDe(i)}
-                    cy={yDe(indicador.id, valor)}
-                    r={hoverIndex === i ? "1.6" : "1"}
-                    fill={indicador.color}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                ))}
-              </g>
+              <polyline
+                key={indicador.id}
+                points={pathPoints}
+                fill="none"
+                stroke={indicador.color}
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
             );
           })}
 
@@ -157,6 +152,34 @@ export const EvolucionIndicadoresChart = forwardRef<SVGSVGElement, EvolucionIndi
           )}
         </svg>
 
+        {/* Marcadores de línea como overlay HTML (no SVG): el viewBox usa
+            preserveAspectRatio="none" para que el gráfico ocupe todo el
+            ancho disponible, y eso estira un <circle> en una elipse cuando
+            el aspect ratio no es 1:1. Un <div> con border-radius fijo en
+            píxeles no sufre esa distorsión. */}
+        {tipo === "linea" &&
+          indicadores.map((indicador) =>
+            puntos.map((punto, i) => {
+              const valor = punto.valores[indicador.id];
+              if (valor == null) return null;
+              const activo = hoverIndex === i;
+              return (
+                <div
+                  key={`${indicador.id}-${punto.timestamp}`}
+                  className="pointer-events-none absolute rounded-full"
+                  style={{
+                    left: `${xDe(i)}%`,
+                    top: `${yDe(indicador.id, valor)}%`,
+                    width: activo ? 8 : 5,
+                    height: activo ? 8 : 5,
+                    backgroundColor: indicador.color,
+                    transform: "translate(-50%, -50%)",
+                  }}
+                />
+              );
+            }),
+          )}
+
         {hovered && (
           <div
             className="pointer-events-none absolute z-10 w-max max-w-[220px] -translate-y-2 rounded-md bg-slate-900 px-3 py-2 text-xs text-white shadow-lg"
@@ -184,6 +207,7 @@ export const EvolucionIndicadoresChart = forwardRef<SVGSVGElement, EvolucionIndi
             })}
           </div>
         )}
+        </div>
 
         <div className="mt-1 flex justify-between text-[10px]" style={{ color: COLOR_EJE_TEXTO }}>
           {puntos.map((p, i) => (
