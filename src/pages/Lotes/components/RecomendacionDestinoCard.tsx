@@ -3,7 +3,9 @@ import { AlertCircle, CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
 import { Badge } from "../../../components/ui/Badge";
 import type { BadgeVariant } from "../../../components/ui/Badge";
 import { Select } from "../../../components/ui/Select";
+import { useAuth } from "../../../hooks/useAuth";
 import { useRecomendacionDestino } from "../../../hooks/useRecomendacionDestino";
+import { registrarDivergencia } from "../../../hooks/useDivergenciasDestino";
 import {
   derivarNivelConfianza,
   type NivelConfianzaRecomendacion,
@@ -37,6 +39,7 @@ interface RecomendacionDestinoCardProps {
 }
 
 export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardProps) {
+  const { user } = useAuth();
   const {
     recomendacion,
     isLoading,
@@ -152,10 +155,23 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
     void responder({ aceptada: true });
   };
 
-  const handleConfirmarRechazo = () => {
+  const handleConfirmarRechazo = async () => {
     setJustificacionTocada(true);
-    if (!puedeConfirmarRechazo) return;
-    void responder({ aceptada: false, destinoRealId: Number(destinoRealId) });
+    if (!puedeConfirmarRechazo || !destinoRealSeleccionado) return;
+    const ok = await responder({ aceptada: false, destinoRealId: Number(destinoRealId) });
+    // HU-37 (mock visual): el PATCH real de arriba ya aceptó el rechazo,
+    // pero el backend no guarda la justificación — se completa acá lo que
+    // falta (ver useDivergenciasDestino.ts).
+    if (ok) {
+      registrarDivergencia({
+        loteId,
+        destinoRecomendado: recomendacion.destinoRecomendado.nombre,
+        destinoElegido: destinoRealSeleccionado.nombre,
+        justificacion: justificacion.trim(),
+        usuario: user?.email ?? "Usuario desconocido",
+        timestamp: new Date().toISOString(),
+      });
+    }
   };
 
   return (

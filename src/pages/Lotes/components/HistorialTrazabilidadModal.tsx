@@ -3,6 +3,7 @@ import {
   ArrowRightLeft,
   CheckCircle2,
   ClipboardCheck,
+  GitBranch,
   HelpCircle,
   MapPin,
   PackagePlus,
@@ -11,7 +12,9 @@ import {
 import { Modal } from "../../../components/ui/Modal";
 import { Badge } from "../../../components/ui/Badge";
 import { ClasificacionLoteBadge } from "../../../components/ClasificacionLoteBadge";
+import { SectionHeader } from "../../../components/ui/SectionHeader";
 import { useTrazabilidadLote } from "../../../hooks/useTrazabilidadLote";
+import { useDivergenciaPorLote } from "../../../hooks/useDivergenciasDestino";
 import { TIPO_MATERIA_PRIMA_TABS } from "../../Configuracion/constants/parametrosCalidad";
 import { UBICACION_LABEL } from "../../Sensores/constants/parametroSensor";
 import { UNIDAD_RENDIMIENTO_SIMBOLO } from "../constants/unidadRendimiento";
@@ -159,6 +162,7 @@ export function HistorialTrazabilidadModal({
   onClose,
 }: HistorialTrazabilidadModalProps) {
   const { eventos, codigoLote, isLoading, error, refetch } = useTrazabilidadLote(loteId);
+  const divergencia = useDivergenciaPorLote(loteId);
 
   if (!isOpen) return null;
 
@@ -169,6 +173,31 @@ export function HistorialTrazabilidadModal({
       description={codigoLote ?? undefined}
       onClose={onClose}
     >
+      {/* HU-37 (mock visual): aparte del timeline real de arriba (backend,
+          GET /lotes/:id/trazabilidad) porque el backend todavía no modela
+          la divergencia como un evento de trazabilidad — ver
+          useDivergenciasDestino.ts. */}
+      {divergencia && (
+        <div className="mb-6 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-500/10">
+          <SectionHeader>DIVERGENCIA DE DESTINO</SectionHeader>
+          <div className="flex items-start gap-3">
+            <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">
+              <GitBranch className="h-4 w-4" />
+            </span>
+            <div className="flex flex-1 flex-col gap-1">
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                Recomendado: <strong>{divergencia.destinoRecomendado}</strong> → Elegido:{" "}
+                <strong>{divergencia.destinoElegido}</strong>
+              </p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">"{divergencia.justificacion}"</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {divergencia.usuario} · {formatFecha(divergencia.timestamp)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
           <span>{error}</span>
