@@ -5,7 +5,7 @@ import type { BadgeVariant } from "../../../components/ui/Badge";
 import { Select } from "../../../components/ui/Select";
 import { useAuth } from "../../../hooks/useAuth";
 import { useRecomendacionDestino } from "../../../hooks/useRecomendacionDestino";
-import { registrarDivergencia } from "../../../hooks/useDivergenciasDestino";
+import { registrarCambioDestino } from "../../../hooks/useDestinoProductivoLote";
 import {
   derivarNivelConfianza,
   type NivelConfianzaRecomendacion,
@@ -151,25 +151,37 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
   const justificacionValida = justificacion.trim().length >= JUSTIFICACION_MIN_LENGTH;
   const puedeConfirmarRechazo = destinoRealId !== "" && justificacionValida && !isResponding;
 
-  const handleAceptar = () => {
-    void responder({ aceptada: true });
+  const handleAceptar = async () => {
+    const ok = await responder({ aceptada: true });
+    // HU-34/HU-37 (mock visual): el backend todavía no tiene un endpoint
+    // para leer/escribir Lote.destinoProductivoId — se completa acá lo que
+    // falta (ver useDestinoProductivoLote.ts). Aceptar no es una
+    // divergencia: el destino elegido es el mismo que el recomendado.
+    if (ok) {
+      registrarCambioDestino({
+        loteId,
+        destinoNuevoId: recomendacion.destinoRecomendado.id,
+        destinoNuevoNombre: recomendacion.destinoRecomendado.nombre,
+        usuario: user?.email ?? "Usuario desconocido",
+        origen: "recomendacion_ml",
+        esDivergencia: false,
+      });
+    }
   };
 
   const handleConfirmarRechazo = async () => {
     setJustificacionTocada(true);
     if (!puedeConfirmarRechazo || !destinoRealSeleccionado) return;
     const ok = await responder({ aceptada: false, destinoRealId: Number(destinoRealId) });
-    // HU-37 (mock visual): el PATCH real de arriba ya aceptó el rechazo,
-    // pero el backend no guarda la justificación — se completa acá lo que
-    // falta (ver useDivergenciasDestino.ts).
     if (ok) {
-      registrarDivergencia({
+      registrarCambioDestino({
         loteId,
-        destinoRecomendado: recomendacion.destinoRecomendado.nombre,
-        destinoElegido: destinoRealSeleccionado.nombre,
-        justificacion: justificacion.trim(),
+        destinoNuevoId: destinoRealSeleccionado.id,
+        destinoNuevoNombre: destinoRealSeleccionado.nombre,
         usuario: user?.email ?? "Usuario desconocido",
-        timestamp: new Date().toISOString(),
+        origen: "recomendacion_ml",
+        esDivergencia: true,
+        justificacion: justificacion.trim(),
       });
     }
   };

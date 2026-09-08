@@ -14,6 +14,12 @@ import {
 import { useConfigParametros } from "../../hooks/useConfigParametros";
 import { useTambosPorProveedor } from "../../hooks/useTambos";
 import { RecomendacionDestinoCard } from "./components/RecomendacionDestinoCard";
+import { useAuth } from "../../hooks/useAuth";
+import { useCatalogoDestinosProductivos } from "../../hooks/useCatalogoDestinosProductivos";
+import {
+  registrarCambioDestino,
+  useDestinoProductivoLote,
+} from "../../hooks/useDestinoProductivoLote";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -26,6 +32,7 @@ import type { ConfigParametro } from "../../types/configParametro.types";
 import { Ubicacion, type Sensor } from "../../types/sensor.types";
 import {
   DestinoLote,
+  EstadoLote,
   type CreateLoteDto,
   type Lote,
   type LoteCreateResponse,
@@ -72,6 +79,11 @@ interface FormValues {
   // ellos.
   cantidadComprometida: string;
   parametrosComprometidos: Record<ParametroVisible, string>;
+  // HU-34 (mock visual): destino productivo del catálogo configurable
+  // (queso, yogur, crema, etc.) — no confundir con `destinoInicial`, el
+  // enum fijo de arriba. Opcional acá, obligatorio recién para poder
+  // cerrar el ciclo del lote (ver botón "Cerrar ciclo del lote").
+  destinoProductivoId: number | "";
 }
 
 interface FormErrors {
@@ -93,7 +105,7 @@ function buildParametrosVacios(): Record<ParametroVisible, string> {
   );
 }
 
-function buildInitialValues(lote?: Lote): FormValues {
+function buildInitialValues(lote?: Lote, destinoProductivoActualId?: number): FormValues {
   if (!lote) {
     return {
       proveedorId: "",
@@ -106,6 +118,7 @@ function buildInitialValues(lote?: Lote): FormValues {
       ubicacionInicial: "",
       cantidadComprometida: "",
       parametrosComprometidos: buildParametrosVacios(),
+      destinoProductivoId: "",
     };
   }
   return {
@@ -122,6 +135,9 @@ function buildInitialValues(lote?: Lote): FormValues {
     // HU-66: tampoco editable en PATCH /lotes/:id.
     cantidadComprometida: "",
     parametrosComprometidos: buildParametrosVacios(),
+    // HU-34 (mock visual): viene de useDestinoProductivoLote, no del lote
+    // real (el backend todavía no tiene endpoint para esto).
+    destinoProductivoId: destinoProductivoActualId ?? "",
   };
 }
 
@@ -260,12 +276,21 @@ export function LoteFormModal({
   onUpdate,
 }: LoteFormModalProps) {
   const esEdicion = !!lote;
+  // HU-34: "procesado" = ya no admite cambios de destino productivo.
+  const loteEstaProcesado =
+    !!lote && (lote.estado === EstadoLote.FINALIZADO || lote.estado === EstadoLote.RECHAZADO);
+  const { user } = useAuth();
   const { configs } = useConfigParametros();
+  // HU-34 (mock visual): ver useDestinoProductivoLote.ts.
+  const destinoProductivoActual = useDestinoProductivoLote(lote?.id ?? null);
+  const { destinosActivos: destinosProductivos } = useCatalogoDestinosProductivos();
   const [values, setValues] = useState<FormValues>(() =>
-    buildInitialValues(lote),
+    buildInitialValues(lote, destinoProductivoActual?.destinoActualId),
   );
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState("");
+  const [cerrarCicloError, setCerrarCicloError] = useState("");
+  const [cerrarCicloMensaje, setCerrarCicloMensaje] = useState("");
 
   // Tras crear el lote, si el backend sugiere sensoresDisponibles (activos
   // en la misma ubicacionInicial), se ofrece asociarlos sin salir del modal
@@ -291,9 +316,11 @@ export function LoteFormModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setValues(buildInitialValues(lote));
+    setValues(buildInitialValues(lote, destinoProductivoActual?.destinoActualId));
     setErrors({});
     setServerError("");
+    setCerrarCicloError("");
+    setCerrarCicloMensaje("");
     setPaso("form");
     setLoteCreadoId(null);
     setSensoresDisponibles([]);
@@ -361,6 +388,38 @@ export function LoteFormModal({
     }));
   };
 
+  // HU-34 (mock visual): solo registra un cambio si efectivamente se
+  // seleccionó un destino distinto al que ya tenía el lote (AC3: "sin
+  // duplicar registros" cuando no cambió nada).
+  const registrarCambioDestinoProductivoSiCorresponde = (loteId: number) => {
+    if (values.destinoProductivoId === "") return;
+    if (values.destinoProductivoId === destinoProductivoActual?.destinoActualId) return;
+    const destino = destinosProductivos.find((d) => d.id === values.destinoProductivoId);
+    if (!destino) return;
+    registrarCambioDestino({
+      loteId,
+      destinoNuevoId: destino.id,
+      destinoNuevoNombre: destino.nombre,
+      usuario: user?.email ?? "Usuario desconocido",
+      origen: "manual",
+    });
+  };
+
+  // HU-34 (AC4, mock visual): "cerrar el ciclo" en sí no tiene endpoint
+  // real todavía — lo único implementado es el bloqueo cuando falta el
+  // destino productivo, que es lo que pide el criterio de aceptación.
+  const handleCerrarCiclo = () => {
+    setCerrarCicloMensaje("");
+    if (!destinoProductivoActual) {
+      setCerrarCicloError("El destino productivo es obligatorio para cerrar el ciclo del lote.");
+      return;
+    }
+    setCerrarCicloError("");
+    setCerrarCicloMensaje(
+      "Destino productivo asignado — validación lista. El cierre real del ciclo todavía no está conectado al backend.",
+    );
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setServerError("");
@@ -379,6 +438,7 @@ export function LoteFormModal({
           ).toISOString(),
           destinoInicial: values.destinoInicial as DestinoLote,
         });
+        registrarCambioDestinoProductivoSiCorresponde(lote!.id);
         onClose();
       } catch (err) {
         setServerError(
@@ -421,6 +481,7 @@ export function LoteFormModal({
           : {}),
       });
 
+      registrarCambioDestinoProductivoSiCorresponde(respuesta.lote.id);
       setWarnings(respuesta.warnings ?? []);
 
       if (respuesta.sensoresDisponibles.length > 0) {
@@ -581,35 +642,44 @@ export function LoteFormModal({
       }
       onClose={onClose}
       footer={
-        <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            Cancelar
-          </button>
-          <Button
-            type="submit"
-            form="lote-form"
-            isLoading={isSubmitting}
-            className="!w-auto px-6"
-          >
-            {esEdicion ? "Guardar destino" : "Registrar lote"}
-          </Button>
-          {/* HU-49 (mock visual): botón del prototipo, todavía sin lógica —
-              a propósito no reemplaza ni reutiliza el flujo real de
-              "Finalizar lote" (FinalizarLoteModal, HU-62). */}
-          {esEdicion && (
+        <div className="flex flex-col items-end gap-2">
+          {cerrarCicloError && (
+            <p className="text-sm text-red-600 dark:text-red-400">{cerrarCicloError}</p>
+          )}
+          {cerrarCicloMensaje && (
+            <p className="text-sm text-emerald-600 dark:text-emerald-400">{cerrarCicloMensaje}</p>
+          )}
+          <div className="flex justify-end gap-3">
             <button
               type="button"
-              disabled
-              title="Próximamente — pendiente de conexión con el backend"
-              className="cursor-not-allowed rounded-lg bg-[#3d6fcf] px-4 py-2 text-sm font-semibold text-white opacity-50"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              Cerrar ciclo del lote
+              Cancelar
             </button>
-          )}
+            <Button
+              type="submit"
+              form="lote-form"
+              isLoading={isSubmitting}
+              className="!w-auto px-6"
+            >
+              {esEdicion ? "Guardar destino" : "Registrar lote"}
+            </Button>
+            {/* HU-34 (AC4, mock visual): valida que haya un destino
+                productivo asignado. El cierre de ciclo en sí todavía no
+                tiene endpoint real — a propósito no reemplaza ni reutiliza
+                el flujo real de "Finalizar lote" (FinalizarLoteModal, HU-62). */}
+            {esEdicion && (
+              <button
+                type="button"
+                onClick={handleCerrarCiclo}
+                title="Pendiente de conexión real con el backend — valida el destino productivo"
+                className="rounded-lg bg-[#3d6fcf] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#3460b5]"
+              >
+                Cerrar ciclo del lote
+              </button>
+            )}
+          </div>
         </div>
       }
     >
@@ -895,6 +965,48 @@ export function LoteFormModal({
         <div className="flex flex-col gap-3">
           <SectionHeader>DESTINO PRODUCTIVO</SectionHeader>
           {esEdicion && <RecomendacionDestinoCard loteId={lote!.id} />}
+
+          {/* HU-34 (mock visual): selector plano del catálogo configurable
+              de destinos productivos (queso, yogur, crema, etc.) — no
+              confundir con "Destino inicial" de más abajo, que es el enum
+              fijo de ubicación/tratamiento. Editable mientras el lote no
+              esté procesado (finalizado o rechazado). */}
+          {loteEstaProcesado ? (
+            <div>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Destino productivo
+              </span>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {destinoProductivoActual?.destinoActualNombre ?? "Sin asignar"}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                El lote ya fue procesado: el destino productivo no se puede modificar.
+              </p>
+            </div>
+          ) : (
+            <>
+              <Select
+                id="lote-destino-productivo"
+                label="Destino productivo"
+                options={[
+                  { value: "", label: "Sin asignar" },
+                  ...destinosProductivos.map((d) => ({ value: String(d.id), label: d.nombre })),
+                ]}
+                value={values.destinoProductivoId === "" ? "" : String(values.destinoProductivoId)}
+                onChange={(e) =>
+                  setValues((prev) => ({
+                    ...prev,
+                    destinoProductivoId: e.target.value === "" ? "" : Number(e.target.value),
+                  }))
+                }
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Opcional al registrar el lote. Es obligatorio para cerrar el ciclo y se puede
+                modificar mientras el lote no esté procesado.
+              </p>
+            </>
+          )}
+
           <Select
             id="lote-destino"
             label="Destino inicial *"
