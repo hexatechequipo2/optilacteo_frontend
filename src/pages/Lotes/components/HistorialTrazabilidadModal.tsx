@@ -51,6 +51,10 @@ const TIPO_EVENTO_META: Record<TipoEventoTrazabilidad, { label: string; icon: Lu
     icon: ArrowRightLeft,
   },
   [TipoEventoTrazabilidad.FINALIZACION]: { label: "Finalización", icon: CheckCircle2 },
+  [TipoEventoTrazabilidad.RECOMENDACION_DESTINO]: {
+    label: "Recomendación de destino",
+    icon: GitBranch,
+  },
 };
 const TIPO_EVENTO_FALLBACK = { label: "Evento", icon: HelpCircle };
 
@@ -141,6 +145,40 @@ function DetalleEvento({ evento }: { evento: EventoTrazabilidad }) {
         </p>
       );
     }
+    case TipoEventoTrazabilidad.RECOMENDACION_DESTINO: {
+      const destinoRecomendadoNombre = d.destinoRecomendadoNombre as string | undefined;
+      const destinoRealNombre = d.destinoRealNombre as string | null | undefined;
+      const divergencia = d.divergencia as boolean | undefined;
+      const justificacion = d.justificacion as string | null | undefined;
+      const usuarioId = d.usuarioId as number | null | undefined;
+      return (
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Recomendado:{" "}
+            <strong className="text-slate-700 dark:text-slate-300">
+              {destinoRecomendadoNombre ?? "—"}
+            </strong>
+            {" · "}Elegido:{" "}
+            <strong className="text-slate-700 dark:text-slate-300">
+              {destinoRealNombre ?? "—"}
+            </strong>
+          </p>
+          {divergencia && <Badge variant="warning">Divergencia justificada</Badge>}
+          {justificacion && (
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Justificación: {justificacion}
+            </p>
+          )}
+          {usuarioId != null && (
+            // TODO(backend): el evento solo trae usuarioId numérico (ver
+            // lote-trazabilidad.service.ts) — pedir que resuelva a nombre o
+            // email, igual que ya se muestra en otros eventos del
+            // historial. No disimular con un fallback mientras tanto.
+            <p className="text-xs text-slate-400 dark:text-slate-500">Usuario ID: {usuarioId}</p>
+          )}
+        </div>
+      );
+    }
     default:
       return null;
   }
@@ -164,6 +202,14 @@ export function HistorialTrazabilidadModal({
   const { eventos, codigoLote, isLoading, error, refetch } = useTrazabilidadLote(loteId);
   const destinoProductivo = useDestinoProductivoLote(loteId);
 
+  // HU-34: de acá para abajo solo interesan las asignaciones manuales — las
+  // de origen "recomendacion_ml" (aceptadas o con divergencia) ya se
+  // muestran en el timeline real como evento RECOMENDACION_DESTINO (HU-37),
+  // listarlas también acá sería duplicar el mismo dato.
+  const asignacionesManuales = destinoProductivo
+    ? [...destinoProductivo.historial].filter((cambio) => cambio.origen === "manual").reverse()
+    : [];
+
   if (!isOpen) return null;
 
   return (
@@ -173,9 +219,9 @@ export function HistorialTrazabilidadModal({
       description={codigoLote ?? undefined}
       onClose={onClose}
     >
-      {/* HU-34/HU-37 (mock visual): aparte del timeline real de arriba
-          (backend, GET /lotes/:id/trazabilidad) porque el backend todavía
-          no expone un endpoint para el destino productivo de un lote — ver
+      {/* HU-34 (mock visual): destino vigente + asignaciones manuales,
+          aparte del timeline real de arriba porque el backend todavía no
+          expone un endpoint para Lote.destinoProductivoId — ver
           useDestinoProductivoLote.ts. */}
       {destinoProductivo && (
         <div className="mb-6 flex flex-col gap-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
@@ -186,55 +232,33 @@ export function HistorialTrazabilidadModal({
               {destinoProductivo.destinoActualNombre}
             </strong>
           </p>
-          <ol className="flex flex-col gap-3">
-            {[...destinoProductivo.historial].reverse().map((cambio, i) => (
-              <li key={i} className="flex items-start gap-3">
-                <span
-                  className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${
-                    cambio.esDivergencia
-                      ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
-                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                  }`}
-                >
-                  <GitBranch className="h-4 w-4" />
-                </span>
-                <div className="flex flex-1 flex-col gap-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm text-slate-700 dark:text-slate-300">
-                      {cambio.destinoAnteriorNombre ? (
-                        <>
-                          <strong>{cambio.destinoAnteriorNombre}</strong> →{" "}
-                        </>
-                      ) : null}
-                      <strong>{cambio.destinoNuevoNombre}</strong>
-                    </p>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">
-                      {formatFecha(cambio.timestamp)}
-                    </span>
+          {asignacionesManuales.length > 0 && (
+            <ol className="flex flex-col gap-3">
+              {asignacionesManuales.map((cambio, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    <GitBranch className="h-4 w-4" />
+                  </span>
+                  <div className="flex flex-1 flex-col gap-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        {cambio.destinoAnteriorNombre ? (
+                          <>
+                            <strong>{cambio.destinoAnteriorNombre}</strong> →{" "}
+                          </>
+                        ) : null}
+                        <strong>{cambio.destinoNuevoNombre}</strong>
+                      </p>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                        {formatFecha(cambio.timestamp)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{cambio.usuario}</p>
                   </div>
-                  {cambio.esDivergencia && (
-                    <>
-                      <Badge variant="warning">Divergencia justificada</Badge>
-                      {cambio.destinoRecomendadoNombre && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Recomendado por el sistema:{" "}
-                          <strong className="text-slate-700 dark:text-slate-300">
-                            {cambio.destinoRecomendadoNombre}
-                          </strong>
-                        </p>
-                      )}
-                      {cambio.justificacion && (
-                        <p className="text-sm text-slate-600 dark:text-slate-400">
-                          Justificación: {cambio.justificacion}
-                        </p>
-                      )}
-                    </>
-                  )}
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{cambio.usuario}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
       )}
 
