@@ -15,6 +15,9 @@ interface RespuestaConfirmada {
 interface ResponderDto {
   aceptada: boolean;
   destinoRealId?: number;
+  // HU-37: requerida por el backend cuando aceptada = false (ver
+  // ResponderRecomendacionDto en recomendacionDestino.types.ts).
+  justificacion?: string;
 }
 
 interface UseRecomendacionDestinoResult {

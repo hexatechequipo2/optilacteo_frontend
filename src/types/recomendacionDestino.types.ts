@@ -34,4 +34,8 @@ export function derivarNivelConfianza(confianza: number): NivelConfianzaRecomend
 export interface ResponderRecomendacionDto {
   aceptada: boolean;
   destinoRealId?: number; // requerido solo si aceptada = false
+  // HU-37: requerida por el backend (MinLength 20, ver
+  // responder-recomendacion.dto.ts) cuando aceptada = false. Si no viaja,
+  // el PATCH /recomendaciones/:id/responder responde 400.
+  justificacion?: string;
 }

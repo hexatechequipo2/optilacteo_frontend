@@ -24,6 +24,11 @@ import {
 // comentario en destino-productivo.entity.ts), así que esta tarjeta no
 // toca ni valida contra ese campo.
 
+// El backend exige un mínimo de 20 caracteres (ver
+// responder-recomendacion.dto.ts, HU-37 AC2) — acá se pide más para que la
+// justificación sea útil en auditoría, pero nunca menos: así ningún envío
+// que pase la validación del frontend puede rebotar contra el backend por
+// longitud.
 const JUSTIFICACION_MIN_LENGTH = 30;
 
 const NIVEL_BADGE_VARIANT: Record<NivelConfianzaRecomendacion, BadgeVariant> = {
@@ -205,7 +210,11 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
   const handleConfirmarRechazo = async () => {
     setJustificacionTocada(true);
     if (!puedeConfirmarRechazo || !destinoRealSeleccionado) return;
-    const ok = await responder({ aceptada: false, destinoRealId: Number(destinoRealId) });
+    const ok = await responder({
+      aceptada: false,
+      destinoRealId: Number(destinoRealId),
+      justificacion: justificacion.trim(),
+    });
     if (ok) {
       registrarCambioDestino({
         loteId,
