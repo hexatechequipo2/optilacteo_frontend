@@ -9,6 +9,11 @@ import { AuditoriaModal } from "../../components/AuditoriaModal";
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  useTodosDestinoProductivoLote,
+  esDivergenciaVigente,
+} from "../../hooks/useDestinoProductivoLote";
+import { Badge } from "../../components/ui/Badge";
 import { proveedoresService } from "../../services/proveedores.service";
 import { tamboService } from "../../services/tambo.service";
 import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
@@ -110,6 +115,11 @@ export default function LotesPage() {
   const [tambos, setTambos] = useState<Tambo[]>([]);
   const [filtroUnidadRendimiento, setFiltroUnidadRendimiento] = useState("");
   const [tabActiva, setTabActiva] = useState<TabLotes>("lotes");
+  // HU-34/HU-37 (mock visual): ver useDestinoProductivoLote.ts — el
+  // backend todavía no expone un endpoint para el destino productivo de un
+  // lote, así que esto vive en localStorage hasta que exista ese endpoint.
+  const destinoProductivoPorLote = useTodosDestinoProductivoLote();
+  const [soloConDivergencias, setSoloConDivergencias] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
   const [loteMediciones, setLoteMediciones] = useState<Lote | null>(null);
@@ -301,9 +311,29 @@ export default function LotesPage() {
   // ("Todas") no filtra nada; con "" el lote no tiene rendimiento cargado
   // (no finalizado o finalizado sin rendimiento) y no matchea ninguna unidad.
   const lotesFiltrados = useMemo(() => {
-    if (filtroUnidadRendimiento === "") return lotes;
-    return lotes.filter((lote) => lote.unidadRendimiento === filtroUnidadRendimiento);
-  }, [lotes, filtroUnidadRendimiento]);
+    let resultado = lotes;
+    if (filtroUnidadRendimiento !== "") {
+      resultado = resultado.filter((lote) => lote.unidadRendimiento === filtroUnidadRendimiento);
+    }
+    if (soloConDivergencias) {
+      resultado = resultado.filter((lote) =>
+        esDivergenciaVigente(destinoProductivoPorLote[lote.id] ?? null),
+      );
+    }
+    return resultado;
+  }, [lotes, filtroUnidadRendimiento, soloConDivergencias, destinoProductivoPorLote]);
+
+  // HU-37: cuenta sobre el universo ya filtrado por unidad de rendimiento
+  // (no sobre `lotes` sin filtrar), para que el número del checkbox
+  // coincida con lo que efectivamente se puede llegar a ver.
+  const cantidadConDivergencias = useMemo(() => {
+    const base =
+      filtroUnidadRendimiento === ""
+        ? lotes
+        : lotes.filter((lote) => lote.unidadRendimiento === filtroUnidadRendimiento);
+    return base.filter((lote) => esDivergenciaVigente(destinoProductivoPorLote[lote.id] ?? null))
+      .length;
+  }, [lotes, filtroUnidadRendimiento, destinoProductivoPorLote]);
 
   // HU-68: se busca por id en la lista ya cargada (no un GET /lotes/:id
   // aparte) para que, tras registrar un consumo y refetchear /lotes, el
@@ -334,14 +364,25 @@ export default function LotesPage() {
         </div>
         <div className="flex flex-wrap items-end gap-3">
           {tabActiva === "lotes" && (
-            <Select
-              id="filtro-unidad-rendimiento"
-              label="Unidad de rendimiento"
-              options={FILTRO_UNIDAD_OPTIONS}
-              value={filtroUnidadRendimiento}
-              onChange={(e) => setFiltroUnidadRendimiento(e.target.value)}
-              className="!py-1.5 text-sm"
-            />
+            <>
+              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={soloConDivergencias}
+                  onChange={(e) => setSoloConDivergencias(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700"
+                />
+                Solo lotes con divergencias justificadas ({cantidadConDivergencias})
+              </label>
+              <Select
+                id="filtro-unidad-rendimiento"
+                label="Unidad de rendimiento"
+                options={FILTRO_UNIDAD_OPTIONS}
+                value={filtroUnidadRendimiento}
+                onChange={(e) => setFiltroUnidadRendimiento(e.target.value)}
+                className="!py-1.5 text-sm"
+              />
+            </>
           )}
           {puedeCrearLote && (
             <Button type="button" className="!w-auto px-6" onClick={abrirAlta}>
@@ -393,14 +434,15 @@ export default function LotesPage() {
             Ningún lote coincide con el filtro
           </p>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            No hay lotes finalizados con rendimiento en{" "}
-            {UNIDAD_RENDIMIENTO_LABEL[filtroUnidadRendimiento as UnidadRendimiento]?.toLowerCase()}.
+            {soloConDivergencias
+              ? "No hay lotes con divergencias justificadas que coincidan con el resto de los filtros."
+              : `No hay lotes finalizados con rendimiento en ${UNIDAD_RENDIMIENTO_LABEL[filtroUnidadRendimiento as UnidadRendimiento]?.toLowerCase()}.`}
           </p>
         </div>
       ) : (
         <>
           {/* Tabla (md+) */}
-          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
+          <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800">
@@ -435,8 +477,27 @@ export default function LotesPage() {
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {new Date(lote.fechaIngreso).toLocaleDateString("es-AR")}
                     </td>
-                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                      {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
+                    <td className="px-5 py-3">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-slate-600 dark:text-slate-400">
+                          {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
+                        </span>
+                        {destinoProductivoPorLote[lote.id] ? (
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                            <span className="text-slate-400 dark:text-slate-500">Productivo:</span>
+                            <span className="font-medium text-blue-600 dark:text-blue-400">
+                              {destinoProductivoPorLote[lote.id].destinoActualNombre}
+                            </span>
+                            {esDivergenciaVigente(destinoProductivoPorLote[lote.id]) && (
+                              <Badge variant="warning">Divergencia</Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs italic text-slate-400 dark:text-slate-500">
+                            Sin destino productivo asignado
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {formatRendimiento(lote)}
@@ -655,6 +716,23 @@ export default function LotesPage() {
                     <dt className="text-slate-400 dark:text-slate-500">Destino</dt>
                     <dd className="text-slate-600 dark:text-slate-400">
                       {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
+                    </dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-slate-400 dark:text-slate-500">Destino productivo</dt>
+                    <dd>
+                      {destinoProductivoPorLote[lote.id] ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-blue-600 dark:text-blue-400">
+                            {destinoProductivoPorLote[lote.id].destinoActualNombre}
+                          </span>
+                          {esDivergenciaVigente(destinoProductivoPorLote[lote.id]) && (
+                            <Badge variant="warning">Divergencia</Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="italic text-slate-400 dark:text-slate-500">Sin asignar</span>
+                      )}
                     </dd>
                   </div>
                   <div className="col-span-2">

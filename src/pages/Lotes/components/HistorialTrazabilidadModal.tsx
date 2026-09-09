@@ -3,6 +3,7 @@ import {
   ArrowRightLeft,
   CheckCircle2,
   ClipboardCheck,
+  GitBranch,
   HelpCircle,
   MapPin,
   PackagePlus,
@@ -11,7 +12,9 @@ import {
 import { Modal } from "../../../components/ui/Modal";
 import { Badge } from "../../../components/ui/Badge";
 import { ClasificacionLoteBadge } from "../../../components/ClasificacionLoteBadge";
+import { SectionHeader } from "../../../components/ui/SectionHeader";
 import { useTrazabilidadLote } from "../../../hooks/useTrazabilidadLote";
+import { useDestinoProductivoLote } from "../../../hooks/useDestinoProductivoLote";
 import { TIPO_MATERIA_PRIMA_TABS } from "../../Configuracion/constants/parametrosCalidad";
 import { UBICACION_LABEL } from "../../Sensores/constants/parametroSensor";
 import { UNIDAD_RENDIMIENTO_SIMBOLO } from "../constants/unidadRendimiento";
@@ -159,6 +162,7 @@ export function HistorialTrazabilidadModal({
   onClose,
 }: HistorialTrazabilidadModalProps) {
   const { eventos, codigoLote, isLoading, error, refetch } = useTrazabilidadLote(loteId);
+  const destinoProductivo = useDestinoProductivoLote(loteId);
 
   if (!isOpen) return null;
 
@@ -169,6 +173,63 @@ export function HistorialTrazabilidadModal({
       description={codigoLote ?? undefined}
       onClose={onClose}
     >
+      {/* HU-34/HU-37 (mock visual): aparte del timeline real de arriba
+          (backend, GET /lotes/:id/trazabilidad) porque el backend todavía
+          no expone un endpoint para el destino productivo de un lote — ver
+          useDestinoProductivoLote.ts. */}
+      {destinoProductivo && (
+        <div className="mb-6 flex flex-col gap-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+          <SectionHeader>DESTINO PRODUCTIVO</SectionHeader>
+          <p className="text-sm text-slate-700 dark:text-slate-300">
+            Destino vigente:{" "}
+            <strong className="text-slate-900 dark:text-white">
+              {destinoProductivo.destinoActualNombre}
+            </strong>
+          </p>
+          <ol className="flex flex-col gap-3">
+            {[...destinoProductivo.historial].reverse().map((cambio, i) => (
+              <li key={i} className="flex items-start gap-3">
+                <span
+                  className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${
+                    cambio.esDivergencia
+                      ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
+                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                  }`}
+                >
+                  <GitBranch className="h-4 w-4" />
+                </span>
+                <div className="flex flex-1 flex-col gap-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      {cambio.destinoAnteriorNombre ? (
+                        <>
+                          <strong>{cambio.destinoAnteriorNombre}</strong> →{" "}
+                        </>
+                      ) : null}
+                      <strong>{cambio.destinoNuevoNombre}</strong>
+                    </p>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">
+                      {formatFecha(cambio.timestamp)}
+                    </span>
+                  </div>
+                  {cambio.esDivergencia && (
+                    <>
+                      <Badge variant="warning">Divergencia justificada</Badge>
+                      {cambio.justificacion && (
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          "{cambio.justificacion}"
+                        </p>
+                      )}
+                    </>
+                  )}
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{cambio.usuario}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
           <span>{error}</span>

@@ -8,13 +8,15 @@ import { UmbralesCalidadTab } from "./components/UmbralesCalidadTab";
 import { ComparacionHistoricaConfigTab } from "./components/ComparacionHistoricaConfigTab";
 import { PlcGatewayConfigTab } from "./components/PlcGatewayConfigTab";
 import { SkusConfigTab } from "./components/SkusConfigTab";
+import { DestinosProductivosConfigTab } from "./components/DestinosProductivosConfigTab";
 
 type TabConfiguracion =
   | "umbrales"
   | "logo-identidad"
   | "comparacion-historica"
   | "plc-gateway"
-  | "skus";
+  | "skus"
+  | "destinos-productivos";
 
 // HU-67 (AC 2): tab de catálogo de SKUs, solo para Gerente. POST /skus en el
 // backend está restringido a ADMINISTRADOR/GERENTE (ver sku.controller.ts),
@@ -27,6 +29,7 @@ const TABS_GERENTE: { value: TabConfiguracion; label: string }[] = [
   { value: "comparacion-historica", label: "Comparación histórica" },
   { value: "plc-gateway", label: "Conexión PLC/Gateway" },
   { value: "skus", label: "Catálogo de SKUs" },
+  { value: "destinos-productivos", label: "Destinos productivos" },
 ];
 
 // HU-23: a diferencia de Umbrales/Logo (Gerente-only, ver allowedRoles en
@@ -44,6 +47,10 @@ const TABS_RESPONSABLE_CALIDAD: { value: TabConfiguracion; label: string }[] = [
 // esta tab.
 const TABS_RESPONSABLE_PRODUCCION: { value: TabConfiguracion; label: string }[] = [
   { value: "plc-gateway", label: "Conexión PLC/Gateway" },
+  // HU-34: Responsable de producción es quien asigna el destino productivo
+  // en los lotes, pero la administración del catálogo (alta/edición/baja)
+  // queda restringida a Gerente — acá solo lo consulta en modo lectura.
+  { value: "destinos-productivos", label: "Destinos productivos" },
 ];
 
 export default function ConfiguracionPage() {
@@ -80,6 +87,9 @@ export default function ConfiguracionPage() {
       {tabActiva === "comparacion-historica" && <ComparacionHistoricaConfigTab />}
       {tabActiva === "plc-gateway" && <PlcGatewayConfigTab />}
       {tabActiva === "skus" && <SkusConfigTab />}
+      {tabActiva === "destinos-productivos" && (
+        <DestinosProductivosConfigTab puedeAdministrar={esGerente} />
+      )}
     </Layout>
   );
 }
