@@ -11,6 +11,10 @@ export const TipoEventoTrazabilidad = {
   INGRESO_CAMARA: "INGRESO_CAMARA",
   CONSUMO_PARCIAL: "CONSUMO_PARCIAL",
   FINALIZACION: "FINALIZACION",
+  // HU-37 (PR #126 de optilacteo-backend): evento por cada recomendación ML
+  // ya respondida (aceptada o rechazada) — ver detalle en
+  // lote-trazabilidad.service.ts. Las pendientes no generan evento.
+  RECOMENDACION_DESTINO: "RECOMENDACION_DESTINO",
 } as const;
 
 export type TipoEventoTrazabilidad =
