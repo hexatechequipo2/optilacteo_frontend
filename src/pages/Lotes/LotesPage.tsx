@@ -3,6 +3,7 @@ import { CheckCircle2, FlaskConical, GitMerge, History, Pencil, Route } from "lu
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
+import { Tabs } from "../../components/ui/Tabs";
 import { ClasificacionLoteBadge } from "../../components/ClasificacionLoteBadge";
 import { AuditoriaModal } from "../../components/AuditoriaModal";
 import { useLotes } from "../../hooks/useLotes";
@@ -26,6 +27,7 @@ import { LoteMedicionesModal } from "./components/LoteMedicionesModal";
 import { TrazabilidadLoteModal } from "./components/TrazabilidadLoteModal";
 import { HistorialTrazabilidadModal } from "./components/HistorialTrazabilidadModal";
 import { FinalizarLoteModal } from "./components/FinalizarLoteModal";
+import { EvolucionIndicadoresTab } from "./components/EvolucionIndicadoresTab";
 import {
   UNIDAD_RENDIMIENTO_LABEL,
   UNIDAD_RENDIMIENTO_SIMBOLO,
@@ -82,6 +84,18 @@ const FILTRO_UNIDAD_OPTIONS = [
 
 const TIPO_MATERIA_PRIMA_LABEL = new Map(TIPO_MATERIA_PRIMA_TABS.map((t) => [t.value, t.label]));
 
+// HU-39: se agrega el tab "Historial de mediciones" (gráfico de evolución
+// de indicadores) junto a la tabla de lotes. "Desvíos por proveedor" del
+// prototipo (Figura 2, sprint 4) queda deliberadamente afuera de este
+// cambio — hoy vive como modal en Proveedores (DesviosProveedorModal.tsx),
+// y moverlo ahí es una decisión de navegación aparte, no parte de HU-39.
+type TabLotes = "lotes" | "historial-mediciones";
+
+const TABS_LOTES: { value: TabLotes; label: string }[] = [
+  { value: "lotes", label: "Lotes" },
+  { value: "historial-mediciones", label: "Historial de mediciones" },
+];
+
 export default function LotesPage() {
   const {
     lotes,
@@ -100,6 +114,7 @@ export default function LotesPage() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [tambos, setTambos] = useState<Tambo[]>([]);
   const [filtroUnidadRendimiento, setFiltroUnidadRendimiento] = useState("");
+  const [tabActiva, setTabActiva] = useState<TabLotes>("lotes");
   // HU-34/HU-37 (mock visual): ver useDestinoProductivoLote.ts — el
   // backend todavía no expone un endpoint para el destino productivo de un
   // lote, así que esto vive en localStorage hasta que exista ese endpoint.
@@ -348,23 +363,27 @@ export default function LotesPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-            <input
-              type="checkbox"
-              checked={soloConDivergencias}
-              onChange={(e) => setSoloConDivergencias(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700"
-            />
-            Solo lotes con divergencias justificadas ({cantidadConDivergencias})
-          </label>
-          <Select
-            id="filtro-unidad-rendimiento"
-            label="Unidad de rendimiento"
-            options={FILTRO_UNIDAD_OPTIONS}
-            value={filtroUnidadRendimiento}
-            onChange={(e) => setFiltroUnidadRendimiento(e.target.value)}
-            className="!py-1.5 text-sm"
-          />
+          {tabActiva === "lotes" && (
+            <>
+              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={soloConDivergencias}
+                  onChange={(e) => setSoloConDivergencias(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700"
+                />
+                Solo lotes con divergencias justificadas ({cantidadConDivergencias})
+              </label>
+              <Select
+                id="filtro-unidad-rendimiento"
+                label="Unidad de rendimiento"
+                options={FILTRO_UNIDAD_OPTIONS}
+                value={filtroUnidadRendimiento}
+                onChange={(e) => setFiltroUnidadRendimiento(e.target.value)}
+                className="!py-1.5 text-sm"
+              />
+            </>
+          )}
           {puedeCrearLote && (
             <Button type="button" className="!w-auto px-6" onClick={abrirAlta}>
               + Nuevo lote
@@ -373,6 +392,14 @@ export default function LotesPage() {
         </div>
       </div>
 
+      <div className="mb-6">
+        <Tabs tabs={TABS_LOTES} value={tabActiva} onChange={setTabActiva} />
+      </div>
+
+      {tabActiva === "historial-mediciones" ? (
+        <EvolucionIndicadoresTab />
+      ) : (
+        <>
       {error && (
         <div className="mb-4 flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
           <span>{error}</span>
@@ -716,6 +743,8 @@ export default function LotesPage() {
               </div>
             ))}
           </div>
+        </>
+      )}
         </>
       )}
 
