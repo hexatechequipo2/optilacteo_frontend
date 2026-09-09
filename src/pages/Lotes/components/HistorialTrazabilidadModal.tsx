@@ -215,9 +215,17 @@ export function HistorialTrazabilidadModal({
                   {cambio.esDivergencia && (
                     <>
                       <Badge variant="warning">Divergencia justificada</Badge>
+                      {cambio.destinoRecomendadoNombre && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Recomendado por el sistema:{" "}
+                          <strong className="text-slate-700 dark:text-slate-300">
+                            {cambio.destinoRecomendadoNombre}
+                          </strong>
+                        </p>
+                      )}
                       {cambio.justificacion && (
                         <p className="text-sm text-slate-600 dark:text-slate-400">
-                          "{cambio.justificacion}"
+                          Justificación: {cambio.justificacion}
                         </p>
                       )}
                     </>
