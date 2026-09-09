@@ -4,6 +4,7 @@ import type {
   PuntoSerieEvolucion,
   TipoGraficoEvolucion,
 } from "../../../types/indicadorEvolucion.types";
+import { calcularRangoIndicador } from "../../../utils/indicadorEvolucionRango";
 
 interface EvolucionIndicadoresChartProps {
   puntos: PuntoSerieEvolucion[];
@@ -11,16 +12,14 @@ interface EvolucionIndicadoresChartProps {
   tipo: TipoGraficoEvolucion;
 }
 
-const COLOR_GRILLA = "#e2e8f0";
-const COLOR_EJE_TEXTO = "#94a3b8";
-
 // HU-39 (AC1 y AC3): un solo gráfico compara indicadores con unidades
 // distintas entre sí (% de grasa, °C de temperatura, k/mL de células
 // somáticas...), así que cada serie se normaliza a su propio rango
-// visible (0-100) en vez de compartir un eje Y absoluto — el valor real se
-// ve en el tooltip y en la leyenda/chips, no en el eje. El gráfico se
-// renderiza siempre con paleta clara (sin dark:) porque también es la
-// imagen que se exporta a PNG para informes (AC4).
+// visible (0-100) en vez de compartir un eje Y absoluto — no hay eje Y
+// numérico porque esos números no representarían nada real; el valor real
+// se ve en el tooltip y en la leyenda de abajo, con el mismo rango que
+// exportarGraficoEvolucionPng.ts calcula para el PNG (calcularRangoIndicador
+// compartido, para que pantalla y PNG nunca muestren rangos distintos).
 export function EvolucionIndicadoresChart({
   puntos,
   indicadores,
@@ -30,14 +29,10 @@ export function EvolucionIndicadoresChart({
 
   const n = puntos.length;
   const rangosPorIndicador = new Map(
-    indicadores.map((indicador) => {
-      const valores = puntos
-        .map((p) => p.valores[indicador.id])
-        .filter((v): v is number => v != null);
-      const min = valores.length ? Math.min(...valores) : 0;
-      const max = valores.length ? Math.max(...valores) : 1;
-      return [indicador.id, { min, max: max === min ? min + 1 : max }];
-    }),
+    indicadores.map((indicador) => [
+      indicador.id,
+      calcularRangoIndicador(puntos, indicador),
+    ]),
   );
 
   const xDe = (i: number) => (n <= 1 ? 50 : (i / (n - 1)) * 100);
@@ -61,12 +56,36 @@ export function EvolucionIndicadoresChart({
     // adentro de este mismo div, sumaría su alto al cálculo del % y
     // corriría los marcadores hacia abajo respecto de la línea/barras.
     <div>
+      {/* Leyenda con el rango real por indicador — mismo cálculo
+          (calcularRangoIndicador) y mismo texto que la leyenda del PNG
+          exportado (ver exportarGraficoEvolucionPng.ts), para que pantalla
+          y PNG nunca se contradigan sobre qué representa cada línea/barra. */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        {indicadores.map((indicador) => {
+          const rango = rangosPorIndicador.get(indicador.id)!;
+          return (
+            <span
+              key={indicador.id}
+              className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300"
+            >
+              <span
+                className="h-2 w-2 flex-shrink-0 rounded-full"
+                style={{ backgroundColor: indicador.color }}
+              />
+              {indicador.label} ({rango.min.toFixed(2)}–{rango.max.toFixed(2)} {indicador.unidad})
+            </span>
+          );
+        })}
+      </div>
+      <p className="mb-2 text-[11px] italic text-slate-400 dark:text-slate-500">
+        Escala relativa por indicador — ver rango real en la leyenda
+      </p>
+
       <div className="relative h-72 w-full">
         <svg
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
-          className="block h-full w-full overflow-visible"
-          style={{ background: "#ffffff" }}
+          className="block h-full w-full overflow-visible rounded-md bg-white dark:bg-slate-900"
         >
           {[0, 50, 100].map((y) => (
             <line
@@ -75,10 +94,11 @@ export function EvolucionIndicadoresChart({
               y1={y}
               x2="100"
               y2={y}
-              stroke={COLOR_GRILLA}
+              stroke="currentColor"
               strokeWidth="0.5"
               strokeDasharray="2,2"
               vectorEffect="non-scaling-stroke"
+              className="text-slate-100 dark:text-slate-800"
             />
           ))}
 
@@ -155,10 +175,11 @@ export function EvolucionIndicadoresChart({
               y1="0"
               x2={hoveredX}
               y2="100"
-              stroke={COLOR_EJE_TEXTO}
+              stroke="currentColor"
               strokeWidth="0.5"
               strokeDasharray="1,1"
               vectorEffect="non-scaling-stroke"
+              className="text-slate-300 dark:text-slate-600"
             />
           )}
         </svg>
@@ -220,10 +241,7 @@ export function EvolucionIndicadoresChart({
         )}
       </div>
 
-      <div
-        className="mt-1 flex justify-between text-[10px]"
-        style={{ color: COLOR_EJE_TEXTO }}
-      >
+      <div className="mt-1 flex justify-between text-[10px] text-slate-400 dark:text-slate-500">
         {puntos.map((p, i) => (
           <span
             key={p.timestamp}
