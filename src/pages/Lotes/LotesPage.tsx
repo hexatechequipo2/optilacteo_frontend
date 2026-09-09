@@ -54,7 +54,6 @@ const HEADERS_BASE = [
   "UBICACIÓN",
   "INGRESO",
   "DESTINO",
-  "DESTINO PRODUCTIVO",
   "RENDIMIENTO",
 ];
 
@@ -416,7 +415,7 @@ export default function LotesPage() {
       ) : (
         <>
           {/* Tabla (md+) */}
-          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
+          <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800">
@@ -451,22 +450,27 @@ export default function LotesPage() {
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {new Date(lote.fechaIngreso).toLocaleDateString("es-AR")}
                     </td>
-                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                      {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
-                    </td>
                     <td className="px-5 py-3">
-                      {destinoProductivoPorLote[lote.id] ? (
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="font-medium text-blue-600 dark:text-blue-400">
-                            {destinoProductivoPorLote[lote.id].destinoActualNombre}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-slate-600 dark:text-slate-400">
+                          {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
+                        </span>
+                        {destinoProductivoPorLote[lote.id] ? (
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                            <span className="text-slate-400 dark:text-slate-500">Productivo:</span>
+                            <span className="font-medium text-blue-600 dark:text-blue-400">
+                              {destinoProductivoPorLote[lote.id].destinoActualNombre}
+                            </span>
+                            {esDivergenciaVigente(destinoProductivoPorLote[lote.id]) && (
+                              <Badge variant="warning">Divergencia</Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs italic text-slate-400 dark:text-slate-500">
+                            Sin destino productivo asignado
                           </span>
-                          {esDivergenciaVigente(destinoProductivoPorLote[lote.id]) && (
-                            <Badge variant="warning">Divergencia</Badge>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="italic text-slate-400 dark:text-slate-500">Sin asignar</span>
-                      )}
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {formatRendimiento(lote)}
