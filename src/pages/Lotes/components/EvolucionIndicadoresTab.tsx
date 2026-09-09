@@ -86,6 +86,7 @@ export function EvolucionIndicadoresTab() {
     periodo,
     rangoPersonalizado: rango,
     indicadoresSeleccionados: seleccionados,
+    tipoGrafico,
   });
 
   const indicadoresSeleccionadosConfig = INDICADORES_EVOLUCION.filter((i) =>
@@ -256,9 +257,9 @@ export function EvolucionIndicadoresTab() {
           <>
             {agregado && (
               <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-                Rango extenso: los puntos se agregan por{" "}
-                {granularidad === "mes" ? "mes" : "semana"} para preservar el
-                rendimiento.
+                Los puntos se agregan por{" "}
+                {granularidad === "mes" ? "mes" : "semana"} para que el
+                gráfico se pueda leer bien.
               </p>
             )}
             <EvolucionIndicadoresChart
