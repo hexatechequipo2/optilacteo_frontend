@@ -14,7 +14,9 @@ import { Badge } from "../../../components/ui/Badge";
 import { ClasificacionLoteBadge } from "../../../components/ClasificacionLoteBadge";
 import { SectionHeader } from "../../../components/ui/SectionHeader";
 import { useTrazabilidadLote } from "../../../hooks/useTrazabilidadLote";
-import { useDestinoProductivoLote } from "../../../hooks/useDestinoProductivoLote";
+import { useDestinoManualLote } from "../../../hooks/useDestinoProductivoManual";
+import { useDestinoRecomendacionLote } from "../../../hooks/useDestinoProductivoRecomendacion";
+import { calcularDestinoVigente } from "../../../utils/destinoProductivoVigente";
 import { TIPO_MATERIA_PRIMA_TABS } from "../../Configuracion/constants/parametrosCalidad";
 import { UBICACION_LABEL } from "../../Sensores/constants/parametroSensor";
 import { UNIDAD_RENDIMIENTO_SIMBOLO } from "../constants/unidadRendimiento";
@@ -200,14 +202,18 @@ export function HistorialTrazabilidadModal({
   onClose,
 }: HistorialTrazabilidadModalProps) {
   const { eventos, codigoLote, isLoading, error, refetch } = useTrazabilidadLote(loteId);
-  const destinoProductivo = useDestinoProductivoLote(loteId);
+  const destinoManual = useDestinoManualLote(loteId);
+  const destinoRecomendacion = useDestinoRecomendacionLote(loteId);
+  const destinoVigente = calcularDestinoVigente(destinoManual, destinoRecomendacion);
 
-  // HU-34: de acá para abajo solo interesan las asignaciones manuales — las
-  // de origen "recomendacion_ml" (aceptadas o con divergencia) ya se
-  // muestran en el timeline real como evento RECOMENDACION_DESTINO (HU-37),
-  // listarlas también acá sería duplicar el mismo dato.
-  const asignacionesManuales = destinoProductivo
-    ? [...destinoProductivo.historial].filter((cambio) => cambio.origen === "manual").reverse()
+  // HU-34: acá solo interesan las asignaciones manuales — las de origen
+  // "recomendacion_ml" (aceptadas o con divergencia) ya se muestran en el
+  // timeline real como evento RECOMENDACION_DESTINO (HU-37), listarlas
+  // también acá sería duplicar el mismo dato. Desde la separación de hooks
+  // (useDestinoProductivoManual / useDestinoProductivoRecomendacion) este
+  // store ya solo contiene asignaciones manuales, no hace falta filtrar.
+  const asignacionesManuales = destinoManual
+    ? [...destinoManual.historial].reverse()
     : [];
 
   if (!isOpen) return null;
@@ -219,17 +225,17 @@ export function HistorialTrazabilidadModal({
       description={codigoLote ?? undefined}
       onClose={onClose}
     >
-      {/* HU-34 (mock visual): destino vigente + asignaciones manuales,
-          aparte del timeline real de arriba porque el backend todavía no
-          expone un endpoint para Lote.destinoProductivoId — ver
-          useDestinoProductivoLote.ts. */}
-      {destinoProductivo && (
+      {/* HU-34/HU-37 (mock visual): destino vigente + asignaciones
+          manuales, aparte del timeline real de arriba porque el backend
+          todavía no expone un endpoint para Lote.destinoProductivoId — ver
+          useDestinoProductivoManual.ts / useDestinoProductivoRecomendacion.ts. */}
+      {destinoVigente && (
         <div className="mb-6 flex flex-col gap-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
           <SectionHeader>DESTINO PRODUCTIVO</SectionHeader>
           <p className="text-sm text-slate-700 dark:text-slate-300">
             Destino vigente:{" "}
             <strong className="text-slate-900 dark:text-white">
-              {destinoProductivo.destinoActualNombre}
+              {destinoVigente.destinoActualNombre}
             </strong>
           </p>
           {asignacionesManuales.length > 0 && (

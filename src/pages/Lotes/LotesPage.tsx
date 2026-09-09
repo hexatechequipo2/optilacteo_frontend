@@ -9,10 +9,13 @@ import { AuditoriaModal } from "../../components/AuditoriaModal";
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
+import { useTodosDestinoManualLote } from "../../hooks/useDestinoProductivoManual";
+import { useTodosDestinoRecomendacionLote } from "../../hooks/useDestinoProductivoRecomendacion";
 import {
-  useTodosDestinoProductivoLote,
+  calcularDestinoVigente,
   esDivergenciaVigente,
-} from "../../hooks/useDestinoProductivoLote";
+  type DestinoVigente,
+} from "../../utils/destinoProductivoVigente";
 import { Badge } from "../../components/ui/Badge";
 import { proveedoresService } from "../../services/proveedores.service";
 import { tamboService } from "../../services/tambo.service";
@@ -115,10 +118,48 @@ export default function LotesPage() {
   const [tambos, setTambos] = useState<Tambo[]>([]);
   const [filtroUnidadRendimiento, setFiltroUnidadRendimiento] = useState("");
   const [tabActiva, setTabActiva] = useState<TabLotes>("lotes");
-  // HU-34/HU-37 (mock visual): ver useDestinoProductivoLote.ts — el
-  // backend todavía no expone un endpoint para el destino productivo de un
-  // lote, así que esto vive en localStorage hasta que exista ese endpoint.
-  const destinoProductivoPorLote = useTodosDestinoProductivoLote();
+  // HU-34/HU-37 (mock visual): ver useDestinoProductivoManual.ts /
+  // useDestinoProductivoRecomendacion.ts — el backend todavía no expone un
+  // endpoint para el destino productivo de un lote, así que esto vive en
+  // localStorage (uno por origen) hasta que exista ese endpoint.
+  const destinoManualPorLote = useTodosDestinoManualLote();
+  const destinoRecomendacionPorLote = useTodosDestinoRecomendacionLote();
+  // Combina los dos stores por lote (ver utils/destinoProductivoVigente.ts)
+  // una sola vez acá, en vez de recalcularlo en cada fila de la tabla.
+  const idsConDestino = useMemo(
+    () =>
+      new Set([
+        ...Object.keys(destinoManualPorLote).map(Number),
+        ...Object.keys(destinoRecomendacionPorLote).map(Number),
+      ]),
+    [destinoManualPorLote, destinoRecomendacionPorLote],
+  );
+  const destinoVigentePorLote = useMemo(() => {
+    const mapa = new Map<number, DestinoVigente | null>();
+    for (const loteId of idsConDestino) {
+      mapa.set(
+        loteId,
+        calcularDestinoVigente(
+          destinoManualPorLote[loteId] ?? null,
+          destinoRecomendacionPorLote[loteId] ?? null,
+        ),
+      );
+    }
+    return mapa;
+  }, [idsConDestino, destinoManualPorLote, destinoRecomendacionPorLote]);
+  const divergenciaVigentePorLote = useMemo(() => {
+    const mapa = new Map<number, boolean>();
+    for (const loteId of idsConDestino) {
+      mapa.set(
+        loteId,
+        esDivergenciaVigente(
+          destinoManualPorLote[loteId] ?? null,
+          destinoRecomendacionPorLote[loteId] ?? null,
+        ),
+      );
+    }
+    return mapa;
+  }, [idsConDestino, destinoManualPorLote, destinoRecomendacionPorLote]);
   const [soloConDivergencias, setSoloConDivergencias] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
@@ -316,12 +357,10 @@ export default function LotesPage() {
       resultado = resultado.filter((lote) => lote.unidadRendimiento === filtroUnidadRendimiento);
     }
     if (soloConDivergencias) {
-      resultado = resultado.filter((lote) =>
-        esDivergenciaVigente(destinoProductivoPorLote[lote.id] ?? null),
-      );
+      resultado = resultado.filter((lote) => divergenciaVigentePorLote.get(lote.id) ?? false);
     }
     return resultado;
-  }, [lotes, filtroUnidadRendimiento, soloConDivergencias, destinoProductivoPorLote]);
+  }, [lotes, filtroUnidadRendimiento, soloConDivergencias, divergenciaVigentePorLote]);
 
   // HU-37: cuenta sobre el universo ya filtrado por unidad de rendimiento
   // (no sobre `lotes` sin filtrar), para que el número del checkbox
@@ -331,9 +370,8 @@ export default function LotesPage() {
       filtroUnidadRendimiento === ""
         ? lotes
         : lotes.filter((lote) => lote.unidadRendimiento === filtroUnidadRendimiento);
-    return base.filter((lote) => esDivergenciaVigente(destinoProductivoPorLote[lote.id] ?? null))
-      .length;
-  }, [lotes, filtroUnidadRendimiento, destinoProductivoPorLote]);
+    return base.filter((lote) => divergenciaVigentePorLote.get(lote.id) ?? false).length;
+  }, [lotes, filtroUnidadRendimiento, divergenciaVigentePorLote]);
 
   // HU-68: se busca por id en la lista ya cargada (no un GET /lotes/:id
   // aparte) para que, tras registrar un consumo y refetchear /lotes, el
@@ -482,13 +520,13 @@ export default function LotesPage() {
                         <span className="text-slate-600 dark:text-slate-400">
                           {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
                         </span>
-                        {destinoProductivoPorLote[lote.id] ? (
+                        {destinoVigentePorLote.get(lote.id) ? (
                           <div className="flex flex-wrap items-center gap-1.5 text-xs">
                             <span className="text-slate-400 dark:text-slate-500">Productivo:</span>
                             <span className="font-medium text-blue-600 dark:text-blue-400">
-                              {destinoProductivoPorLote[lote.id].destinoActualNombre}
+                              {destinoVigentePorLote.get(lote.id)!.destinoActualNombre}
                             </span>
-                            {esDivergenciaVigente(destinoProductivoPorLote[lote.id]) && (
+                            {divergenciaVigentePorLote.get(lote.id) && (
                               <Badge variant="warning">Divergencia</Badge>
                             )}
                           </div>
@@ -721,12 +759,12 @@ export default function LotesPage() {
                   <div className="col-span-2">
                     <dt className="text-slate-400 dark:text-slate-500">Destino productivo</dt>
                     <dd>
-                      {destinoProductivoPorLote[lote.id] ? (
+                      {destinoVigentePorLote.get(lote.id) ? (
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium text-blue-600 dark:text-blue-400">
-                            {destinoProductivoPorLote[lote.id].destinoActualNombre}
+                            {destinoVigentePorLote.get(lote.id)!.destinoActualNombre}
                           </span>
-                          {esDivergenciaVigente(destinoProductivoPorLote[lote.id]) && (
+                          {divergenciaVigentePorLote.get(lote.id) && (
                             <Badge variant="warning">Divergencia</Badge>
                           )}
                         </div>

@@ -17,9 +17,11 @@ import { RecomendacionDestinoCard } from "./components/RecomendacionDestinoCard"
 import { useAuth } from "../../hooks/useAuth";
 import { useCatalogoDestinosProductivos } from "../../hooks/useCatalogoDestinosProductivos";
 import {
-  registrarCambioDestino,
-  useDestinoProductivoLote,
-} from "../../hooks/useDestinoProductivoLote";
+  registrarDestinoManual,
+  useDestinoManualLote,
+} from "../../hooks/useDestinoProductivoManual";
+import { useDestinoRecomendacionLote } from "../../hooks/useDestinoProductivoRecomendacion";
+import { calcularDestinoVigente } from "../../utils/destinoProductivoVigente";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -135,8 +137,10 @@ function buildInitialValues(lote?: Lote, destinoProductivoActualId?: number): Fo
     // HU-66: tampoco editable en PATCH /lotes/:id.
     cantidadComprometida: "",
     parametrosComprometidos: buildParametrosVacios(),
-    // HU-34 (mock visual): viene de useDestinoProductivoLote, no del lote
-    // real (el backend todavía no tiene endpoint para esto).
+    // HU-34/HU-37 (mock visual): destino vigente calculado en el
+    // consumidor a partir de useDestinoProductivoManual /
+    // useDestinoProductivoRecomendacion, no del lote real (el backend
+    // todavía no tiene endpoint para esto).
     destinoProductivoId: destinoProductivoActualId ?? "",
   };
 }
@@ -281,11 +285,16 @@ export function LoteFormModal({
     !!lote && (lote.estado === EstadoLote.FINALIZADO || lote.estado === EstadoLote.RECHAZADO);
   const { user } = useAuth();
   const { configs } = useConfigParametros();
-  // HU-34 (mock visual): ver useDestinoProductivoLote.ts.
-  const destinoProductivoActual = useDestinoProductivoLote(lote?.id ?? null);
+  // HU-34/HU-37 (mock visual): el destino vigente puede venir de una
+  // asignación manual (este modal) o de haber aceptado/rechazado una
+  // recomendación ML (RecomendacionDestinoCard) — se combinan acá, ver
+  // utils/destinoProductivoVigente.ts.
+  const destinoManualActual = useDestinoManualLote(lote?.id ?? null);
+  const destinoRecomendacionActual = useDestinoRecomendacionLote(lote?.id ?? null);
+  const destinoVigente = calcularDestinoVigente(destinoManualActual, destinoRecomendacionActual);
   const { destinosActivos: destinosProductivos } = useCatalogoDestinosProductivos();
   const [values, setValues] = useState<FormValues>(() =>
-    buildInitialValues(lote, destinoProductivoActual?.destinoActualId),
+    buildInitialValues(lote, destinoVigente?.destinoActualId),
   );
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState("");
@@ -316,7 +325,7 @@ export function LoteFormModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setValues(buildInitialValues(lote, destinoProductivoActual?.destinoActualId));
+    setValues(buildInitialValues(lote, destinoVigente?.destinoActualId));
     setErrors({});
     setServerError("");
     setCerrarCicloError("");
@@ -393,15 +402,14 @@ export function LoteFormModal({
   // duplicar registros" cuando no cambió nada).
   const registrarCambioDestinoProductivoSiCorresponde = (loteId: number) => {
     if (values.destinoProductivoId === "") return;
-    if (values.destinoProductivoId === destinoProductivoActual?.destinoActualId) return;
+    if (values.destinoProductivoId === destinoVigente?.destinoActualId) return;
     const destino = destinosProductivos.find((d) => d.id === values.destinoProductivoId);
     if (!destino) return;
-    registrarCambioDestino({
+    registrarDestinoManual({
       loteId,
       destinoNuevoId: destino.id,
       destinoNuevoNombre: destino.nombre,
       usuario: user?.email ?? "Usuario desconocido",
-      origen: "manual",
     });
   };
 
@@ -410,7 +418,7 @@ export function LoteFormModal({
   // destino productivo, que es lo que pide el criterio de aceptación.
   const handleCerrarCiclo = () => {
     setCerrarCicloMensaje("");
-    if (!destinoProductivoActual) {
+    if (!destinoVigente) {
       setCerrarCicloError("El destino productivo es obligatorio para cerrar el ciclo del lote.");
       return;
     }
@@ -977,7 +985,7 @@ export function LoteFormModal({
                 Destino productivo
               </span>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                {destinoProductivoActual?.destinoActualNombre ?? "Sin asignar"}
+                {destinoVigente?.destinoActualNombre ?? "Sin asignar"}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 El lote ya fue procesado: el destino productivo no se puede modificar.
