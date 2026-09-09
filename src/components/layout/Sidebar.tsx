@@ -268,7 +268,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         <span className="flex-shrink-0 rounded-md bg-blue-100 px-3 py-1 text-xs font-semibold uppercase text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
-          {user?.rolNombre ?? "Sin rol"}
+          {/* Badge de rol arriba a la izquierda: para Responsable de
+              producción se abrevia a "Producción" para que no se corte con
+              nombres de empresa largos (el resto de los roles no cambia). */}
+          {esResponsableProduccion ? "Producción" : (user?.rolNombre ?? "Sin rol")}
         </span>
 
         <button

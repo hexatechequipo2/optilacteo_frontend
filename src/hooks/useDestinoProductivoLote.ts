@@ -27,6 +27,8 @@ interface RegistrarCambioParams {
   origen: OrigenCambioDestino;
   esDivergencia?: boolean;
   justificacion?: string;
+  destinoRecomendadoId?: number | null;
+  destinoRecomendadoNombre?: string | null;
 }
 
 // HU-34/HU-37 (mock visual): ver destinoProductivoLote.types.ts — un solo
@@ -43,6 +45,8 @@ export function registrarCambioDestino({
   origen,
   esDivergencia = false,
   justificacion,
+  destinoRecomendadoId = null,
+  destinoRecomendadoNombre = null,
 }: RegistrarCambioParams) {
   const todo = leerTodo();
   const actual = todo[loteId];
@@ -56,6 +60,8 @@ export function registrarCambioDestino({
     timestamp: new Date().toISOString(),
     origen,
     esDivergencia,
+    destinoRecomendadoId,
+    destinoRecomendadoNombre,
     ...(justificacion ? { justificacion } : {}),
   };
 
@@ -99,10 +105,15 @@ export function useTodosDestinoProductivoLote(): Almacen {
 
 // HU-37: "divergencia" es específicamente cuando el último cambio de un
 // lote vino de rechazar una recomendación ML (no cualquier asignación
-// manual de HU-34).
+// manual de HU-34) Y esa recomendación rechazada quedó identificada
+// (destinoRecomendadoId). Sin esto último no hay contra qué mostrar la
+// divergencia: puede pasar con registros guardados antes de que este
+// campo existiera, y en ese caso preferimos no marcar nada en vez de
+// mostrar una divergencia "huérfana" sin recomendación asociada.
 export function esDivergenciaVigente(
   estado: DestinoProductivoLoteState | null,
 ): boolean {
   if (!estado || estado.historial.length === 0) return false;
-  return estado.historial[estado.historial.length - 1].esDivergencia;
+  const ultimo = estado.historial[estado.historial.length - 1];
+  return ultimo.esDivergencia && ultimo.destinoRecomendadoId != null;
 }

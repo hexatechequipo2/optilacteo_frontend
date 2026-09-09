@@ -23,6 +23,14 @@ export interface CambioDestinoProductivo {
   // elegido difiere del recomendado (aceptar la recomendación tal cual
   // también pasa por acá, pero no es una divergencia).
   esDivergencia: boolean;
+  // HU-37: destino que el sistema recomendó en el momento del cambio.
+  // No null solo cuando origen es "recomendacion_ml" — es lo que permite
+  // mostrar "recomendado vs elegido" y, en esDivergenciaVigente, validar
+  // que una divergencia tenga una recomendación identificable detrás.
+  // Ausente (undefined) en registros de localStorage guardados antes de
+  // este campo: se trata igual que null, no como dato corrupto.
+  destinoRecomendadoId: number | null;
+  destinoRecomendadoNombre: string | null;
   // Solo presente cuando esDivergencia es true (HU-37 AC1/AC2).
   justificacion?: string;
 }

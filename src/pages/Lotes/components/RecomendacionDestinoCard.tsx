@@ -5,7 +5,11 @@ import type { BadgeVariant } from "../../../components/ui/Badge";
 import { Select } from "../../../components/ui/Select";
 import { useAuth } from "../../../hooks/useAuth";
 import { useRecomendacionDestino } from "../../../hooks/useRecomendacionDestino";
-import { registrarCambioDestino } from "../../../hooks/useDestinoProductivoLote";
+import {
+  registrarCambioDestino,
+  useDestinoProductivoLote,
+  esDivergenciaVigente,
+} from "../../../hooks/useDestinoProductivoLote";
 import {
   derivarNivelConfianza,
   type NivelConfianzaRecomendacion,
@@ -53,6 +57,11 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
     errorResponder,
     respuestaConfirmada,
   } = useRecomendacionDestino(loteId);
+
+  // HU-37: para distinguir, cuando el backend ya no tiene una recomendación
+  // pendiente que devolver, entre "nunca hubo" y "hubo y ya se resolvió".
+  const destinoProductivoLote = useDestinoProductivoLote(loteId);
+  const divergenciaVigente = esDivergenciaVigente(destinoProductivoLote);
 
   const [mostrarSelectorDestino, setMostrarSelectorDestino] = useState(false);
   const [destinoRealId, setDestinoRealId] = useState("");
@@ -130,6 +139,28 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
   }
 
   if (!recomendacion) {
+    if (divergenciaVigente && destinoProductivoLote) {
+      const ultimoCambio =
+        destinoProductivoLote.historial[destinoProductivoLote.historial.length - 1];
+      return (
+        <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-500/10">
+          {header}
+          <p className="flex items-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-400">
+            <AlertCircle className="h-4 w-4" /> Recomendación ya resuelta con divergencia
+          </p>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            El sistema recomendó <strong>{ultimoCambio.destinoRecomendadoNombre}</strong>. Se
+            eligió <strong>{ultimoCambio.destinoNuevoNombre}</strong> y se justificó la
+            divergencia.
+          </p>
+          {ultimoCambio.justificacion && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Justificación: {ultimoCambio.justificacion}
+            </p>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col gap-2 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
         {header}
@@ -165,6 +196,8 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
         usuario: user?.email ?? "Usuario desconocido",
         origen: "recomendacion_ml",
         esDivergencia: false,
+        destinoRecomendadoId: recomendacion.destinoRecomendado.id,
+        destinoRecomendadoNombre: recomendacion.destinoRecomendado.nombre,
       });
     }
   };
@@ -182,6 +215,8 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
         origen: "recomendacion_ml",
         esDivergencia: true,
         justificacion: justificacion.trim(),
+        destinoRecomendadoId: recomendacion.destinoRecomendado.id,
+        destinoRecomendadoNombre: recomendacion.destinoRecomendado.nombre,
       });
     }
   };
