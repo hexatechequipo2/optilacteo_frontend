@@ -5,11 +5,13 @@ import { Button } from "../../components/ui/Button";
 import { Tabs } from "../../components/ui/Tabs";
 import { useDashboardProduccion } from "../../hooks/useDashboardProduccion";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
+import { useAuth } from "../../hooks/useAuth";
 import type { FiltroPeriodoDashboard } from "../../types/dashboardProduccion.types";
 import { MetricaCard } from "./components/MetricaCard";
 import { LotesProcesadosChart } from "./components/LotesProcesadosChart";
 import { LineaCalidadPanel } from "./components/LineaCalidadPanel";
 import { ReporteProduccionPDF } from "./components/ReporteProduccionPDF";
+import { PrediccionVolumenSemanalCard } from "./components/PrediccionVolumenSemanalCard";
 
 const HOY = new Date().toLocaleDateString("es-AR", {
   weekday: "long",
@@ -59,7 +61,15 @@ export default function DashboardProduccionPage() {
   const { resumen, historico, isLoading, error, filtro, setFiltro, refetch } =
     useDashboardProduccion();
   const { empresa } = useEmpresaActual();
+  const { user } = useAuth();
   const [, forceTick] = useState(0);
+
+  // HU-51: la HU es específica del rol Responsable de producción (no
+  // Gerente, que también aterriza en esta misma pantalla — ver allowedRoles
+  // en App.tsx). Comparación normalizada, mismo criterio que el resto de
+  // los checks por rol en LotesPage.tsx.
+  const puedeVerPrediccionVolumen =
+    (user?.rolNombre ?? "").trim().toLowerCase() === "responsable de producción";
 
   // Recalcula el texto "actualizado hace Xs" cada segundo sin re-pedir datos.
   useEffect(() => {
@@ -144,6 +154,12 @@ export default function DashboardProduccionPage() {
               </p>
               <LotesProcesadosChart datos={historico?.puntos ?? []} />
             </div>
+
+            {puedeVerPrediccionVolumen && (
+              <div className="mt-6">
+                <PrediccionVolumenSemanalCard />
+              </div>
+            )}
           </div>
 
           <ReporteProduccionPDF
