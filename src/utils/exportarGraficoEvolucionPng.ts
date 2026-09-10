@@ -3,6 +3,7 @@ import type {
   PuntoSerieEvolucion,
   TipoGraficoEvolucion,
 } from "../types/indicadorEvolucion.types";
+import { calcularRangoIndicador } from "./indicadorEvolucionRango";
 
 // HU-39 (mejora post-QA): la primera versión exportaba el <svg> tal cual
 // (serializado a canvas) — como el título, la leyenda y las fechas del eje
@@ -27,18 +28,6 @@ const COLOR_TITULO = "#0f172a";
 const COLOR_SUBTITULO = "#64748b";
 const COLOR_GRILLA = "#e2e8f0";
 const COLOR_EJE_TEXTO = "#94a3b8";
-
-function calcularRango(
-  puntos: PuntoSerieEvolucion[],
-  indicador: IndicadorEvolucionConfig,
-) {
-  const valores = puntos
-    .map((p) => p.valores[indicador.id])
-    .filter((v): v is number => v != null);
-  const min = valores.length ? Math.min(...valores) : 0;
-  const max = valores.length ? Math.max(...valores) : 1;
-  return { min, max: max === min ? min + 1 : max };
-}
 
 export function exportarGraficoEvolucionPng({
   puntos,
@@ -79,7 +68,7 @@ export function exportarGraficoEvolucionPng({
   const legendLineHeight = 24;
   ctx.font = "13px Arial, sans-serif";
   const rangos = new Map(
-    indicadores.map((i) => [i.id, calcularRango(puntos, i)]),
+    indicadores.map((i) => [i.id, calcularRangoIndicador(puntos, i)]),
   );
 
   for (const indicador of indicadores) {

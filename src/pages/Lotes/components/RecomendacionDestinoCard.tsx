@@ -6,10 +6,14 @@ import { Select } from "../../../components/ui/Select";
 import { useAuth } from "../../../hooks/useAuth";
 import { useRecomendacionDestino } from "../../../hooks/useRecomendacionDestino";
 import {
-  registrarCambioDestino,
-  useDestinoProductivoLote,
+  registrarDestinoRecomendacion,
+  useDestinoRecomendacionLote,
+} from "../../../hooks/useDestinoProductivoRecomendacion";
+import { useDestinoManualLote } from "../../../hooks/useDestinoProductivoManual";
+import {
+  calcularDestinoVigente,
   esDivergenciaVigente,
-} from "../../../hooks/useDestinoProductivoLote";
+} from "../../../utils/destinoProductivoVigente";
 import {
   derivarNivelConfianza,
   type NivelConfianzaRecomendacion,
@@ -64,9 +68,13 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
   } = useRecomendacionDestino(loteId);
 
   // HU-37: para distinguir, cuando el backend ya no tiene una recomendación
-  // pendiente que devolver, entre "nunca hubo" y "hubo y ya se resolvió".
-  const destinoProductivoLote = useDestinoProductivoLote(loteId);
-  const divergenciaVigente = esDivergenciaVigente(destinoProductivoLote);
+  // pendiente que devolver, entre "nunca hubo", "hubo y quedó una
+  // divergencia vigente" y "hubo y se resolvió sin divergencia" (o incluso
+  // el destino vino de una asignación manual posterior, HU-34).
+  const destinoRecomendacionLote = useDestinoRecomendacionLote(loteId);
+  const destinoManualLote = useDestinoManualLote(loteId);
+  const divergenciaVigente = esDivergenciaVigente(destinoManualLote, destinoRecomendacionLote);
+  const destinoVigente = calcularDestinoVigente(destinoManualLote, destinoRecomendacionLote);
 
   const [mostrarSelectorDestino, setMostrarSelectorDestino] = useState(false);
   const [destinoRealId, setDestinoRealId] = useState("");
@@ -144,25 +152,47 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
   }
 
   if (!recomendacion) {
-    if (divergenciaVigente && destinoProductivoLote) {
+    // El destino vigente (si existe, sea cual sea su origen) siempre va
+    // primero: es el dato que importa para quien está mirando el lote hoy.
+    // "Sin recomendación disponible" queda reservado para cuando de verdad
+    // no hay ningún destino cargado — antes se mostraba ese texto incluso
+    // con un destino ya asignado, y parecía que no había nada cargado.
+    if (divergenciaVigente && destinoRecomendacionLote) {
       const ultimoCambio =
-        destinoProductivoLote.historial[destinoProductivoLote.historial.length - 1];
+        destinoRecomendacionLote.historial[destinoRecomendacionLote.historial.length - 1];
       return (
         <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-500/10">
           {header}
-          <p className="flex items-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-400">
-            <AlertCircle className="h-4 w-4" /> Recomendación ya resuelta con divergencia
+          <p className="text-sm font-medium text-slate-900 dark:text-white">
+            Destino asignado:{" "}
+            <strong>{destinoVigente?.destinoActualNombre ?? ultimoCambio.destinoNuevoNombre}</strong>
+          </p>
+          <p className="flex items-center gap-1.5 text-xs font-medium text-amber-800 dark:text-amber-400">
+            <AlertCircle className="h-4 w-4" /> Divergencia justificada respecto a la
+            recomendación
           </p>
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            El sistema recomendó <strong>{ultimoCambio.destinoRecomendadoNombre}</strong>. Se
-            eligió <strong>{ultimoCambio.destinoNuevoNombre}</strong> y se justificó la
-            divergencia.
+            El sistema había recomendado{" "}
+            <strong>{ultimoCambio.destinoRecomendadoNombre}</strong>.
           </p>
           {ultimoCambio.justificacion && (
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Justificación: {ultimoCambio.justificacion}
             </p>
           )}
+        </div>
+      );
+    }
+    if (destinoVigente) {
+      return (
+        <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+          {header}
+          <p className="text-sm font-medium text-slate-900 dark:text-white">
+            Destino asignado: <strong>{destinoVigente.destinoActualNombre}</strong>
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            No hay una recomendación pendiente para este lote.
+          </p>
         </div>
       );
     }
@@ -189,17 +219,16 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
 
   const handleAceptar = async () => {
     const ok = await responder({ aceptada: true });
-    // HU-34/HU-37 (mock visual): el backend todavía no tiene un endpoint
-    // para leer/escribir Lote.destinoProductivoId — se completa acá lo que
-    // falta (ver useDestinoProductivoLote.ts). Aceptar no es una
+    // HU-37 (mock visual): el backend todavía no tiene un endpoint para
+    // leer/escribir Lote.destinoProductivoId — se completa acá lo que falta
+    // (ver useDestinoProductivoRecomendacion.ts). Aceptar no es una
     // divergencia: el destino elegido es el mismo que el recomendado.
     if (ok) {
-      registrarCambioDestino({
+      registrarDestinoRecomendacion({
         loteId,
         destinoNuevoId: recomendacion.destinoRecomendado.id,
         destinoNuevoNombre: recomendacion.destinoRecomendado.nombre,
         usuario: user?.email ?? "Usuario desconocido",
-        origen: "recomendacion_ml",
         esDivergencia: false,
         destinoRecomendadoId: recomendacion.destinoRecomendado.id,
         destinoRecomendadoNombre: recomendacion.destinoRecomendado.nombre,
@@ -216,12 +245,11 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
       justificacion: justificacion.trim(),
     });
     if (ok) {
-      registrarCambioDestino({
+      registrarDestinoRecomendacion({
         loteId,
         destinoNuevoId: destinoRealSeleccionado.id,
         destinoNuevoNombre: destinoRealSeleccionado.nombre,
         usuario: user?.email ?? "Usuario desconocido",
-        origen: "recomendacion_ml",
         esDivergencia: true,
         justificacion: justificacion.trim(),
         destinoRecomendadoId: recomendacion.destinoRecomendado.id,

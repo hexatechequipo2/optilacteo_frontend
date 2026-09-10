@@ -21,7 +21,11 @@ export const INDICADORES_EVOLUCION: IndicadorEvolucionConfig[] = [
   { id: "grasa", label: "Materia grasa", unidad: "%", color: "#2563eb", rango: [3.15, 4.1] },
   { id: "proteina", label: "Proteína", unidad: "%", color: "#16a34a", rango: [3.0, 3.6] },
   { id: "acidez", label: "Acidez titulable", unidad: "°D", color: "#f97316", rango: [14, 18] },
-  { id: "temperatura", label: "Temperatura", unidad: "°C", color: "#d97706", rango: [2, 8] },
+  // Antes #d97706 (ámbar): muy parecido al naranja de Acidez titulable, con
+  // ambos seleccionados costaba distinguir cuál barra/línea era cuál
+  // (reportado por Damaris probando el ítem 3 en pantalla, 2026-09-09). Rojo
+  // queda lejos en el círculo cromático de los otros 5 colores del set.
+  { id: "temperatura", label: "Temperatura", unidad: "°C", color: "#dc2626", rango: [2, 8] },
   {
     id: "celulasSomaticas",
     label: "Células somáticas",
