@@ -355,7 +355,10 @@ test.describe("LotesPage", () => {
 
     await page.getByRole("button", { name: /nuevo lote/i }).click();
 
-    // Intentamos enviar sin completar ningún campo
+    // El botón queda deshabilitado (HU-69) hasta cargar un número de remito
+    // válido — se completa solo ese campo para poder disparar el submit y
+    // ver la validación del resto de los campos obligatorios.
+    await page.getByLabel("Número de remito *").fill("R-000123");
     await page.getByRole("button", { name: "Registrar lote" }).click();
 
     await expect(
@@ -404,6 +407,7 @@ test.describe("LotesPage", () => {
     await page.getByText("Leche cruda").click();
     await page.getByLabel("pH (sin unidad)").fill("6.8");
     await page.getByLabel("Destino inicial *").selectOption({ value: "produccion" });
+    await page.getByLabel("Número de remito *").fill("R-000123");
 
     await page.getByRole("button", { name: "Registrar lote" }).click();
 
@@ -437,6 +441,7 @@ test.describe("LotesPage", () => {
     await page.getByText("Leche cruda").click();
     await page.getByLabel("pH (sin unidad)").fill("6.8");
     await page.getByLabel("Destino inicial *").selectOption({ value: "produccion" });
+    await page.getByLabel("Número de remito *").fill("R-000123");
 
     await page.getByRole("button", { name: "Registrar lote" }).click();
 
@@ -498,10 +503,107 @@ test.describe("LotesPage", () => {
     // pH por debajo del mínimo configurado (6–7.5)
     await page.getByLabel("pH (sin unidad)").fill("2");
     await page.getByLabel("Destino inicial *").selectOption({ value: "produccion" });
+    await page.getByLabel("Número de remito *").fill("R-000123");
 
     await page.getByRole("button", { name: "Registrar lote" }).click();
 
     await expect(page.getByText("Debe estar entre 6 y 7.5")).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-69 · Anexo de número de remito a lote
+// ---------------------------------------------------------------------------
+
+test.describe("LoteFormModal — HU-69 (número de remito)", () => {
+  test("el botón Registrar lote queda deshabilitado hasta cargar un número de remito válido", async ({
+    page,
+  }) => {
+    await mockLotesDeps(page);
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    await page.getByRole("button", { name: /nuevo lote/i }).click();
+
+    await expect(page.getByRole("button", { name: "Registrar lote" })).toBeDisabled();
+
+    await page.getByLabel("Número de remito *").fill("R-000123");
+    await expect(page.getByRole("button", { name: "Registrar lote" })).toBeEnabled();
+  });
+
+  test("valida en tiempo real: campo vacío y formato inválido muestran mensajes distintos", async ({
+    page,
+  }) => {
+    await mockLotesDeps(page);
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    await page.getByRole("button", { name: /nuevo lote/i }).click();
+    const campo = page.getByLabel("Número de remito *");
+
+    // Tocar el campo y dejarlo vacío (blur) dispara el mensaje de obligatorio.
+    // exact:true porque el texto de ayuda estático arranca con la misma
+    // frase ("El número de remito es obligatorio. La cantidad y...").
+    await campo.click();
+    await campo.blur();
+    await expect(
+      page.getByText("El número de remito es obligatorio.", { exact: true }),
+    ).toBeVisible();
+
+    // Caracteres inválidos (espacio y barra) disparan el mensaje de formato
+    await campo.fill("R 000/123");
+    await expect(
+      page.getByText("Formato inválido. Usá solo letras, números y guiones."),
+    ).toBeVisible();
+    await expect(
+      page.getByText("El número de remito es obligatorio.", { exact: true }),
+    ).not.toBeVisible();
+
+    // Un valor válido no muestra ningún error
+    await campo.fill("R-000123");
+    await expect(
+      page.getByText("Formato inválido. Usá solo letras, números y guiones."),
+    ).not.toBeVisible();
+  });
+
+  test("la tabla de lotes muestra el número de remito y permite buscar por él", async ({ page }) => {
+    await mockLotesDeps(page);
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "optilacteo:remito-lote",
+        JSON.stringify({
+          1: { numeroRemito: "R-000123", registradoEn: "2026-08-01T12:00:00.000Z" },
+        }),
+      );
+    });
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    // Se renderiza a la vez la fila de tabla (desktop) y la card (mobile,
+    // oculta por CSS) — se escopea a la tabla para no chocar con strict mode.
+    const table = page.getByRole("table");
+    await expect(table.getByText("Nº remito: R-000123")).toBeVisible();
+
+    await page
+      .getByPlaceholder("Buscar por lote, proveedor, tambo o nº de remito...")
+      .fill("R-000123");
+    await expect(table.getByText("LOT-2026-001")).toBeVisible();
+    await expect(table.getByText("LOT-2026-002")).not.toBeVisible();
+  });
+
+  test("una búsqueda sin resultados muestra un mensaje específico, no el del filtro de rendimiento", async ({
+    page,
+  }) => {
+    await mockLotesDeps(page);
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    await page
+      .getByPlaceholder("Buscar por lote, proveedor, tambo o nº de remito...")
+      .fill("no existe ningún lote así");
+
+    await expect(page.getByText('Ningún lote coincide con "no existe ningún lote así".')).toBeVisible();
+    await expect(page.getByText(/rendimiento en undefined/)).not.toBeVisible();
   });
 });
 

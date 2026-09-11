@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { RadioCard } from "../../components/ui/RadioCard";
@@ -22,6 +21,7 @@ import {
 } from "../../hooks/useDestinoProductivoManual";
 import { useDestinoRecomendacionLote } from "../../hooks/useDestinoProductivoRecomendacion";
 import { calcularDestinoVigente } from "../../utils/destinoProductivoVigente";
+import { registrarRemitoLote } from "../../hooks/useRemitoLote";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -66,6 +66,11 @@ const DESTINO_OPTIONS = [
   })),
 ];
 
+// HU-69 (AC3, Pantalla 9): "formato alfanumérico válido" — letras, números y
+// guiones, mismo ejemplo del prototipo ("R-000123"). Sin espacios ni otros
+// símbolos.
+const NUMERO_REMITO_REGEX = /^[A-Za-z0-9-]+$/;
+
 interface FormValues {
   proveedorId: string;
   // HU-36: tambo de origen, obligatorio y dependiente del proveedor elegido
@@ -77,8 +82,10 @@ interface FormValues {
   parametros: Record<ParametroVisible, string>;
   destinoInicial: DestinoLote | "";
   ubicacionInicial: Ubicacion | "";
-  // HU-66: datos del remito, opcionales (AC4) — el lote se guarda igual sin
-  // ellos.
+  // HU-69 (AC1): obligatorio, a diferencia del resto de "datos del remito".
+  numeroRemito: string;
+  // HU-66: cantidad/calidad comprometidas, opcionales (AC4) — el lote se
+  // guarda igual sin ellas.
   cantidadComprometida: string;
   parametrosComprometidos: Record<ParametroVisible, string>;
   // HU-34 (mock visual): destino productivo del catálogo configurable
@@ -96,6 +103,7 @@ interface FormErrors {
   destinoInicial?: string;
   parametros?: Partial<Record<ParametroVisible, string>>;
   parametrosGeneral?: string;
+  numeroRemito?: string;
   cantidadComprometida?: string;
   parametrosComprometidos?: Partial<Record<ParametroVisible, string>>;
 }
@@ -118,6 +126,7 @@ function buildInitialValues(lote?: Lote, destinoProductivoActualId?: number): Fo
       parametros: buildParametrosVacios(),
       destinoInicial: "",
       ubicacionInicial: "",
+      numeroRemito: "",
       cantidadComprometida: "",
       parametrosComprometidos: buildParametrosVacios(),
       destinoProductivoId: "",
@@ -134,6 +143,9 @@ function buildInitialValues(lote?: Lote, destinoProductivoActualId?: number): Fo
     parametros: buildParametrosVacios(),
     destinoInicial: lote.destinoInicial ?? "",
     ubicacionInicial: lote.ubicacionInicial ?? "",
+    // HU-69: no aplica en edición, la sección "Datos del remito" solo se
+    // muestra al crear (ver !esEdicion más abajo).
+    numeroRemito: "",
     // HU-66: tampoco editable en PATCH /lotes/:id.
     cantidadComprometida: "",
     parametrosComprometidos: buildParametrosVacios(),
@@ -223,8 +235,19 @@ function validate(
   if (!algunoCargado)
     errors.parametrosGeneral = "Cargá al menos un parámetro de calidad";
 
-  // HU-66: datos del remito, opcionales (AC4) — solo se valida formato de
-  // lo que sí se cargó.
+  // HU-69 (AC1, AC3, AC5): a diferencia del resto de "datos del remito",
+  // obligatorio y con formato validado — dos mensajes distintos según el
+  // motivo del rechazo (Pantalla 9: "valida en tiempo real dos situaciones
+  // diferenciadas: el campo vacío y el ingreso de caracteres inválidos").
+  const numeroRemitoTrim = values.numeroRemito.trim();
+  if (numeroRemitoTrim === "") {
+    errors.numeroRemito = "El número de remito es obligatorio.";
+  } else if (!NUMERO_REMITO_REGEX.test(numeroRemitoTrim)) {
+    errors.numeroRemito = "Formato inválido. Usá solo letras, números y guiones.";
+  }
+
+  // HU-66: cantidad/calidad comprometidas, opcionales (AC4) — solo se valida
+  // formato de lo que sí se cargó.
   if (values.cantidadComprometida.trim() !== "") {
     const valor = Number(values.cantidadComprometida);
     if (Number.isNaN(valor) || valor <= 0) {
@@ -318,10 +341,11 @@ export function LoteFormModal({
   // se pierdan silenciosamente cerrando el modal solo.
   const [warnings, setWarnings] = useState<string[]>([]);
 
-  // HU-66: colapsada por defecto — es común no tener el remito al momento
-  // de la carga (AC4), no queremos que el form se vea más largo/obligatorio
-  // de lo que es cuando no aplica.
-  const [remitoAbierto, setRemitoAbierto] = useState(false);
+  // HU-69: si ya se tocó el campo de número de remito — recién ahí se
+  // muestran sus errores en tiempo real (Pantalla 9), para no arrancar el
+  // form con un campo obligatorio en rojo antes de que el usuario escriba
+  // nada.
+  const [numeroRemitoTocado, setNumeroRemitoTocado] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -336,8 +360,24 @@ export function LoteFormModal({
     setSensoresSeleccionados(new Set());
     setAsociarError("");
     setWarnings([]);
-    setRemitoAbierto(false);
+    setNumeroRemitoTocado(false);
   }, [isOpen, lote]);
+
+  // HU-69 (AC1, AC3, Pantalla 9): validación en tiempo real, no solo al
+  // enviar — "manteniendo deshabilitada la confirmación hasta que el valor
+  // resulte válido". Dos mensajes distintos, mismo criterio que validate().
+  const numeroRemitoTrimmed = values.numeroRemito.trim();
+  const numeroRemitoVacio = numeroRemitoTrimmed === "";
+  const numeroRemitoFormatoInvalido =
+    !numeroRemitoVacio && !NUMERO_REMITO_REGEX.test(numeroRemitoTrimmed);
+  const numeroRemitoValido = !numeroRemitoVacio && !numeroRemitoFormatoInvalido;
+  const numeroRemitoErrorEnVivo = !numeroRemitoTocado
+    ? undefined
+    : numeroRemitoVacio
+      ? "El número de remito es obligatorio."
+      : numeroRemitoFormatoInvalido
+        ? "Formato inválido. Usá solo letras, números y guiones."
+        : undefined;
 
   // HU-36: combo encadenado — la lista de tambos depende del proveedor
   // elegido (GET /tambos?proveedorId=xxx). En edición, proveedorId ya viene
@@ -490,6 +530,10 @@ export function LoteFormModal({
       });
 
       registrarCambioDestinoProductivoSiCorresponde(respuesta.lote.id);
+      // HU-69 (mock visual): el backend todavía no tiene columna para esto,
+      // ver useRemitoLote.ts — la validación ya garantizó que llegue no
+      // vacío y con formato válido antes de este punto.
+      registrarRemitoLote(respuesta.lote.id, numeroRemitoTrimmed);
       setWarnings(respuesta.warnings ?? []);
 
       if (respuesta.sensoresDisponibles.length > 0) {
@@ -669,6 +713,10 @@ export function LoteFormModal({
               type="submit"
               form="lote-form"
               isLoading={isSubmitting}
+              // HU-69 (Pantalla 9): "manteniendo deshabilitada la
+              // confirmación hasta que el valor resulte válido" — solo
+              // aplica al crear, la sección de remito no existe en edición.
+              disabled={!esEdicion && !numeroRemitoValido}
               className="!w-auto px-6"
             >
               {esEdicion ? "Guardar destino" : "Registrar lote"}
@@ -892,80 +940,80 @@ export function LoteFormModal({
           )}
         </div>
 
-        {/* HU-66: datos del remito, opcionales (AC4) — colapsado por
-            defecto porque no siempre se cuenta con el remito al momento de
-            la carga. PATCH /lotes/:id tampoco acepta estos campos, así que
-            en edición no se muestra la sección. */}
+        {/* HU-66/HU-69: datos del remito. Ya no es una sección opcional
+            colapsada: desde HU-69 el número de remito es obligatorio (AC1),
+            así que se muestra siempre expandida — ocultar por defecto un
+            campo requerido detrás de un acordeón habría sido peor que
+            mostrarlo siempre. Cantidad y calidad comprometidas siguen
+            siendo opcionales (HU-66 AC4), sin cambios ahí. PATCH
+            /lotes/:id no acepta ninguno de estos campos, así que en
+            edición no se muestra la sección (mismo criterio que antes). */}
         {!esEdicion && (
           <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => setRemitoAbierto((prev) => !prev)}
-              className="flex w-full items-center gap-3"
-            >
-              {remitoAbierto ? (
-                <ChevronDown className="h-4 w-4 flex-shrink-0 text-slate-400 dark:text-slate-500" />
-              ) : (
-                <ChevronRight className="h-4 w-4 flex-shrink-0 text-slate-400 dark:text-slate-500" />
-              )}
-              <span className="text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500">
-                DATOS DEL REMITO (OPCIONAL)
-              </span>
-              <span className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
-            </button>
+            <SectionHeader>DATOS DEL REMITO</SectionHeader>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              El número de remito es obligatorio. La cantidad y la calidad
+              comprometidas son opcionales si no contás con el remito
+              completo al momento de la carga.
+            </p>
 
-            {remitoAbierto && (
-              <div className="flex flex-col gap-3 border-l-2 border-slate-100 pl-4 dark:border-slate-800">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Cargá lo comprometido por el proveedor según el remito para
-                  detectar desvíos contra lo efectivamente recibido. Si no
-                  contás con el remito todavía, podés dejar esta sección vacía y
-                  el lote se guarda igual.
-                </p>
+            <Input
+              id="lote-numeroRemito"
+              label="Número de remito *"
+              placeholder="R-000123"
+              value={values.numeroRemito}
+              onChange={(e) => {
+                setNumeroRemitoTocado(true);
+                setValues((prev) => ({ ...prev, numeroRemito: e.target.value }));
+              }}
+              onBlur={() => setNumeroRemitoTocado(true)}
+              error={numeroRemitoErrorEnVivo ?? errors.numeroRemito}
+            />
+            <p className="-mt-2 text-xs text-slate-400 dark:text-slate-500">
+              Alfanumérico, letras y números con guiones. Ejemplo: R-000123.
+            </p>
 
-                <Input
-                  id="lote-cantidadComprometida"
-                  type="number"
-                  inputMode="decimal"
-                  label="Cantidad comprometida según remito"
-                  value={values.cantidadComprometida}
-                  onChange={(e) =>
-                    setValues((prev) => ({
-                      ...prev,
-                      cantidadComprometida: e.target.value,
-                    }))
-                  }
-                  error={errors.cantidadComprometida}
-                />
+            <Input
+              id="lote-cantidadComprometida"
+              type="number"
+              inputMode="decimal"
+              label="Cantidad comprometida según remito"
+              value={values.cantidadComprometida}
+              onChange={(e) =>
+                setValues((prev) => ({
+                  ...prev,
+                  cantidadComprometida: e.target.value,
+                }))
+              }
+              error={errors.cantidadComprometida}
+            />
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {ORDEN_PARAMETROS.map((parametro) => {
-                    const meta = PARAMETROS_META[parametro];
-                    const tieneValorReal =
-                      values.parametros[parametro].trim() !== "";
-                    return (
-                      <Input
-                        key={`comprometido-${parametro}`}
-                        id={`lote-param-comprometido-${parametro}`}
-                        label={`${meta.label} comprometido (${meta.unidad})`}
-                        type="number"
-                        inputMode="decimal"
-                        disabled={!tieneValorReal}
-                        placeholder={
-                          tieneValorReal ? "" : "Cargá primero el valor real"
-                        }
-                        value={values.parametrosComprometidos[parametro]}
-                        onChange={(e) =>
-                          setParametroComprometido(parametro, e.target.value)
-                        }
-                        error={errors.parametrosComprometidos?.[parametro]}
-                        className={!tieneValorReal ? "opacity-60" : ""}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {ORDEN_PARAMETROS.map((parametro) => {
+                const meta = PARAMETROS_META[parametro];
+                const tieneValorReal =
+                  values.parametros[parametro].trim() !== "";
+                return (
+                  <Input
+                    key={`comprometido-${parametro}`}
+                    id={`lote-param-comprometido-${parametro}`}
+                    label={`${meta.label} comprometido (${meta.unidad})`}
+                    type="number"
+                    inputMode="decimal"
+                    disabled={!tieneValorReal}
+                    placeholder={
+                      tieneValorReal ? "" : "Cargá primero el valor real"
+                    }
+                    value={values.parametrosComprometidos[parametro]}
+                    onChange={(e) =>
+                      setParametroComprometido(parametro, e.target.value)
+                    }
+                    error={errors.parametrosComprometidos?.[parametro]}
+                    className={!tieneValorReal ? "opacity-60" : ""}
+                  />
+                );
+              })}
+            </div>
           </div>
         )}
 

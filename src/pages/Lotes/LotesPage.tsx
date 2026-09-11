@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FlaskConical, GitMerge, History, Pencil, Route } from "lucide-react";
+import { CheckCircle2, FlaskConical, GitMerge, History, Pencil, Route, Search } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
@@ -17,6 +17,7 @@ import {
   type DestinoVigente,
 } from "../../utils/destinoProductivoVigente";
 import { Badge } from "../../components/ui/Badge";
+import { useTodosRemitoLote } from "../../hooks/useRemitoLote";
 import { proveedoresService } from "../../services/proveedores.service";
 import { tamboService } from "../../services/tambo.service";
 import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
@@ -161,6 +162,9 @@ export default function LotesPage() {
     return mapa;
   }, [idsConDestino, destinoManualPorLote, destinoRecomendacionPorLote]);
   const [soloConDivergencias, setSoloConDivergencias] = useState(false);
+  // HU-69 (mock visual): ver useRemitoLote.ts.
+  const remitoPorLote = useTodosRemitoLote();
+  const [busqueda, setBusqueda] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
   const [loteMediciones, setLoteMediciones] = useState<Lote | null>(null);
@@ -359,8 +363,34 @@ export default function LotesPage() {
     if (soloConDivergencias) {
       resultado = resultado.filter((lote) => divergenciaVigentePorLote.get(lote.id) ?? false);
     }
+    // HU-69 (AC "el listado de lotes... habilita la búsqueda por número de
+    // remito"): client-side, sobre los campos ya cargados en pantalla — no
+    // hay ningún query param de búsqueda combinada en GET /lotes.
+    const termino = busqueda.trim().toLowerCase();
+    if (termino !== "") {
+      resultado = resultado.filter((lote) => {
+        const proveedor = proveedorMap.get(lote.proveedorId) ?? "";
+        const tambo = tamboMap.get(lote.tamboId) ?? "";
+        const remito = remitoPorLote[lote.id]?.numeroRemito ?? "";
+        return (
+          lote.codigo.toLowerCase().includes(termino) ||
+          proveedor.toLowerCase().includes(termino) ||
+          tambo.toLowerCase().includes(termino) ||
+          remito.toLowerCase().includes(termino)
+        );
+      });
+    }
     return resultado;
-  }, [lotes, filtroUnidadRendimiento, soloConDivergencias, divergenciaVigentePorLote]);
+  }, [
+    lotes,
+    filtroUnidadRendimiento,
+    soloConDivergencias,
+    divergenciaVigentePorLote,
+    busqueda,
+    proveedorMap,
+    tamboMap,
+    remitoPorLote,
+  ]);
 
   // HU-37: cuenta sobre el universo ya filtrado por unidad de rendimiento
   // (no sobre `lotes` sin filtrar), para que el número del checkbox
@@ -380,6 +410,11 @@ export default function LotesPage() {
   const loteTrazabilidad = useMemo(
     () => lotes.find((l) => l.id === loteTrazabilidadId) ?? null,
     [lotes, loteTrazabilidadId],
+  );
+
+  const loteHistorial = useMemo(
+    () => lotes.find((l) => l.id === loteHistorialId) ?? null,
+    [lotes, loteHistorialId],
   );
 
   const headers = useMemo(() => {
@@ -430,6 +465,21 @@ export default function LotesPage() {
         </div>
       </div>
 
+      {tabActiva === "lotes" && (
+        // HU-69: búsqueda client-side por código de lote, proveedor, tambo o
+        // número de remito — no hay query param combinado en GET /lotes.
+        <div className="relative mb-4 max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por lote, proveedor, tambo o nº de remito..."
+            className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          />
+        </div>
+      )}
+
       <div className="mb-6">
         <Tabs tabs={TABS_LOTES} value={tabActiva} onChange={setTabActiva} />
       </div>
@@ -472,9 +522,16 @@ export default function LotesPage() {
             Ningún lote coincide con el filtro
           </p>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {soloConDivergencias
-              ? "No hay lotes con divergencias justificadas que coincidan con el resto de los filtros."
-              : `No hay lotes finalizados con rendimiento en ${UNIDAD_RENDIMIENTO_LABEL[filtroUnidadRendimiento as UnidadRendimiento]?.toLowerCase()}.`}
+            {/* HU-69: el buscador es un filtro más sobre lotesFiltrados —
+                sin este caso, una búsqueda sin resultados caía en el mensaje
+                del filtro de rendimiento (con "undefined" si ese filtro no
+                estaba activo). Se prioriza porque es el más específico: si
+                hay texto buscado, es la razón más probable del vacío. */}
+            {busqueda.trim() !== ""
+              ? `Ningún lote coincide con "${busqueda.trim()}".`
+              : soloConDivergencias
+                ? "No hay lotes con divergencias justificadas que coincidan con el resto de los filtros."
+                : `No hay lotes finalizados con rendimiento en ${UNIDAD_RENDIMIENTO_LABEL[filtroUnidadRendimiento as UnidadRendimiento]?.toLowerCase()}.`}
           </p>
         </div>
       ) : (
@@ -498,7 +555,14 @@ export default function LotesPage() {
                 {lotesFiltrados.map((lote) => (
                   <tr key={lote.id} className="text-sm">
                     <td className="px-5 py-3 font-mono text-xs font-medium text-slate-900 dark:text-white">
-                      {lote.codigo}
+                      <div className="flex flex-col gap-0.5">
+                        <span>{lote.codigo}</span>
+                        {remitoPorLote[lote.id] && (
+                          <span className="font-sans text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                            Nº remito: {remitoPorLote[lote.id].numeroRemito}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-slate-700 dark:text-slate-300">
                       {proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`}
@@ -638,6 +702,11 @@ export default function LotesPage() {
                     <p className="truncate font-mono text-xs font-medium text-slate-900 dark:text-white">
                       {lote.codigo}
                     </p>
+                    {remitoPorLote[lote.id] && (
+                      <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">
+                        Nº remito: {remitoPorLote[lote.id].numeroRemito}
+                      </p>
+                    )}
                     <p className="truncate text-sm text-slate-700 dark:text-slate-300">
                       {proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`}
                     </p>
@@ -823,6 +892,9 @@ export default function LotesPage() {
       <HistorialTrazabilidadModal
         isOpen={loteHistorialId !== null}
         loteId={loteHistorialId}
+        lote={loteHistorial}
+        proveedorMap={proveedorMap}
+        tamboMap={tamboMap}
         onClose={() => setLoteHistorialId(null)}
       />
 

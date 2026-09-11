@@ -419,6 +419,7 @@ test.describe("LoteFormModal — combo proveedor/tambo", () => {
     await dialog.getByText("Leche cruda").click();
     await dialog.getByLabel("pH (sin unidad)").fill("6.8");
     await dialog.getByLabel("Destino inicial *").selectOption({ value: "produccion" });
+    await dialog.getByLabel("Número de remito *").fill("R-000123");
 
     await dialog.getByRole("button", { name: "Registrar lote" }).click();
 
@@ -457,6 +458,7 @@ test.describe("LoteFormModal — combo proveedor/tambo", () => {
     await dialog.getByText("Leche cruda").click();
     await dialog.getByLabel("pH (sin unidad)").fill("6.8");
     await dialog.getByLabel("Destino inicial *").selectOption({ value: "produccion" });
+    await dialog.getByLabel("Número de remito *").fill("R-000123");
 
     await dialog.getByRole("button", { name: "Registrar lote" }).click();
 

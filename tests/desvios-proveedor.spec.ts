@@ -284,7 +284,11 @@ async function completarDatosBasicosDelLote(dialog: Locator) {
 }
 
 test.describe("LoteFormModal — datos del remito", () => {
-  test("la sección de remito está colapsada por defecto y se expande al hacer click", async ({
+  // HU-69: la sección dejó de ser un acordeón colapsado por defecto — el
+  // número de remito ahora es obligatorio (AC1), así que se muestra siempre
+  // expandida. Antes de HU-69 esta sección era 100% opcional y arrancaba
+  // colapsada.
+  test("la sección de datos del remito está siempre visible, sin necesidad de expandirla", async ({
     page,
   }) => {
     await mockLotesDeps(page);
@@ -294,9 +298,7 @@ test.describe("LoteFormModal — datos del remito", () => {
     await page.getByRole("button", { name: /nuevo lote/i }).click();
     const dialog = page.getByRole("dialog");
 
-    await expect(dialog.getByLabel("Cantidad comprometida según remito")).not.toBeVisible();
-
-    await dialog.getByText("DATOS DEL REMITO (OPCIONAL)").click();
+    await expect(dialog.getByLabel("Número de remito *")).toBeVisible();
     await expect(dialog.getByLabel("Cantidad comprometida según remito")).toBeVisible();
   });
 
@@ -309,7 +311,6 @@ test.describe("LoteFormModal — datos del remito", () => {
 
     await page.getByRole("button", { name: /nuevo lote/i }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByText("DATOS DEL REMITO (OPCIONAL)").click();
 
     await expect(dialog.getByLabel("pH comprometido (sin unidad)")).toBeDisabled();
 
@@ -346,8 +347,7 @@ test.describe("LoteFormModal — datos del remito", () => {
 
     await completarDatosBasicosDelLote(dialog);
     await dialog.getByLabel("pH (sin unidad)").fill("6.8");
-
-    await dialog.getByText("DATOS DEL REMITO (OPCIONAL)").click();
+    await dialog.getByLabel("Número de remito *").fill("R-000123");
     await dialog.getByLabel("Cantidad comprometida según remito").fill("950");
     await dialog.getByLabel("pH comprometido (sin unidad)").fill("6.5");
 
@@ -388,6 +388,7 @@ test.describe("LoteFormModal — datos del remito", () => {
 
     await completarDatosBasicosDelLote(dialog);
     await dialog.getByLabel("pH (sin unidad)").fill("6.8");
+    await dialog.getByLabel("Número de remito *").fill("R-000123");
 
     await dialog.getByRole("button", { name: "Registrar lote" }).click();
 
@@ -406,8 +407,7 @@ test.describe("LoteFormModal — datos del remito", () => {
 
     await completarDatosBasicosDelLote(dialog);
     await dialog.getByLabel("pH (sin unidad)").fill("6.8");
-
-    await dialog.getByText("DATOS DEL REMITO (OPCIONAL)").click();
+    await dialog.getByLabel("Número de remito *").fill("R-000123");
     await dialog.getByLabel("Cantidad comprometida según remito").fill("-5");
 
     await dialog.getByRole("button", { name: "Registrar lote" }).click();
