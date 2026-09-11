@@ -15,9 +15,7 @@ import { Badge } from "../../../components/ui/Badge";
 import { ClasificacionLoteBadge } from "../../../components/ClasificacionLoteBadge";
 import { SectionHeader } from "../../../components/ui/SectionHeader";
 import { useTrazabilidadLote } from "../../../hooks/useTrazabilidadLote";
-import { useDestinoManualLote } from "../../../hooks/useDestinoProductivoManual";
-import { useDestinoRecomendacionLote } from "../../../hooks/useDestinoProductivoRecomendacion";
-import { calcularDestinoVigente } from "../../../utils/destinoProductivoVigente";
+import { useDestinoProductivoLote } from "../../../hooks/useDestinoProductivoLote";
 import { useRemitoLote } from "../../../hooks/useRemitoLote";
 import { exportarTrazabilidadCsv } from "../../../utils/exportarTrazabilidadCsv";
 import { TIPO_MATERIA_PRIMA_TABS } from "../../Configuracion/constants/parametrosCalidad";
@@ -215,9 +213,7 @@ export function HistorialTrazabilidadModal({
   onClose,
 }: HistorialTrazabilidadModalProps) {
   const { eventos, codigoLote, isLoading, error, refetch } = useTrazabilidadLote(loteId);
-  const destinoManual = useDestinoManualLote(loteId);
-  const destinoRecomendacion = useDestinoRecomendacionLote(loteId);
-  const destinoVigente = calcularDestinoVigente(destinoManual, destinoRecomendacion);
+  const { historial: historialDestino, destinoVigente } = useDestinoProductivoLote(loteId);
   // HU-69 (mock visual): ver useRemitoLote.ts — el backend todavía no tiene
   // columna para esto, se guarda en localStorage al crear el lote.
   const numeroRemito = useRemitoLote(loteId);
@@ -241,12 +237,10 @@ export function HistorialTrazabilidadModal({
   // HU-34: acá solo interesan las asignaciones manuales — las de origen
   // "recomendacion_ml" (aceptadas o con divergencia) ya se muestran en el
   // timeline real como evento RECOMENDACION_DESTINO (HU-37), listarlas
-  // también acá sería duplicar el mismo dato. Desde la separación de hooks
-  // (useDestinoProductivoManual / useDestinoProductivoRecomendacion) este
-  // store ya solo contiene asignaciones manuales, no hace falta filtrar.
-  const asignacionesManuales = destinoManual
-    ? [...destinoManual.historial].reverse()
-    : [];
+  // también acá sería duplicar el mismo dato. El backend ya devuelve
+  // historialDestino ordenado del más nuevo al más viejo, no hace falta
+  // revertir el array.
+  const asignacionesManuales = historialDestino.filter((h) => h.origen === "manual");
 
   if (!isOpen) return null;
 
@@ -290,10 +284,10 @@ export function HistorialTrazabilidadModal({
         </div>
       </div>
 
-      {/* HU-34/HU-37 (mock visual): destino vigente + asignaciones
-          manuales, aparte del timeline real de arriba porque el backend
-          todavía no expone un endpoint para Lote.destinoProductivoId — ver
-          useDestinoProductivoManual.ts / useDestinoProductivoRecomendacion.ts. */}
+      {/* HU-34/HU-37: destino vigente + asignaciones manuales, aparte del
+          timeline real de arriba — GET /lotes/:id/destino-productivo/historial
+          (ver useDestinoProductivoLote.ts). Las de origen "recomendacion_ml"
+          no se listan acá (ver el comentario de asignacionesManuales). */}
       {destinoVigente && (
         <div className="mb-6 flex flex-col gap-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
           <SectionHeader>DESTINO PRODUCTIVO</SectionHeader>
@@ -305,8 +299,8 @@ export function HistorialTrazabilidadModal({
           </p>
           {asignacionesManuales.length > 0 && (
             <ol className="flex flex-col gap-3">
-              {asignacionesManuales.map((cambio, i) => (
-                <li key={i} className="flex items-start gap-3">
+              {asignacionesManuales.map((cambio) => (
+                <li key={cambio.id} className="flex items-start gap-3">
                   <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                     <GitBranch className="h-4 w-4" />
                   </span>
@@ -318,13 +312,18 @@ export function HistorialTrazabilidadModal({
                             <strong>{cambio.destinoAnteriorNombre}</strong> →{" "}
                           </>
                         ) : null}
-                        <strong>{cambio.destinoNuevoNombre}</strong>
+                        <strong>{cambio.destinoProductivoNombre}</strong>
                       </p>
                       <span className="text-xs text-slate-400 dark:text-slate-500">
-                        {formatFecha(cambio.timestamp)}
+                        {formatFecha(cambio.createdAt)}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{cambio.usuario}</p>
+                    {/* TODO(backend): igual que en RECOMENDACION_DESTINO más
+                        abajo, solo llega usuarioId numérico — no disimular
+                        con un fallback. */}
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Usuario ID: {cambio.usuarioId}
+                    </p>
                   </div>
                 </li>
               ))}

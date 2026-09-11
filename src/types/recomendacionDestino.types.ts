@@ -39,3 +39,29 @@ export interface ResponderRecomendacionDto {
   // el PATCH /recomendaciones/:id/responder responde 400.
   justificacion?: string;
 }
+
+// HU-37: espeja el objeto que devuelve GET /recomendaciones/todas
+// (ml.service.ts: obtenerTodas) — todas las recomendaciones de la empresa,
+// en cualquier estado, con la justificación incluida cuando la tuvo. Se usa
+// para reconstruir el "por qué" de una divergencia ya resuelta (ver
+// useDestinoProductivoLote.ts), porque /recomendaciones/lote/:loteId solo
+// devuelve la recomendación mientras está pendiente.
+//
+// OJO: no trae loteConsumoId — si el lote tuvo recomendaciones generadas
+// por un consumo parcial posterior (HU-68), quedan mezcladas acá bajo el
+// mismo loteId sin forma de distinguirlas desde el frontend.
+export interface RecomendacionDestinoItem {
+  recomendacionId: number;
+  loteId: number;
+  loteCodigo: string;
+  estado: EstadoRecomendacion;
+  destinoRecomendadoId: number;
+  destinoRecomendadoNombre: string | null;
+  destinoRealId: number | null;
+  destinoRealNombre: string | null;
+  confianza: number;
+  justificacion: string | null;
+  usuarioId: number | null;
+  createdAt: string;
+  respondidaEn: string | null;
+}
