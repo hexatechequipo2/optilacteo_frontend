@@ -366,6 +366,68 @@ test.describe("HistorialTrazabilidadModal (HU-32)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// HU-69 — Anexo de número de remito a lote (visible en la consulta de
+// trazabilidad + incluido en la exportación)
+// ---------------------------------------------------------------------------
+
+test.describe("HistorialTrazabilidadModal — HU-69 (número de remito)", () => {
+  test("muestra proveedor, tambo y número de remito junto al historial", async ({ page }) => {
+    await mockTrazabilidadDeps(page);
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "optilacteo:remito-lote",
+        JSON.stringify({
+          1: { numeroRemito: "R-000123", registradoEn: "2026-08-01T12:00:00.000Z" },
+        }),
+      );
+    });
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    await abrirModalPorTitulo(page, "LOT-2026-001", "Historial de trazabilidad completo");
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Tambo El Roble")).toBeVisible();
+    await expect(dialog.getByText("Establecimiento El Roble")).toBeVisible();
+    await expect(dialog.getByText("R-000123")).toBeVisible();
+  });
+
+  test("muestra 'Sin remito' cuando el lote no tiene número de remito cargado", async ({ page }) => {
+    await mockTrazabilidadDeps(page);
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    await abrirModalPorTitulo(page, "LOT-2026-001", "Historial de trazabilidad completo");
+
+    await expect(page.getByRole("dialog").getByText("Sin remito")).toBeVisible();
+  });
+
+  test("exporta el historial a CSV con proveedor, tambo y número de remito", async ({ page }) => {
+    await mockTrazabilidadDeps(page);
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "optilacteo:remito-lote",
+        JSON.stringify({
+          1: { numeroRemito: "R-000123", registradoEn: "2026-08-01T12:00:00.000Z" },
+        }),
+      );
+    });
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    await abrirModalPorTitulo(page, "LOT-2026-001", "Historial de trazabilidad completo");
+
+    const descargaPromise = page.waitForEvent("download");
+    await page.getByRole("dialog").getByRole("button", { name: "Exportar CSV" }).click();
+    const descarga = await descargaPromise;
+
+    expect(descarga.suggestedFilename()).toMatch(
+      /^trazabilidad-LOT-2026-001-\d{4}-\d{2}-\d{2}\.csv$/,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // HU-68 — Consumo parcial de un lote de ingreso
 // ---------------------------------------------------------------------------
 

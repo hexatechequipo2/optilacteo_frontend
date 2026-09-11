@@ -3,6 +3,7 @@ import {
   ArrowRightLeft,
   CheckCircle2,
   ClipboardCheck,
+  Download,
   GitBranch,
   HelpCircle,
   MapPin,
@@ -17,10 +18,13 @@ import { useTrazabilidadLote } from "../../../hooks/useTrazabilidadLote";
 import { useDestinoManualLote } from "../../../hooks/useDestinoProductivoManual";
 import { useDestinoRecomendacionLote } from "../../../hooks/useDestinoProductivoRecomendacion";
 import { calcularDestinoVigente } from "../../../utils/destinoProductivoVigente";
+import { useRemitoLote } from "../../../hooks/useRemitoLote";
+import { exportarTrazabilidadCsv } from "../../../utils/exportarTrazabilidadCsv";
 import { TIPO_MATERIA_PRIMA_TABS } from "../../Configuracion/constants/parametrosCalidad";
 import { UBICACION_LABEL } from "../../Sensores/constants/parametroSensor";
 import { UNIDAD_RENDIMIENTO_SIMBOLO } from "../constants/unidadRendimiento";
 import { ClasificacionLote, DecisionRevision, UnidadRendimiento } from "../../../types/lote.types";
+import type { Lote } from "../../../types/lote.types";
 import type { TipoMateriaPrima } from "../../../types/configParametro.types";
 import { Ubicacion } from "../../../types/sensor.types";
 import { TipoEventoTrazabilidad, type EventoTrazabilidad } from "../../../types/trazabilidad.types";
@@ -189,6 +193,12 @@ function DetalleEvento({ evento }: { evento: EventoTrazabilidad }) {
 interface HistorialTrazabilidadModalProps {
   isOpen: boolean;
   loteId: number | null;
+  // HU-69: para mostrar proveedor/tambo/remito y armar el nombre del CSV
+  // exportado. Puede llegar null en el instante entre "se cerró el lote
+  // seleccionado" y "se cerró el modal" (mismo patrón que TrazabilidadLoteModal).
+  lote: Lote | null;
+  proveedorMap: Map<number, string>;
+  tamboMap: Map<number, string>;
   onClose: () => void;
 }
 
@@ -199,12 +209,34 @@ interface HistorialTrazabilidadModalProps {
 export function HistorialTrazabilidadModal({
   isOpen,
   loteId,
+  lote,
+  proveedorMap,
+  tamboMap,
   onClose,
 }: HistorialTrazabilidadModalProps) {
   const { eventos, codigoLote, isLoading, error, refetch } = useTrazabilidadLote(loteId);
   const destinoManual = useDestinoManualLote(loteId);
   const destinoRecomendacion = useDestinoRecomendacionLote(loteId);
   const destinoVigente = calcularDestinoVigente(destinoManual, destinoRecomendacion);
+  // HU-69 (mock visual): ver useRemitoLote.ts — el backend todavía no tiene
+  // columna para esto, se guarda en localStorage al crear el lote.
+  const numeroRemito = useRemitoLote(loteId);
+
+  const nombreProveedor = lote ? (proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`) : "—";
+  const nombreTambo = lote ? (tamboMap.get(lote.tamboId) ?? `Tambo #${lote.tamboId}`) : "—";
+
+  const handleExportar = () => {
+    if (!lote) return;
+    const fecha = new Date().toISOString().slice(0, 10);
+    exportarTrazabilidadCsv({
+      codigoLote: lote.codigo,
+      proveedor: nombreProveedor,
+      tambo: nombreTambo,
+      numeroRemito,
+      eventos,
+      nombreArchivo: `trazabilidad-${lote.codigo}-${fecha}.csv`,
+    });
+  };
 
   // HU-34: acá solo interesan las asignaciones manuales — las de origen
   // "recomendacion_ml" (aceptadas o con divergencia) ya se muestran en el
@@ -225,6 +257,39 @@ export function HistorialTrazabilidadModal({
       description={codigoLote ?? undefined}
       onClose={onClose}
     >
+      <div className="mb-6 flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <SectionHeader>DATOS DE INGRESO</SectionHeader>
+          <button
+            type="button"
+            onClick={handleExportar}
+            disabled={!lote || isLoading}
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <Download className="h-3.5 w-3.5" /> Exportar CSV
+          </button>
+        </div>
+        {/* HU-69: mismo estilo de tarjetas que "DATOS DE INGRESO" en
+            TrazabilidadLoteModal — proveedor y tambo de origen ya existían en
+            el lote, acá se suman para dar contexto junto al remito nuevo. */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="flex flex-col gap-1 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Proveedor</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">{nombreProveedor}</p>
+          </div>
+          <div className="flex flex-col gap-1 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Tambo de origen</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">{nombreTambo}</p>
+          </div>
+          <div className="flex flex-col gap-1 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Nº de remito</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">
+              {numeroRemito ?? "Sin remito"}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* HU-34/HU-37 (mock visual): destino vigente + asignaciones
           manuales, aparte del timeline real de arriba porque el backend
           todavía no expone un endpoint para Lote.destinoProductivoId — ver
