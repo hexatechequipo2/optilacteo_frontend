@@ -208,8 +208,19 @@ export function RecomendacionDestinoCard({
   }
 
   const nivelConfianza = derivarNivelConfianza(recomendacion.confianza);
+  // HU-37 AC1: el destino recomendado no es una alternativa válida acá —
+  // este selector es específicamente para elegir OTRO destino (si el
+  // operador está de acuerdo, el flujo es "Aceptar recomendación", no
+  // este). Bug real encontrado en dev (recomendaciones_destino id=20,
+  // LOTE-1-00087): se podía elegir el mismo destino recomendado y quedaba
+  // una "divergencia" que no era tal. El backend también lo rechaza ahora
+  // con 400 (ver ml.service.ts).
+  const destinosAlternativos = destinosProductivos.filter(
+    (d) => d.id !== recomendacion.destinoRecomendado.id,
+  );
+  const hayAlternativas = destinosAlternativos.length > 0;
   const destinoRealSeleccionado = destinoRealId
-    ? destinosProductivos.find((d) => d.id === Number(destinoRealId))
+    ? destinosAlternativos.find((d) => d.id === Number(destinoRealId))
     : undefined;
   const justificacionValida = justificacion.trim().length >= JUSTIFICACION_MIN_LENGTH;
   const puedeConfirmarRechazo = destinoRealId !== "" && justificacionValida && !isResponding;
@@ -281,24 +292,33 @@ export function RecomendacionDestinoCard({
                 value: "",
                 label: isLoadingDestinos ? "Cargando destinos..." : "Seleccioná un destino",
               },
-              ...destinosProductivos.map((d) => ({ value: String(d.id), label: d.nombre })),
+              ...destinosAlternativos.map((d) => ({ value: String(d.id), label: d.nombre })),
             ]}
             value={destinoRealId}
-            disabled={isLoadingDestinos || isResponding}
+            disabled={isLoadingDestinos || isResponding || !hayAlternativas}
             onChange={(e) => setDestinoRealId(e.target.value)}
           />
           {errorDestinos && (
             <p className="text-xs text-red-600 dark:text-red-400">{errorDestinos}</p>
           )}
+          {/* Explica por qué no se puede rechazar, en vez de dejar el
+              selector vacío con el botón deshabilitado sin decir nada. */}
+          {!isLoadingDestinos && !hayAlternativas && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              No hay otro destino productivo configurado para elegir — el
+              único disponible es el que ya recomendó el sistema. Para
+              registrar una divergencia hace falta al menos otro destino
+              activo en el catálogo.
+            </p>
+          )}
 
-          {destinoRealSeleccionado &&
-            destinoRealSeleccionado.id !== recomendacion.destinoRecomendado.id && (
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                Elegiste <strong>{destinoRealSeleccionado.nombre}</strong> en lugar
-                del destino recomendado{" "}
-                <strong>{recomendacion.destinoRecomendado.nombre}</strong>.
-              </p>
-            )}
+          {destinoRealSeleccionado && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Elegiste <strong>{destinoRealSeleccionado.nombre}</strong> en lugar
+              del destino recomendado{" "}
+              <strong>{recomendacion.destinoRecomendado.nombre}</strong>.
+            </p>
+          )}
 
           <label
             htmlFor="justificacion-divergencia"
