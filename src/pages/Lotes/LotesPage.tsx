@@ -9,13 +9,8 @@ import { AuditoriaModal } from "../../components/AuditoriaModal";
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
-import { useTodosDestinoManualLote } from "../../hooks/useDestinoProductivoManual";
-import { useTodosDestinoRecomendacionLote } from "../../hooks/useDestinoProductivoRecomendacion";
-import {
-  calcularDestinoVigente,
-  esDivergenciaVigente,
-  type DestinoVigente,
-} from "../../utils/destinoProductivoVigente";
+import { recomendacionService } from "../../services/recomendacion.service";
+import type { RecomendacionDestinoItem } from "../../types/recomendacionDestino.types";
 import { Badge } from "../../components/ui/Badge";
 import { useTodosRemitoLote } from "../../hooks/useRemitoLote";
 import { proveedoresService } from "../../services/proveedores.service";
@@ -119,48 +114,51 @@ export default function LotesPage() {
   const [tambos, setTambos] = useState<Tambo[]>([]);
   const [filtroUnidadRendimiento, setFiltroUnidadRendimiento] = useState("");
   const [tabActiva, setTabActiva] = useState<TabLotes>("lotes");
-  // HU-34/HU-37 (mock visual): ver useDestinoProductivoManual.ts /
-  // useDestinoProductivoRecomendacion.ts — el backend todavía no expone un
-  // endpoint para el destino productivo de un lote, así que esto vive en
-  // localStorage (uno por origen) hasta que exista ese endpoint.
-  const destinoManualPorLote = useTodosDestinoManualLote();
-  const destinoRecomendacionPorLote = useTodosDestinoRecomendacionLote();
-  // Combina los dos stores por lote (ver utils/destinoProductivoVigente.ts)
-  // una sola vez acá, en vez de recalcularlo en cada fila de la tabla.
-  const idsConDestino = useMemo(
-    () =>
-      new Set([
-        ...Object.keys(destinoManualPorLote).map(Number),
-        ...Object.keys(destinoRecomendacionPorLote).map(Number),
-      ]),
-    [destinoManualPorLote, destinoRecomendacionPorLote],
+  // HU-37: universo de recomendaciones de la empresa para aproximar, en la
+  // tabla, qué lotes tienen una divergencia justificada — ver el TODO en
+  // divergenciaVigentePorLote más abajo. Una sola llamada acá, no una por
+  // fila (mismo patrón que proveedores/tambos, arriba).
+  const [recomendacionesTodas, setRecomendacionesTodas] = useState<RecomendacionDestinoItem[]>(
+    [],
   );
-  const destinoVigentePorLote = useMemo(() => {
-    const mapa = new Map<number, DestinoVigente | null>();
-    for (const loteId of idsConDestino) {
-      mapa.set(
-        loteId,
-        calcularDestinoVigente(
-          destinoManualPorLote[loteId] ?? null,
-          destinoRecomendacionPorLote[loteId] ?? null,
-        ),
-      );
-    }
-    return mapa;
-  }, [idsConDestino, destinoManualPorLote, destinoRecomendacionPorLote]);
+  useEffect(() => {
+    recomendacionService
+      .getTodas()
+      .then(setRecomendacionesTodas)
+      .catch(() => setRecomendacionesTodas([]));
+  }, []);
+  // TODO(backend): esto es una aproximación, no el destino vigente real de
+  // cada lote (para eso, ver useDestinoProductivoLote.ts — GET
+  // /lotes/:id/destino-productivo/historial — que sí es preciso pero es
+  // por lote, no sirve para pintar 100 filas de una). Toma, por loteId, la
+  // recomendación resuelta (aceptada o rechazada) más reciente según
+  // respondidaEn y marca "divergencia" si quedó rechazada. Dos límites
+  // conocidos, ambos hacia el lado de "puede sobrar el badge", nunca
+  // "puede faltar" cuando realmente no hubo divergencia:
+  // 1. No sabe si después hubo una asignación MANUAL (HU-34) que reemplazó
+  //    ese destino — el badge puede quedar vigente aunque ya no lo esté.
+  // 2. No distingue una recomendación de un consumo parcial posterior
+  //    (HU-68) de la del lote original: comparten el mismo loteId y el DTO
+  //    de /recomendaciones/todas no expone loteConsumoId para separarlas.
+  // Por eso la tabla ya NO muestra el nombre del destino productivo vigente
+  // (solo el badge de divergencia): mostrar un nombre sacado únicamente de
+  // acá sería directamente incorrecto para un lote reasignado a mano
+  // después de la recomendación, no solo impreciso.
   const divergenciaVigentePorLote = useMemo(() => {
+    const masRecientePorLote = new Map<number, RecomendacionDestinoItem>();
+    for (const r of recomendacionesTodas) {
+      if (r.estado === "pendiente" || !r.respondidaEn) continue;
+      const actual = masRecientePorLote.get(r.loteId);
+      if (!actual || r.respondidaEn > actual.respondidaEn!) {
+        masRecientePorLote.set(r.loteId, r);
+      }
+    }
     const mapa = new Map<number, boolean>();
-    for (const loteId of idsConDestino) {
-      mapa.set(
-        loteId,
-        esDivergenciaVigente(
-          destinoManualPorLote[loteId] ?? null,
-          destinoRecomendacionPorLote[loteId] ?? null,
-        ),
-      );
+    for (const [loteId, r] of masRecientePorLote) {
+      mapa.set(loteId, r.estado === "rechazada");
     }
     return mapa;
-  }, [idsConDestino, destinoManualPorLote, destinoRecomendacionPorLote]);
+  }, [recomendacionesTodas]);
   const [soloConDivergencias, setSoloConDivergencias] = useState(false);
   // HU-69 (mock visual): ver useRemitoLote.ts.
   const remitoPorLote = useTodosRemitoLote();
@@ -584,20 +582,13 @@ export default function LotesPage() {
                         <span className="text-slate-600 dark:text-slate-400">
                           {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
                         </span>
-                        {destinoVigentePorLote.get(lote.id) ? (
-                          <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                            <span className="text-slate-400 dark:text-slate-500">Productivo:</span>
-                            <span className="font-medium text-blue-600 dark:text-blue-400">
-                              {destinoVigentePorLote.get(lote.id)!.destinoActualNombre}
-                            </span>
-                            {divergenciaVigentePorLote.get(lote.id) && (
-                              <Badge variant="warning">Divergencia</Badge>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs italic text-slate-400 dark:text-slate-500">
-                            Sin destino productivo asignado
-                          </span>
+                        {/* HU-37: el nombre del destino productivo vigente
+                            se ve en el detalle del lote (Editar lote /
+                            Historial de trazabilidad) — acá, ver el TODO de
+                            divergenciaVigentePorLote arriba, solo se puede
+                            aproximar el badge de forma confiable. */}
+                        {divergenciaVigentePorLote.get(lote.id) && (
+                          <Badge variant="warning">Divergencia</Badge>
                         )}
                       </div>
                     </td>
@@ -828,17 +819,13 @@ export default function LotesPage() {
                   <div className="col-span-2">
                     <dt className="text-slate-400 dark:text-slate-500">Destino productivo</dt>
                     <dd>
-                      {destinoVigentePorLote.get(lote.id) ? (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-blue-600 dark:text-blue-400">
-                            {destinoVigentePorLote.get(lote.id)!.destinoActualNombre}
-                          </span>
-                          {divergenciaVigentePorLote.get(lote.id) && (
-                            <Badge variant="warning">Divergencia</Badge>
-                          )}
-                        </div>
+                      {/* HU-37: ver el TODO de divergenciaVigentePorLote —
+                          el nombre del destino vigente se ve en el detalle
+                          del lote, acá solo el badge aproximado. */}
+                      {divergenciaVigentePorLote.get(lote.id) ? (
+                        <Badge variant="warning">Divergencia</Badge>
                       ) : (
-                        <span className="italic text-slate-400 dark:text-slate-500">Sin asignar</span>
+                        <span className="italic text-slate-400 dark:text-slate-500">—</span>
                       )}
                     </dd>
                   </div>

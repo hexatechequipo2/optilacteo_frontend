@@ -3,17 +3,11 @@ import { AlertCircle, CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
 import { Badge } from "../../../components/ui/Badge";
 import type { BadgeVariant } from "../../../components/ui/Badge";
 import { Select } from "../../../components/ui/Select";
-import { useAuth } from "../../../hooks/useAuth";
 import { useRecomendacionDestino } from "../../../hooks/useRecomendacionDestino";
-import {
-  registrarDestinoRecomendacion,
-  useDestinoRecomendacionLote,
-} from "../../../hooks/useDestinoProductivoRecomendacion";
-import { useDestinoManualLote } from "../../../hooks/useDestinoProductivoManual";
-import {
-  calcularDestinoVigente,
-  esDivergenciaVigente,
-} from "../../../utils/destinoProductivoVigente";
+import type {
+  DestinoVigente,
+  DivergenciaVigente,
+} from "../../../hooks/useDestinoProductivoLote";
 import {
   derivarNivelConfianza,
   type NivelConfianzaRecomendacion,
@@ -49,10 +43,25 @@ const NIVEL_LABEL: Record<NivelConfianzaRecomendacion, string> = {
 
 interface RecomendacionDestinoCardProps {
   loteId: number;
+  // HU-34/HU-37: el destino vigente (y, si corresponde, la divergencia que
+  // lo originó) ahora vive en el backend (GET
+  // /lotes/:id/destino-productivo/historial) y se calcula una sola vez en
+  // el modal contenedor (useDestinoProductivoLote), no acá — evita pedirlo
+  // dos veces y mantiene una sola fuente de verdad dentro de "Editar lote".
+  destinoVigente: DestinoVigente | null;
+  divergenciaVigente: DivergenciaVigente | null;
+  // Se llama tras aceptar/rechazar para que el modal contenedor vuelva a
+  // pedir el historial (el backend ya escribió el cambio en
+  // lote_destino_historial al responder, ver ml.service.ts).
+  onDestinoRespondido: () => void;
 }
 
-export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardProps) {
-  const { user } = useAuth();
+export function RecomendacionDestinoCard({
+  loteId,
+  destinoVigente,
+  divergenciaVigente,
+  onDestinoRespondido,
+}: RecomendacionDestinoCardProps) {
   const {
     recomendacion,
     isLoading,
@@ -66,15 +75,6 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
     errorResponder,
     respuestaConfirmada,
   } = useRecomendacionDestino(loteId);
-
-  // HU-37: para distinguir, cuando el backend ya no tiene una recomendación
-  // pendiente que devolver, entre "nunca hubo", "hubo y quedó una
-  // divergencia vigente" y "hubo y se resolvió sin divergencia" (o incluso
-  // el destino vino de una asignación manual posterior, HU-34).
-  const destinoRecomendacionLote = useDestinoRecomendacionLote(loteId);
-  const destinoManualLote = useDestinoManualLote(loteId);
-  const divergenciaVigente = esDivergenciaVigente(destinoManualLote, destinoRecomendacionLote);
-  const destinoVigente = calcularDestinoVigente(destinoManualLote, destinoRecomendacionLote);
 
   const [mostrarSelectorDestino, setMostrarSelectorDestino] = useState(false);
   const [destinoRealId, setDestinoRealId] = useState("");
@@ -157,15 +157,12 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
     // "Sin recomendación disponible" queda reservado para cuando de verdad
     // no hay ningún destino cargado — antes se mostraba ese texto incluso
     // con un destino ya asignado, y parecía que no había nada cargado.
-    if (divergenciaVigente && destinoRecomendacionLote) {
-      const ultimoCambio =
-        destinoRecomendacionLote.historial[destinoRecomendacionLote.historial.length - 1];
+    if (divergenciaVigente && destinoVigente) {
       return (
         <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-500/10">
           {header}
           <p className="text-sm font-medium text-slate-900 dark:text-white">
-            Destino asignado:{" "}
-            <strong>{destinoVigente?.destinoActualNombre ?? ultimoCambio.destinoNuevoNombre}</strong>
+            Destino asignado: <strong>{destinoVigente.destinoActualNombre}</strong>
           </p>
           <p className="flex items-center gap-1.5 text-xs font-medium text-amber-800 dark:text-amber-400">
             <AlertCircle className="h-4 w-4" /> Divergencia justificada respecto a la
@@ -173,11 +170,11 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
           </p>
           <p className="text-xs text-slate-600 dark:text-slate-400">
             El sistema había recomendado{" "}
-            <strong>{ultimoCambio.destinoRecomendadoNombre}</strong>.
+            <strong>{divergenciaVigente.destinoRecomendadoNombre}</strong>.
           </p>
-          {ultimoCambio.justificacion && (
+          {divergenciaVigente.justificacion && (
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Justificación: {ultimoCambio.justificacion}
+              Justificación: {divergenciaVigente.justificacion}
             </p>
           )}
         </div>
@@ -219,21 +216,10 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
 
   const handleAceptar = async () => {
     const ok = await responder({ aceptada: true });
-    // HU-37 (mock visual): el backend todavía no tiene un endpoint para
-    // leer/escribir Lote.destinoProductivoId — se completa acá lo que falta
-    // (ver useDestinoProductivoRecomendacion.ts). Aceptar no es una
-    // divergencia: el destino elegido es el mismo que el recomendado.
-    if (ok) {
-      registrarDestinoRecomendacion({
-        loteId,
-        destinoNuevoId: recomendacion.destinoRecomendado.id,
-        destinoNuevoNombre: recomendacion.destinoRecomendado.nombre,
-        usuario: user?.email ?? "Usuario desconocido",
-        esDivergencia: false,
-        destinoRecomendadoId: recomendacion.destinoRecomendado.id,
-        destinoRecomendadoNombre: recomendacion.destinoRecomendado.nombre,
-      });
-    }
+    // El backend ya escribe el cambio en lote_destino_historial al
+    // responder (ver ml.service.ts) — solo hace falta avisarle al
+    // contenedor que vuelva a pedir el historial para reflejarlo.
+    if (ok) onDestinoRespondido();
   };
 
   const handleConfirmarRechazo = async () => {
@@ -244,18 +230,7 @@ export function RecomendacionDestinoCard({ loteId }: RecomendacionDestinoCardPro
       destinoRealId: Number(destinoRealId),
       justificacion: justificacion.trim(),
     });
-    if (ok) {
-      registrarDestinoRecomendacion({
-        loteId,
-        destinoNuevoId: destinoRealSeleccionado.id,
-        destinoNuevoNombre: destinoRealSeleccionado.nombre,
-        usuario: user?.email ?? "Usuario desconocido",
-        esDivergencia: true,
-        justificacion: justificacion.trim(),
-        destinoRecomendadoId: recomendacion.destinoRecomendado.id,
-        destinoRecomendadoNombre: recomendacion.destinoRecomendado.nombre,
-      });
-    }
+    if (ok) onDestinoRespondido();
   };
 
   return (

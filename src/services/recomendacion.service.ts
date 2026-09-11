@@ -2,6 +2,7 @@ import axios from "axios";
 import api from "./api";
 import type {
   RecomendacionDestinoIA,
+  RecomendacionDestinoItem,
   ResponderRecomendacionDto,
 } from "../types/recomendacionDestino.types";
 
@@ -29,6 +30,17 @@ export const recomendacionService = {
     dto: ResponderRecomendacionDto,
   ): Promise<void> => {
     await api.patch(`/recomendaciones/${id}/responder`, dto);
+  },
+
+  // HU-37: todas las recomendaciones de la empresa (cualquier estado), con
+  // justificación incluida. No hay GET /recomendaciones/:id puntual ni
+  // filtro por loteId en el backend — se trae la lista completa y se filtra
+  // acá (ver useDestinoProductivoLote.ts y LotesPage.tsx). Si el volumen de
+  // recomendaciones de una empresa crece mucho, esto debería paginarse o
+  // filtrarse del lado del servidor.
+  getTodas: async (): Promise<RecomendacionDestinoItem[]> => {
+    const { data } = await api.get<RecomendacionDestinoItem[]>("/recomendaciones/todas");
+    return data;
   },
 };
 

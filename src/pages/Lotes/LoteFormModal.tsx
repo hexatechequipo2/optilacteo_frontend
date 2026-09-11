@@ -1,11 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { RadioCard } from "../../components/ui/RadioCard";
 import { SectionHeader } from "../../components/ui/SectionHeader";
 import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
-import { extraerMensajeError } from "../../services/lote.service";
+import { extraerMensajeError, loteService } from "../../services/lote.service";
 import {
   sensorService,
   extraerMensajeError as extraerMensajeErrorSensor,
@@ -13,14 +13,8 @@ import {
 import { useConfigParametros } from "../../hooks/useConfigParametros";
 import { useTambosPorProveedor } from "../../hooks/useTambos";
 import { RecomendacionDestinoCard } from "./components/RecomendacionDestinoCard";
-import { useAuth } from "../../hooks/useAuth";
 import { useCatalogoDestinosProductivos } from "../../hooks/useCatalogoDestinosProductivos";
-import {
-  registrarDestinoManual,
-  useDestinoManualLote,
-} from "../../hooks/useDestinoProductivoManual";
-import { useDestinoRecomendacionLote } from "../../hooks/useDestinoProductivoRecomendacion";
-import { calcularDestinoVigente } from "../../utils/destinoProductivoVigente";
+import { useDestinoProductivoLote } from "../../hooks/useDestinoProductivoLote";
 import { registrarRemitoLote } from "../../hooks/useRemitoLote";
 import {
   ORDEN_PARAMETROS,
@@ -115,7 +109,7 @@ function buildParametrosVacios(): Record<ParametroVisible, string> {
   );
 }
 
-function buildInitialValues(lote?: Lote, destinoProductivoActualId?: number): FormValues {
+function buildInitialValues(lote?: Lote): FormValues {
   if (!lote) {
     return {
       proveedorId: "",
@@ -149,11 +143,11 @@ function buildInitialValues(lote?: Lote, destinoProductivoActualId?: number): Fo
     // HU-66: tampoco editable en PATCH /lotes/:id.
     cantidadComprometida: "",
     parametrosComprometidos: buildParametrosVacios(),
-    // HU-34/HU-37 (mock visual): destino vigente calculado en el
-    // consumidor a partir de useDestinoProductivoManual /
-    // useDestinoProductivoRecomendacion, no del lote real (el backend
-    // todavía no tiene endpoint para esto).
-    destinoProductivoId: destinoProductivoActualId ?? "",
+    // HU-34/HU-37: el destino vigente se carga async (GET
+    // /lotes/:id/destino-productivo/historial, ver useDestinoProductivoLote)
+    // y se aplica una sola vez cuando llega — ver el efecto que sincroniza
+    // destinoHistorial más abajo. Acá arranca vacío.
+    destinoProductivoId: "",
   };
 }
 
@@ -306,19 +300,20 @@ export function LoteFormModal({
   // HU-34: "procesado" = ya no admite cambios de destino productivo.
   const loteEstaProcesado =
     !!lote && (lote.estado === EstadoLote.FINALIZADO || lote.estado === EstadoLote.RECHAZADO);
-  const { user } = useAuth();
   const { configs } = useConfigParametros();
-  // HU-34/HU-37 (mock visual): el destino vigente puede venir de una
-  // asignación manual (este modal) o de haber aceptado/rechazado una
-  // recomendación ML (RecomendacionDestinoCard) — se combinan acá, ver
-  // utils/destinoProductivoVigente.ts.
-  const destinoManualActual = useDestinoManualLote(lote?.id ?? null);
-  const destinoRecomendacionActual = useDestinoRecomendacionLote(lote?.id ?? null);
-  const destinoVigente = calcularDestinoVigente(destinoManualActual, destinoRecomendacionActual);
+  // HU-34/HU-37: el destino vigente puede venir de una asignación manual
+  // (este modal) o de haber aceptado/rechazado una recomendación ML
+  // (RecomendacionDestinoCard, que recibe destinoVigente/divergenciaVigente
+  // por prop para no duplicar el fetch) — se calcula acá una sola vez con
+  // el historial real del backend, GET /lotes/:id/destino-productivo/historial.
+  const destinoHistorial = useDestinoProductivoLote(esEdicion ? lote!.id : null);
+  const { destinoVigente } = destinoHistorial;
+  // Ver el efecto de sincronización más abajo: evita pisar la elección del
+  // usuario si destinoHistorial se vuelve a disparar durante la misma
+  // apertura del modal.
+  const destinoVigenteAplicado = useRef(false);
   const { destinosActivos: destinosProductivos } = useCatalogoDestinosProductivos();
-  const [values, setValues] = useState<FormValues>(() =>
-    buildInitialValues(lote, destinoVigente?.destinoActualId),
-  );
+  const [values, setValues] = useState<FormValues>(() => buildInitialValues(lote));
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState("");
   const [cerrarCicloError, setCerrarCicloError] = useState("");
@@ -349,7 +344,7 @@ export function LoteFormModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setValues(buildInitialValues(lote, destinoVigente?.destinoActualId));
+    setValues(buildInitialValues(lote));
     setErrors({});
     setServerError("");
     setCerrarCicloError("");
@@ -361,7 +356,22 @@ export function LoteFormModal({
     setAsociarError("");
     setWarnings([]);
     setNumeroRemitoTocado(false);
+    destinoVigenteAplicado.current = false;
   }, [isOpen, lote]);
+
+  // HU-34/HU-37: destinoVigente llega async (ver arriba) — se completa acá,
+  // una sola vez por apertura del modal, para no pisar lo que el usuario ya
+  // haya elegido en el selector si el fetch tarda o se vuelve a disparar.
+  useEffect(() => {
+    if (!isOpen || !esEdicion) return;
+    if (destinoHistorial.isLoading) return;
+    if (destinoVigenteAplicado.current) return;
+    destinoVigenteAplicado.current = true;
+    setValues((prev) => ({
+      ...prev,
+      destinoProductivoId: destinoVigente?.destinoActualId ?? "",
+    }));
+  }, [isOpen, esEdicion, destinoHistorial.isLoading, destinoVigente]);
 
   // HU-69 (AC1, AC3, Pantalla 9): validación en tiempo real, no solo al
   // enviar — "manteniendo deshabilitada la confirmación hasta que el valor
@@ -437,20 +447,25 @@ export function LoteFormModal({
     }));
   };
 
-  // HU-34 (mock visual): solo registra un cambio si efectivamente se
-  // seleccionó un destino distinto al que ya tenía el lote (AC3: "sin
-  // duplicar registros" cuando no cambió nada).
-  const registrarCambioDestinoProductivoSiCorresponde = (loteId: number) => {
-    if (values.destinoProductivoId === "") return;
-    if (values.destinoProductivoId === destinoVigente?.destinoActualId) return;
-    const destino = destinosProductivos.find((d) => d.id === values.destinoProductivoId);
-    if (!destino) return;
-    registrarDestinoManual({
-      loteId,
-      destinoNuevoId: destino.id,
-      destinoNuevoNombre: destino.nombre,
-      usuario: user?.email ?? "Usuario desconocido",
-    });
+  // HU-34 AC1/AC3: PATCH /lotes/:id/destino-productivo — solo se llama si
+  // efectivamente se eligió un destino distinto al vigente (AC3: "sin
+  // duplicar registros" cuando no cambió nada). Devuelve un mensaje de
+  // error si falló, o null si no hacía falta hacer nada o si salió bien.
+  const asignarDestinoProductivoSiCorresponde = async (
+    loteId: number,
+  ): Promise<string | null> => {
+    if (values.destinoProductivoId === "") return null;
+    if (values.destinoProductivoId === destinoVigente?.destinoActualId) return null;
+    try {
+      await loteService.asignarDestinoProductivo(loteId, values.destinoProductivoId);
+      destinoHistorial.refetch();
+      return null;
+    } catch (err) {
+      return extraerMensajeError(
+        err,
+        "No se pudo asignar el destino productivo elegido.",
+      );
+    }
   };
 
   // HU-34 (AC4, mock visual): "cerrar el ciclo" en sí no tiene endpoint
@@ -486,8 +501,6 @@ export function LoteFormModal({
           ).toISOString(),
           destinoInicial: values.destinoInicial as DestinoLote,
         });
-        registrarCambioDestinoProductivoSiCorresponde(lote!.id);
-        onClose();
       } catch (err) {
         setServerError(
           extraerMensajeError(
@@ -495,7 +508,17 @@ export function LoteFormModal({
             "No se pudo actualizar el lote. Intentá nuevamente.",
           ),
         );
+        return;
       }
+      // El lote ya se actualizó — si falla solo esta parte, no tiene
+      // sentido revertir lo anterior: se muestra el error y se deja el
+      // modal abierto para que se pueda reintentar únicamente el destino.
+      const errorDestino = await asignarDestinoProductivoSiCorresponde(lote!.id);
+      if (errorDestino) {
+        setServerError(errorDestino);
+        return;
+      }
+      onClose();
       return;
     }
 
@@ -529,18 +552,27 @@ export function LoteFormModal({
           : {}),
       });
 
-      registrarCambioDestinoProductivoSiCorresponde(respuesta.lote.id);
+      // El lote ya se creó — si la asignación de destino falla, no tiene
+      // sentido perder el resto del flujo (asociar sensores, etc.): se
+      // suma como una advertencia más en vez de cortar acá.
+      const advertencias = [...(respuesta.warnings ?? [])];
+      const errorDestino = await asignarDestinoProductivoSiCorresponde(respuesta.lote.id);
+      if (errorDestino) {
+        advertencias.push(
+          `${errorDestino} Podés asignarlo después desde "Editar lote".`,
+        );
+      }
       // HU-69 (mock visual): el backend todavía no tiene columna para esto,
       // ver useRemitoLote.ts — la validación ya garantizó que llegue no
       // vacío y con formato válido antes de este punto.
       registrarRemitoLote(respuesta.lote.id, numeroRemitoTrimmed);
-      setWarnings(respuesta.warnings ?? []);
+      setWarnings(advertencias);
 
       if (respuesta.sensoresDisponibles.length > 0) {
         setLoteCreadoId(respuesta.lote.id);
         setSensoresDisponibles(respuesta.sensoresDisponibles);
         setPaso("asociar");
-      } else if ((respuesta.warnings ?? []).length > 0) {
+      } else if (advertencias.length > 0) {
         setPaso("warnings");
       } else {
         onClose();
@@ -1020,13 +1052,21 @@ export function LoteFormModal({
         {/* Destino */}
         <div className="flex flex-col gap-3">
           <SectionHeader>DESTINO PRODUCTIVO</SectionHeader>
-          {esEdicion && <RecomendacionDestinoCard loteId={lote!.id} />}
+          {esEdicion && (
+            <RecomendacionDestinoCard
+              loteId={lote!.id}
+              destinoVigente={destinoHistorial.destinoVigente}
+              divergenciaVigente={destinoHistorial.divergenciaVigente}
+              onDestinoRespondido={destinoHistorial.refetch}
+            />
+          )}
 
-          {/* HU-34 (mock visual): selector plano del catálogo configurable
-              de destinos productivos (queso, yogur, crema, etc.) — no
-              confundir con "Destino inicial" de más abajo, que es el enum
-              fijo de ubicación/tratamiento. Editable mientras el lote no
-              esté procesado (finalizado o rechazado). */}
+          {/* HU-34: selector plano del catálogo configurable de destinos
+              productivos (queso, yogur, crema, etc.), PATCH
+              /lotes/:id/destino-productivo — no confundir con "Destino
+              inicial" de más abajo, que es el enum fijo de
+              ubicación/tratamiento. Editable mientras el lote no esté
+              procesado (finalizado o rechazado). */}
           {loteEstaProcesado ? (
             <div>
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
