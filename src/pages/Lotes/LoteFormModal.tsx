@@ -15,7 +15,6 @@ import { useTambosPorProveedor } from "../../hooks/useTambos";
 import { RecomendacionDestinoCard } from "./components/RecomendacionDestinoCard";
 import { useCatalogoDestinosProductivos } from "../../hooks/useCatalogoDestinosProductivos";
 import { useDestinoProductivoLote } from "../../hooks/useDestinoProductivoLote";
-import { registrarRemitoLote } from "../../hooks/useRemitoLote";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -546,6 +545,9 @@ export function LoteFormModal({
         ubicacionInicial: values.ubicacionInicial || undefined,
         parametros,
         cantidad: Number(values.cantidad),
+        // HU-69 (AC1): obligatorio — la validación ya garantizó que llegue
+        // no vacío y con formato válido antes de este punto.
+        numeroRemito: numeroRemitoTrimmed,
         // HU-66: opcional (AC4) — solo viaja si se cargó la cantidad comprometida.
         ...(values.cantidadComprometida.trim() !== ""
           ? { cantidadComprometidaKg: Number(values.cantidadComprometida) }
@@ -562,10 +564,6 @@ export function LoteFormModal({
           `${errorDestino} Podés asignarlo después desde "Editar lote".`,
         );
       }
-      // HU-69 (mock visual): el backend todavía no tiene columna para esto,
-      // ver useRemitoLote.ts — la validación ya garantizó que llegue no
-      // vacío y con formato válido antes de este punto.
-      registrarRemitoLote(respuesta.lote.id, numeroRemitoTrimmed);
       setWarnings(advertencias);
 
       if (respuesta.sensoresDisponibles.length > 0) {

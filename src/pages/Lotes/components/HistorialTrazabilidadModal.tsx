@@ -16,8 +16,8 @@ import { ClasificacionLoteBadge } from "../../../components/ClasificacionLoteBad
 import { SectionHeader } from "../../../components/ui/SectionHeader";
 import { useTrazabilidadLote } from "../../../hooks/useTrazabilidadLote";
 import { useDestinoProductivoLote } from "../../../hooks/useDestinoProductivoLote";
-import { useRemitoLote } from "../../../hooks/useRemitoLote";
 import { exportarTrazabilidadCsv } from "../../../utils/exportarTrazabilidadCsv";
+import { formatearNumeroRemito } from "../../../utils/numeroRemito";
 import { TIPO_MATERIA_PRIMA_TABS } from "../../Configuracion/constants/parametrosCalidad";
 import { UBICACION_LABEL } from "../../Sensores/constants/parametroSensor";
 import { UNIDAD_RENDIMIENTO_SIMBOLO } from "../constants/unidadRendimiento";
@@ -191,9 +191,10 @@ function DetalleEvento({ evento }: { evento: EventoTrazabilidad }) {
 interface HistorialTrazabilidadModalProps {
   isOpen: boolean;
   loteId: number | null;
-  // HU-69: para mostrar proveedor/tambo/remito y armar el nombre del CSV
-  // exportado. Puede llegar null en el instante entre "se cerró el lote
-  // seleccionado" y "se cerró el modal" (mismo patrón que TrazabilidadLoteModal).
+  // HU-69/HU-36: para mostrar proveedor/tambo y armar el nombre del CSV
+  // exportado (el remito en sí sale de `eventos`, no de acá — ver más abajo).
+  // Puede llegar null en el instante entre "se cerró el lote seleccionado" y
+  // "se cerró el modal" (mismo patrón que TrazabilidadLoteModal).
   lote: Lote | null;
   proveedorMap: Map<number, string>;
   tamboMap: Map<number, string>;
@@ -214,12 +215,19 @@ export function HistorialTrazabilidadModal({
 }: HistorialTrazabilidadModalProps) {
   const { eventos, codigoLote, isLoading, error, refetch } = useTrazabilidadLote(loteId);
   const { historial: historialDestino, destinoVigente } = useDestinoProductivoLote(loteId);
-  // HU-69 (mock visual): ver useRemitoLote.ts — el backend todavía no tiene
-  // columna para esto, se guarda en localStorage al crear el lote.
-  const numeroRemito = useRemitoLote(loteId);
 
   const nombreProveedor = lote ? (proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`) : "—";
   const nombreTambo = lote ? (tamboMap.get(lote.tamboId) ?? `Tambo #${lote.tamboId}`) : "—";
+
+  // HU-69 (AC2): viene en el evento RECEPCION de GET /lotes/:id/trazabilidad
+  // (eventos[].detalle.numeroRemito, ver lote-trazabilidad.service.ts en el
+  // backend) — no es un campo top-level de la respuesta. Se lee de acá y no
+  // de `lote.numeroRemito` para no depender de esa prop, que puede llegar
+  // desactualizada respecto de `loteId` (ver el comentario de la prop más
+  // abajo). 'S/D' es el backfill de la migración, no un remito real (ver
+  // utils/numeroRemito.ts) — se muestra igual que la ausencia de dato.
+  const eventoRecepcion = eventos.find((e) => e.tipo === TipoEventoTrazabilidad.RECEPCION);
+  const numeroRemito = eventoRecepcion?.detalle.numeroRemito as string | undefined;
 
   const handleExportar = () => {
     if (!lote) return;
@@ -278,7 +286,7 @@ export function HistorialTrazabilidadModal({
           <div className="flex flex-col gap-1 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Nº de remito</p>
             <p className="text-sm font-semibold text-slate-900 dark:text-white">
-              {numeroRemito ?? "Sin remito"}
+              {formatearNumeroRemito(numeroRemito)}
             </p>
           </div>
         </div>

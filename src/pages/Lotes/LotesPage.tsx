@@ -12,7 +12,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { recomendacionService } from "../../services/recomendacion.service";
 import type { RecomendacionDestinoItem } from "../../types/recomendacionDestino.types";
 import { Badge } from "../../components/ui/Badge";
-import { useTodosRemitoLote } from "../../hooks/useRemitoLote";
+import { tieneNumeroRemito } from "../../utils/numeroRemito";
 import { proveedoresService } from "../../services/proveedores.service";
 import { tamboService } from "../../services/tambo.service";
 import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
@@ -160,8 +160,6 @@ export default function LotesPage() {
     return mapa;
   }, [recomendacionesTodas]);
   const [soloConDivergencias, setSoloConDivergencias] = useState(false);
-  // HU-69 (mock visual): ver useRemitoLote.ts.
-  const remitoPorLote = useTodosRemitoLote();
   const [busqueda, setBusqueda] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
@@ -363,13 +361,15 @@ export default function LotesPage() {
     }
     // HU-69 (AC "el listado de lotes... habilita la búsqueda por número de
     // remito"): client-side, sobre los campos ya cargados en pantalla — no
-    // hay ningún query param de búsqueda combinada en GET /lotes.
+    // hay ningún query param de búsqueda combinada en GET /lotes. Los lotes
+    // con 'S/D' (backfill de la migración, ver utils/numeroRemito.ts) no
+    // matchean por remito: no tienen uno real que buscar.
     const termino = busqueda.trim().toLowerCase();
     if (termino !== "") {
       resultado = resultado.filter((lote) => {
         const proveedor = proveedorMap.get(lote.proveedorId) ?? "";
         const tambo = tamboMap.get(lote.tamboId) ?? "";
-        const remito = remitoPorLote[lote.id]?.numeroRemito ?? "";
+        const remito = tieneNumeroRemito(lote.numeroRemito) ? lote.numeroRemito : "";
         return (
           lote.codigo.toLowerCase().includes(termino) ||
           proveedor.toLowerCase().includes(termino) ||
@@ -387,7 +387,6 @@ export default function LotesPage() {
     busqueda,
     proveedorMap,
     tamboMap,
-    remitoPorLote,
   ]);
 
   // HU-37: cuenta sobre el universo ya filtrado por unidad de rendimiento
@@ -555,9 +554,9 @@ export default function LotesPage() {
                     <td className="px-5 py-3 font-mono text-xs font-medium text-slate-900 dark:text-white">
                       <div className="flex flex-col gap-0.5">
                         <span>{lote.codigo}</span>
-                        {remitoPorLote[lote.id] && (
+                        {tieneNumeroRemito(lote.numeroRemito) && (
                           <span className="font-sans text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                            Nº remito: {remitoPorLote[lote.id].numeroRemito}
+                            Nº remito: {lote.numeroRemito}
                           </span>
                         )}
                       </div>
@@ -693,9 +692,9 @@ export default function LotesPage() {
                     <p className="truncate font-mono text-xs font-medium text-slate-900 dark:text-white">
                       {lote.codigo}
                     </p>
-                    {remitoPorLote[lote.id] && (
+                    {tieneNumeroRemito(lote.numeroRemito) && (
                       <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">
-                        Nº remito: {remitoPorLote[lote.id].numeroRemito}
+                        Nº remito: {lote.numeroRemito}
                       </p>
                     )}
                     <p className="truncate text-sm text-slate-700 dark:text-slate-300">

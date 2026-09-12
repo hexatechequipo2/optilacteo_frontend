@@ -1,15 +1,18 @@
 import type { EventoTrazabilidad } from "../types/trazabilidad.types";
+import { formatearNumeroRemito } from "./numeroRemito";
 
-// HU-69 (AC4, mock visual): "la exportación del historial de trazabilidad
-// incluye el número de remito entre las columnas del reporte" — no existe
-// hoy ningún export para este modal (HistorialTrazabilidadModal), así que se
-// arma acá, 100% client-side, mismo criterio que
-// exportarGraficoEvolucionPng.ts (sin pegarle a ningún endpoint).
+// HU-69 (AC4): "la exportación del historial de trazabilidad incluye el
+// número de remito entre las columnas del reporte" — no existe ningún
+// export del lado del backend para esta pantalla (ver verificación de
+// HU-69: no hay CSV/export en optilacteo-backend/src/module/lote), así que
+// se arma acá, 100% client-side, mismo criterio que
+// exportarGraficoEvolucionPng.ts (sin pegarle a ningún endpoint). El dato en
+// sí sí es real: viene de GET /lotes/:id/trazabilidad.
 interface ExportarTrazabilidadParams {
   codigoLote: string;
   proveedor: string;
   tambo: string;
-  numeroRemito: string | null;
+  numeroRemito: string | null | undefined;
   eventos: EventoTrazabilidad[];
   nombreArchivo: string;
 }
@@ -33,7 +36,7 @@ export function exportarTrazabilidadCsv({
 
   filas.push(["Lote", "Proveedor", "Tambo", "Nº de remito"].map(celda).join(","));
   filas.push(
-    [codigoLote, proveedor, tambo, numeroRemito ?? "Sin remito"].map(celda).join(","),
+    [codigoLote, proveedor, tambo, formatearNumeroRemito(numeroRemito)].map(celda).join(","),
   );
   filas.push("");
   filas.push(["Fecha", "Tipo de evento", "Descripción"].map(celda).join(","));
