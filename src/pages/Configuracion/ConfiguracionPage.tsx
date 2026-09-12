@@ -3,12 +3,14 @@ import { Layout } from "../../components/layout/Layout";
 import { Tabs } from "../../components/ui/Tabs";
 import { useAuth } from "../../hooks/useAuth";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
+import { ROLES } from "../../constants/roles";
 import { LogoIdentidadTab } from "./components/LogoIdentidadTab";
 import { UmbralesCalidadTab } from "./components/UmbralesCalidadTab";
 import { ComparacionHistoricaConfigTab } from "./components/ComparacionHistoricaConfigTab";
 import { PlcGatewayConfigTab } from "./components/PlcGatewayConfigTab";
 import { SkusConfigTab } from "./components/SkusConfigTab";
 import { DestinosProductivosConfigTab } from "./components/DestinosProductivosConfigTab";
+import { HorariosSilencioConfigTab } from "./components/HorariosSilencioConfigTab";
 
 type TabConfiguracion =
   | "umbrales"
@@ -16,7 +18,8 @@ type TabConfiguracion =
   | "comparacion-historica"
   | "plc-gateway"
   | "skus"
-  | "destinos-productivos";
+  | "destinos-productivos"
+  | "horarios-silencio";
 
 // HU-67 (AC 2): tab de catálogo de SKUs, solo para Gerente. POST /skus en el
 // backend está restringido a ADMINISTRADOR/GERENTE (ver sku.controller.ts),
@@ -30,6 +33,7 @@ const TABS_GERENTE: { value: TabConfiguracion; label: string }[] = [
   { value: "plc-gateway", label: "Conexión PLC/Gateway" },
   { value: "skus", label: "Catálogo de SKUs" },
   { value: "destinos-productivos", label: "Destinos productivos" },
+  { value: "horarios-silencio", label: "Horarios de silencio" },
 ];
 
 // HU-23: a diferencia de Umbrales/Logo (Gerente-only, ver allowedRoles en
@@ -51,13 +55,18 @@ const TABS_RESPONSABLE_PRODUCCION: { value: TabConfiguracion; label: string }[] 
   // en los lotes, pero la administración del catálogo (alta/edición/baja)
   // queda restringida a Gerente — acá solo lo consulta en modo lectura.
   { value: "destinos-productivos", label: "Destinos productivos" },
+  // HU-30: a diferencia de destinos productivos, acá la HU pide
+  // explícitamente que Responsable de producción pueda configurar (no solo
+  // leer) sus propios horarios de silencio — sin distinción de
+  // "puedeAdministrar" como en DestinosProductivosConfigTab.
+  { value: "horarios-silencio", label: "Horarios de silencio" },
 ];
 
 export default function ConfiguracionPage() {
   const { user } = useAuth();
   const { empresa } = useEmpresaActual();
-  const esGerente = user?.rolNombre === "Gerente";
-  const esResponsableProduccion = user?.rolNombre === "Responsable de producción";
+  const esGerente = user?.rolNombre === ROLES.GERENTE;
+  const esResponsableProduccion = user?.rolNombre === ROLES.RESPONSABLE_PRODUCCION;
   const tabs = esGerente
     ? TABS_GERENTE
     : esResponsableProduccion
@@ -90,6 +99,7 @@ export default function ConfiguracionPage() {
       {tabActiva === "destinos-productivos" && (
         <DestinosProductivosConfigTab puedeAdministrar={esGerente} />
       )}
+      {tabActiva === "horarios-silencio" && <HorariosSilencioConfigTab />}
     </Layout>
   );
 }
