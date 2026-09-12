@@ -12,9 +12,11 @@ import {
 } from "../../services/sensor.service";
 import { useConfigParametros } from "../../hooks/useConfigParametros";
 import { useTambosPorProveedor } from "../../hooks/useTambos";
+import { useAuth } from "../../hooks/useAuth";
 import { RecomendacionDestinoCard } from "./components/RecomendacionDestinoCard";
 import { useCatalogoDestinosProductivos } from "../../hooks/useCatalogoDestinosProductivos";
 import { useDestinoProductivoLote } from "../../hooks/useDestinoProductivoLote";
+import { ROLES } from "../../constants/roles";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -42,6 +44,19 @@ const UBICACION_OPTIONS = [
     value: u,
     label: UBICACION_LABEL[u],
   })),
+];
+
+// HU-34: mismos roles que @Roles en lote.controller.ts para
+// PATCH /lotes/:id/destino-productivo. Si se abre este modal a un rol fuera
+// de esta lista, el selector queda deshabilitado en vez de dejar que el
+// PATCH le devuelva 403 sin explicación (ver puedeAsignarDestinoProductivo
+// más abajo). Hoy puedeEditarLote en LotesPage.tsx ya limita a Responsable
+// de calidad y Responsable de producción, ambos incluidos acá.
+const ROLES_CON_PERMISO_DESTINO_PRODUCTIVO: string[] = [
+  ROLES.RESPONSABLE_PRODUCCION,
+  ROLES.RESPONSABLE_CALIDAD,
+  ROLES.GERENTE,
+  ROLES.ADMINISTRADOR,
 ];
 
 const DESTINO_LABEL: Record<DestinoLote, string> = {
@@ -299,6 +314,10 @@ export function LoteFormModal({
   // HU-34: "procesado" = ya no admite cambios de destino productivo.
   const loteEstaProcesado =
     !!lote && (lote.estado === EstadoLote.FINALIZADO || lote.estado === EstadoLote.RECHAZADO);
+  const { user } = useAuth();
+  const puedeAsignarDestinoProductivo = ROLES_CON_PERMISO_DESTINO_PRODUCTIVO.includes(
+    user?.rolNombre ?? "",
+  );
   const { configs } = useConfigParametros();
   // HU-34/HU-37: el destino vigente puede venir de una asignación manual
   // (este modal) o de haber aceptado/rechazado una recomendación ML
@@ -1075,6 +1094,18 @@ export function LoteFormModal({
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 El lote ya fue procesado: el destino productivo no se puede modificar.
+              </p>
+            </div>
+          ) : !puedeAsignarDestinoProductivo ? (
+            <div>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Destino productivo
+              </span>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {destinoVigente?.destinoActualNombre ?? "Sin asignar"}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Tu rol no tiene permiso para asignar o cambiar el destino productivo.
               </p>
             </div>
           ) : (
