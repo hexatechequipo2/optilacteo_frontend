@@ -52,6 +52,13 @@ function segundosDesde(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
 }
 
+// HU-51: el backend habilita esta sección a Responsable de producción,
+// Gerente y Administrador (@Roles en PrediccionVolumenController) — acá
+// solo hace falta cubrir los dos primeros porque son los únicos roles que
+// llegan a esta pantalla (ver allowedRoles en App.tsx; Administrador no
+// tiene ruta a este dashboard).
+const ROLES_CON_PREDICCION_VOLUMEN = ["responsable de producción", "gerente"];
+
 // HU-38: pantalla de inicio del rol "Responsable de producción" ("jefe de
 // producción" en el backlog). AC1+AC3: métricas del día con tendencia. AC2:
 // auto-refresh sin recarga manual (useDashboardProduccion hace polling).
@@ -65,12 +72,11 @@ export default function DashboardProduccionPage() {
   const { user } = useAuth();
   const [, forceTick] = useState(0);
 
-  // HU-51: la HU es específica del rol Responsable de producción (no
-  // Gerente, que también aterriza en esta misma pantalla — ver allowedRoles
-  // en App.tsx). Comparación normalizada, mismo criterio que el resto de
-  // los checks por rol en LotesPage.tsx.
-  const puedeVerPrediccionVolumen =
-    (user?.rolNombre ?? "").trim().toLowerCase() === "responsable de producción";
+  // Comparación normalizada, mismo criterio que el resto de los checks por
+  // rol en LotesPage.tsx.
+  const puedeVerPrediccionVolumen = ROLES_CON_PREDICCION_VOLUMEN.includes(
+    (user?.rolNombre ?? "").trim().toLowerCase(),
+  );
 
   // Recalcula el texto "actualizado hace Xs" cada segundo sin re-pedir datos.
   useEffect(() => {
