@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { Download, TrendingUp } from "lucide-react";
+import { Download, Loader2, TrendingUp } from "lucide-react";
 import { Input } from "../../../components/ui/Input";
 import {
   useEvolucionIndicadores,
   type RangoPersonalizado,
 } from "../../../hooks/useEvolucionIndicadores";
-import { INDICADORES_EVOLUCION } from "../../../utils/mockEvolucionIndicadores";
+import { INDICADORES_EVOLUCION } from "../constants/indicadoresEvolucion";
 import { exportarGraficoEvolucionPng } from "../../../utils/exportarGraficoEvolucionPng";
+import { Parametro } from "../../../types/configParametro.types";
 import type {
   IndicadorEvolucionId,
   PeriodoEvolucion,
@@ -62,31 +63,37 @@ function SegmentedControl<T extends string>({
   );
 }
 
-// HU-39 (EP-7, Sprint 4): "Evolución de indicadores" — ver
-// mockEvolucionIndicadores.ts para el detalle de por qué esto es mock (no
-// hay endpoint apto en el backend para series agregadas de calidad a
-// través de todos los lotes).
-export function EvolucionIndicadoresTab() {
+// HU-39 (EP-7): "Evolución de indicadores" en el dashboard de producción.
+// Conectado a GET /dashboard/indicadores/evolucion (ver
+// useEvolucionIndicadores.ts / evolucionIndicadores.service.ts) — antes
+// vivía como tab mockeado dentro de LotesPage; se mudó acá porque el
+// endpoint real solo lo puede leer Responsable de producción/Gerente/
+// Administrador (mismo trío de roles que ya gatea esta página en
+// App.tsx — no hace falta un chequeo de rol adicional acá adentro).
+// "tipoGrafico" (línea/barras) es puramente de presentación: no se le pasa
+// al hook, no cambia qué se pide al backend.
+export function EvolucionIndicadoresPanel() {
   const [periodo, setPeriodo] = useState<PeriodoEvolucion>("mes");
   const [rango, setRango] = useState<RangoPersonalizado>(RANGO_VACIO);
   const [tipoGrafico, setTipoGrafico] = useState<TipoGraficoEvolucion>("linea");
   const [seleccionados, setSeleccionados] = useState<IndicadorEvolucionId[]>([
-    "grasa",
-    "proteina",
+    Parametro.GRASA,
+    Parametro.PROTEINA,
   ]);
 
   const {
     puntos,
     agregado,
     granularidad,
+    isLoading,
+    error,
     estaVacio,
-    rangoInvalido,
     sinIndicadores,
+    refetch,
   } = useEvolucionIndicadores({
     periodo,
     rangoPersonalizado: rango,
     indicadoresSeleccionados: seleccionados,
-    tipoGrafico,
   });
 
   const indicadoresSeleccionadosConfig = INDICADORES_EVOLUCION.filter((i) =>
@@ -116,7 +123,7 @@ export function EvolucionIndicadoresTab() {
   };
 
   const puedeExportar =
-    !estaVacio && !rangoInvalido && !sinIndicadores && puntos.length > 0;
+    !isLoading && !error && !estaVacio && !sinIndicadores && puntos.length > 0;
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -231,9 +238,23 @@ export function EvolucionIndicadoresTab() {
       </div>
 
       <div className="px-5 py-5">
-        {rangoInvalido ? (
-          <div className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
-            La fecha hasta no puede ser anterior a la fecha desde.
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 py-16 text-center dark:border-slate-700">
+            <Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" />
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Cargando evolución de indicadores...
+            </p>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-red-200 bg-red-50 py-12 text-center dark:border-red-500/30 dark:bg-red-500/10">
+            <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="rounded-md bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
+            >
+              Reintentar
+            </button>
           </div>
         ) : sinIndicadores ? (
           <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 py-16 text-center dark:border-slate-700">

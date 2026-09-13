@@ -5,6 +5,7 @@ import type {
   TipoGraficoEvolucion,
 } from "../../../types/indicadorEvolucion.types";
 import { calcularRangoIndicador } from "../../../utils/indicadorEvolucionRango";
+import { armarSegmentosLinea } from "../../../utils/segmentosLineaEvolucion";
 
 interface EvolucionIndicadoresChartProps {
   puntos: PuntoSerieEvolucion[];
@@ -129,30 +130,33 @@ export function EvolucionIndicadoresChart({
               });
             }
 
-            const puntosValidos = puntos
-              .map((p, i) => ({ i, valor: p.valores[indicador.id] }))
-              .filter(
-                (p): p is { i: number; valor: number } => p.valor != null,
+            // Un hueco (valor:null) corta el trazo en vez de puentearlo —
+            // ver segmentosLineaEvolucion.ts. Un segmento de un solo punto
+            // no arma polyline (no hay nada que conectar); ese punto igual
+            // se ve por el marcador HTML de abajo, que no depende de esto.
+            const segmentos = armarSegmentosLinea(puntos, indicador);
+
+            return segmentos.map((segmento, indiceSegmento) => {
+              if (segmento.length < 2) return null;
+              const pathPoints = segmento
+                .map(
+                  ({ indice, valor }) => `${xDe(indice)},${yDe(indicador.id, valor)}`,
+                )
+                .join(" ");
+
+              return (
+                <polyline
+                  key={`${indicador.id}-${indiceSegmento}`}
+                  points={pathPoints}
+                  fill="none"
+                  stroke={indicador.color}
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
               );
-
-            if (puntosValidos.length === 0) return null;
-
-            const pathPoints = puntosValidos
-              .map(({ i, valor }) => `${xDe(i)},${yDe(indicador.id, valor)}`)
-              .join(" ");
-
-            return (
-              <polyline
-                key={indicador.id}
-                points={pathPoints}
-                fill="none"
-                stroke={indicador.color}
-                strokeWidth="2"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-              />
-            );
+            });
           })}
 
           {puntos.map((_, i) => (
