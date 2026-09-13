@@ -103,3 +103,17 @@ export const TAB_A_NIVEL: Record<TabAlertas, NivelAlerta | null> = {
   preventivas: NivelAlerta.ADVERTENCIA,
   info: NivelAlerta.INFORMATIVA,
 };
+
+// HU-30: días de la semana para el selector de horarios de silencio,
+// mismo criterio 0=domingo..6=sábado que usa el backend (ver
+// ConfiguracionSilencioAlerta.entity.ts, comentario "0=domingo..6=sábado",
+// equivalente a Date.getDay() de JS).
+export const DIAS_SEMANA: { value: number; label: string; abreviado: string }[] = [
+  { value: 0, label: "Domingo", abreviado: "Dom" },
+  { value: 1, label: "Lunes", abreviado: "Lun" },
+  { value: 2, label: "Martes", abreviado: "Mar" },
+  { value: 3, label: "Miércoles", abreviado: "Mié" },
+  { value: 4, label: "Jueves", abreviado: "Jue" },
+  { value: 5, label: "Viernes", abreviado: "Vie" },
+  { value: 6, label: "Sábado", abreviado: "Sáb" },
+];

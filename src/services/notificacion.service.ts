@@ -7,6 +7,11 @@ import type {
   CrearConfiguracionNotificacionDto,
 } from "../types/configuracionNotificacion.types";
 import type { ConfiguracionAlertaDesconexion } from "../types/configuracionAlertaDesconexion.types";
+import type {
+  ConfiguracionSilencioAlerta,
+  CreateConfiguracionSilencioAlertaDto,
+  UpdateConfiguracionSilencioAlertaDto,
+} from "../types/configuracionSilencioAlerta.types";
 
 export interface NotificacionFilterQuery {
   page?: number;
@@ -93,6 +98,54 @@ export const configuracionAlertaDesconexionService = {
       { umbralMinutos },
     );
     return data;
+  },
+};
+
+// HU-30: horarios en los que se silencian las alertas INFORMATIVA (nunca
+// ADVERTENCIA/CRITICA). Mismo controller que el resto de este archivo,
+// sub-recurso /notificaciones/horarios-silencio — a diferencia de
+// configuracionNotificacionService/configuracionAlertaDesconexionService de
+// arriba, este sub-recurso también lo puede administrar Responsable de
+// producción además de Administrador/Gerente (ver @Roles en
+// NotificacionesController.listarHorariosSilencio et al.). Una empresa
+// puede tener varios horarios a la vez, así que es CRUD completo en vez de
+// la fila única de configuracion-alerta-desconexion.
+export const configuracionSilencioAlertaService = {
+  getAll: async (): Promise<ConfiguracionSilencioAlerta[]> => {
+    const { data } = await api.get<ConfiguracionSilencioAlerta[]>(
+      "/notificaciones/horarios-silencio",
+    );
+    return data;
+  },
+
+  // El backend responde 400 (BadRequestException) si horaInicio === horaFin
+  // o si el horario se solapa (mismos días + rango horario) con otro ya
+  // configurado de la empresa — se propaga tal cual vía extraerMensajeError.
+  create: async (
+    dto: CreateConfiguracionSilencioAlertaDto,
+  ): Promise<ConfiguracionSilencioAlerta> => {
+    const { data } = await api.post<ConfiguracionSilencioAlerta>(
+      "/notificaciones/horarios-silencio",
+      dto,
+    );
+    return data;
+  },
+
+  // Mismas validaciones de formato/solapamiento que el alta, evaluadas
+  // contra el resultado final (campos no enviados conservan su valor).
+  update: async (
+    id: number,
+    dto: UpdateConfiguracionSilencioAlertaDto,
+  ): Promise<ConfiguracionSilencioAlerta> => {
+    const { data } = await api.patch<ConfiguracionSilencioAlerta>(
+      `/notificaciones/horarios-silencio/${id}`,
+      dto,
+    );
+    return data;
+  },
+
+  remove: async (id: number): Promise<void> => {
+    await api.delete(`/notificaciones/horarios-silencio/${id}`);
   },
 };
 
