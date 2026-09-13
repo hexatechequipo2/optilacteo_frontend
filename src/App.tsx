@@ -274,14 +274,20 @@ function App() {
                 }
               />
 
-              {/* ALERTAS — Destinatarios (HU-29): conectado a
-                GET/POST/DELETE /notificaciones/configuracion. Administrador
-                y Gerente configuran quién recibe cada nivel de alerta, por
-                rol o por usuario puntual (AC1/AC2/AC4 del backlog). */}
+              {/* ALERTAS — Destinatarios (HU-29) + horarios de silencio
+                (HU-30): Administrador y Gerente configuran quién recibe
+                cada nivel de alerta (AC1/AC2/AC4) y el umbral de
+                desconexión; Responsable de producción se suma acá solo
+                para horarios de silencio (@Roles en
+                NotificacionesController.listarHorariosSilencio incluye
+                RESPONSABLE_PRODUCCION) — el gating fino entre secciones
+                vive dentro de DestinatariosAlertasPage.tsx. */}
               <Route
                 path="/alertas/destinatarios"
                 element={
-                  <ProtectedRoute allowedRoles={["Administrador", "Gerente"]}>
+                  <ProtectedRoute
+                    allowedRoles={["Administrador", "Gerente", "Responsable de producción"]}
+                  >
                     <DestinatariosAlertasPage />
                   </ProtectedRoute>
                 }
