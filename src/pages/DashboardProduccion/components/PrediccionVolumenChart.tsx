@@ -1,16 +1,18 @@
 import { useState } from "react";
-import type { PrediccionVolumenData } from "../../../types/prediccionVolumen.types";
+import type {
+  DiaHistoricoVolumen,
+  DiaPrediccionVolumen,
+} from "../../../types/prediccionVolumen.types";
 
 interface PrediccionVolumenChartProps {
-  data: PrediccionVolumenData;
+  historico: DiaHistoricoVolumen[];
+  prediccion: DiaPrediccionVolumen[];
+  // Sufijo de unidad para las etiquetas (ej. "L" o "kg") — HU-51: la unidad
+  // real viene en la respuesta (litros/kilogramos según materia prima), ya
+  // no está hardcodeada en "L" como en el mock.
+  unidadLabel: string;
   soloPrediccion: boolean;
 }
-
-const COLOR_GRILLA = "#e2e8f0";
-const COLOR_EJE_TEXTO = "#94a3b8";
-const COLOR_HISTORICO = "#94a3b8";
-const COLOR_PREDICCION = "#2563eb";
-const COLOR_BANDA = "#bfdbfe";
 
 function formatearFecha(fecha: string): string {
   const [, mes, dia] = fecha.split("-");
@@ -22,17 +24,22 @@ function formatearFecha(fecha: string): string {
 // EvolucionIndicadoresChart.tsx de HU-39). Combina histórico reciente
 // (línea sólida gris) y predicción de los próximos 7 días (línea punteada
 // azul + banda de confianza sombreada), separados por una marca "HOY".
-export function PrediccionVolumenChart({ data, soloPrediccion }: PrediccionVolumenChartProps) {
+export function PrediccionVolumenChart({
+  historico: historicoProp,
+  prediccion,
+  unidadLabel,
+  soloPrediccion,
+}: PrediccionVolumenChartProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  const historico = soloPrediccion ? [] : data.historico;
+  const historico = soloPrediccion ? [] : historicoProp;
   const nHistorico = historico.length;
-  const nPrediccion = data.prediccion.length;
+  const nPrediccion = prediccion.length;
   const n = nHistorico + nPrediccion;
 
   const valores = [
-    ...historico.map((p) => p.litros),
-    ...data.prediccion.flatMap((p) => [p.minimo, p.maximo]),
+    ...historico.map((p) => p.valor),
+    ...prediccion.flatMap((p) => [p.minimo, p.maximo]),
   ];
   const minValor = Math.min(...valores);
   const maxValor = Math.max(...valores);
@@ -43,8 +50,8 @@ export function PrediccionVolumenChart({ data, soloPrediccion }: PrediccionVolum
   const xDe = (i: number) => (n <= 1 ? 50 : (i / (n - 1)) * 100);
   const yDe = (valor: number) => 100 - ((valor - escalaMin) / (escalaMax - escalaMin)) * 100;
 
-  const puntosHistorico = historico.map((p, i) => ({ x: xDe(i), y: yDe(p.litros), ...p }));
-  const puntosPrediccion = data.prediccion.map((p, i) => ({
+  const puntosHistorico = historico.map((p, i) => ({ x: xDe(i), y: yDe(p.valor), ...p }));
+  const puntosPrediccion = prediccion.map((p, i) => ({
     x: xDe(nHistorico + i),
     y: yDe(p.esperado),
     yMin: yDe(p.minimo),
@@ -65,21 +72,22 @@ export function PrediccionVolumenChart({ data, soloPrediccion }: PrediccionVolum
   const ticks = [0, 1, 2, 3].map((i) => escalaMin + ((escalaMax - escalaMin) * i) / 3);
 
   const todosLosPuntos = [
-    ...puntosHistorico.map((p) => ({ x: p.x, fecha: p.fecha, etiqueta: `${p.litros.toLocaleString("es-AR")} L` })),
+    ...puntosHistorico.map((p) => ({
+      x: p.x,
+      fecha: p.fecha,
+      etiqueta: `${p.valor.toLocaleString("es-AR")} ${unidadLabel}`,
+    })),
     ...puntosPrediccion.map((p) => ({
       x: p.x,
       fecha: p.fecha,
-      etiqueta: `${p.esperado.toLocaleString("es-AR")} L (${p.minimo.toLocaleString("es-AR")}–${p.maximo.toLocaleString("es-AR")})`,
+      etiqueta: `${p.esperado.toLocaleString("es-AR")} ${unidadLabel} (${p.minimo.toLocaleString("es-AR")}–${p.maximo.toLocaleString("es-AR")})`,
     })),
   ];
   const hovered = hoverIndex != null ? todosLosPuntos[hoverIndex] : null;
 
   return (
     <div className="flex items-start gap-3">
-      <div
-        className="flex h-64 flex-col justify-between py-1 text-right text-[10px] text-slate-400 dark:text-slate-500"
-        style={{ color: COLOR_EJE_TEXTO }}
-      >
+      <div className="flex h-64 flex-col justify-between py-1 text-right text-[10px] text-slate-400 dark:text-slate-500">
         {ticks
           .slice()
           .reverse()
@@ -93,7 +101,6 @@ export function PrediccionVolumenChart({ data, soloPrediccion }: PrediccionVolum
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
           className="block h-full w-full overflow-visible"
-          style={{ background: "#ffffff" }}
         >
           {ticks.map((_, i) => (
             <line
@@ -102,10 +109,11 @@ export function PrediccionVolumenChart({ data, soloPrediccion }: PrediccionVolum
               y1={(i * 100) / 3}
               x2="100"
               y2={(i * 100) / 3}
-              stroke={COLOR_GRILLA}
+              stroke="currentColor"
               strokeWidth="0.5"
               strokeDasharray="2,2"
               vectorEffect="non-scaling-stroke"
+              className="text-slate-100 dark:text-slate-800"
             />
           ))}
 
@@ -115,24 +123,33 @@ export function PrediccionVolumenChart({ data, soloPrediccion }: PrediccionVolum
               y1="0"
               x2={xHoy}
               y2="100"
-              stroke={COLOR_EJE_TEXTO}
+              stroke="currentColor"
               strokeWidth="0.5"
               strokeDasharray="1,1"
               vectorEffect="non-scaling-stroke"
+              className="text-slate-300 dark:text-slate-600"
             />
           )}
 
-          {bandaPoints && <polygon points={bandaPoints} fill={COLOR_BANDA} opacity={0.6} />}
+          {bandaPoints && (
+            <polygon
+              points={bandaPoints}
+              fill="currentColor"
+              opacity={0.6}
+              className="text-blue-200 dark:text-blue-500/30"
+            />
+          )}
 
           {puntosHistorico.length > 0 && (
             <polyline
               points={puntosHistorico.map((p) => `${p.x},${p.y}`).join(" ")}
               fill="none"
-              stroke={COLOR_HISTORICO}
+              stroke="currentColor"
               strokeWidth="2"
               strokeLinejoin="round"
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
+              className="text-slate-400 dark:text-slate-500"
             />
           )}
 
@@ -140,12 +157,13 @@ export function PrediccionVolumenChart({ data, soloPrediccion }: PrediccionVolum
             <polyline
               points={puntosPrediccion.map((p) => `${p.x},${p.y}`).join(" ")}
               fill="none"
-              stroke={COLOR_PREDICCION}
+              stroke="currentColor"
               strokeWidth="2"
               strokeDasharray="4,3"
               strokeLinejoin="round"
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
+              className="text-blue-600 dark:text-blue-400"
             />
           )}
 
@@ -167,13 +185,12 @@ export function PrediccionVolumenChart({ data, soloPrediccion }: PrediccionVolum
         {puntosHistorico.map((p, i) => (
           <div
             key={`h-${p.fecha}`}
-            className="pointer-events-none absolute rounded-full"
+            className="pointer-events-none absolute rounded-full bg-slate-400 dark:bg-slate-500"
             style={{
               left: `${p.x}%`,
               top: `${p.y}%`,
               width: hoverIndex === i ? 8 : 5,
               height: hoverIndex === i ? 8 : 5,
-              backgroundColor: COLOR_HISTORICO,
               transform: "translate(-50%, -50%)",
             }}
           />
@@ -181,13 +198,12 @@ export function PrediccionVolumenChart({ data, soloPrediccion }: PrediccionVolum
         {puntosPrediccion.map((p, i) => (
           <div
             key={`p-${p.fecha}`}
-            className="pointer-events-none absolute rounded-full border-2 border-white"
+            className="pointer-events-none absolute rounded-full border-2 border-white bg-blue-600 dark:border-slate-900 dark:bg-blue-400"
             style={{
               left: `${p.x}%`,
               top: `${p.y}%`,
               width: hoverIndex === nHistorico + i ? 8 : 5,
               height: hoverIndex === nHistorico + i ? 8 : 5,
-              backgroundColor: COLOR_PREDICCION,
               transform: "translate(-50%, -50%)",
             }}
           />
@@ -199,7 +215,7 @@ export function PrediccionVolumenChart({ data, soloPrediccion }: PrediccionVolum
           // que también ancla en top:0 cuando el punto encima es justo el
           // primero de la predicción (el más cercano a "HOY").
           <div
-            className="pointer-events-none absolute -translate-x-1/2 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-medium text-white"
+            className="pointer-events-none absolute -translate-x-1/2 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-medium text-white dark:bg-slate-700"
             style={{ left: `${xHoy}%`, top: "-22px" }}
           >
             HOY
@@ -208,7 +224,7 @@ export function PrediccionVolumenChart({ data, soloPrediccion }: PrediccionVolum
 
         {hovered && (
           <div
-            className="pointer-events-none absolute z-10 w-max -translate-y-2 rounded-md bg-slate-900 px-2.5 py-1.5 text-xs text-white shadow-lg"
+            className="pointer-events-none absolute z-10 w-max -translate-y-2 rounded-md bg-slate-900 px-2.5 py-1.5 text-xs text-white shadow-lg dark:bg-slate-700"
             style={{
               left: `${hovered.x}%`,
               top: 0,
