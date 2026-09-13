@@ -12,6 +12,7 @@ import { LotesProcesadosChart } from "./components/LotesProcesadosChart";
 import { LineaCalidadPanel } from "./components/LineaCalidadPanel";
 import { ReporteProduccionPDF } from "./components/ReporteProduccionPDF";
 import { PrediccionVolumenSemanalCard } from "./components/PrediccionVolumenSemanalCard";
+import { EvolucionIndicadoresPanel } from "./components/EvolucionIndicadoresPanel";
 
 const HOY = new Date().toLocaleDateString("es-AR", {
   weekday: "long",
@@ -160,6 +161,16 @@ export default function DashboardProduccionPage() {
                 <PrediccionVolumenSemanalCard />
               </div>
             )}
+
+            {/* HU-39: mismo trío de roles que ya gatea esta página
+                (Responsable de producción + Gerente, vía allowedRoles en
+                App.tsx) coincide con los @Roles de
+                GET /dashboard/indicadores/evolucion — a diferencia de
+                PrediccionVolumenSemanalCard de arriba, no hace falta un
+                gating adicional por rol acá. */}
+            <div className="mt-6">
+              <EvolucionIndicadoresPanel />
+            </div>
           </div>
 
           <ReporteProduccionPDF

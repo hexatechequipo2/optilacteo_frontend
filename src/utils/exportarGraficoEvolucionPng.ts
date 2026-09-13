@@ -4,6 +4,7 @@ import type {
   TipoGraficoEvolucion,
 } from "../types/indicadorEvolucion.types";
 import { calcularRangoIndicador } from "./indicadorEvolucionRango";
+import { armarSegmentosLinea } from "./segmentosLineaEvolucion";
 
 // HU-39 (mejora post-QA): la primera versión exportaba el <svg> tal cual
 // (serializado a canvas) — como el título, la leyenda y las fechas del eje
@@ -152,29 +153,36 @@ export function exportarGraficoEvolucionPng({
     });
   } else {
     for (const indicador of indicadores) {
-      const puntosValidos = puntos
-        .map((p, i) => ({ i, valor: p.valores[indicador.id] }))
-        .filter((p): p is { i: number; valor: number } => p.valor != null);
-      if (puntosValidos.length === 0) continue;
+      // Mismo criterio que EvolucionIndicadoresChart.tsx: un hueco
+      // (valor:null) corta el trazo en vez de puentearlo — cada corrida de
+      // puntos válidos se dibuja como su propio ctx.beginPath()/stroke(),
+      // sin conectar con la corrida siguiente.
+      const segmentos = armarSegmentosLinea(puntos, indicador);
+      if (segmentos.length === 0) continue;
 
       ctx.strokeStyle = indicador.color;
       ctx.lineWidth = 2.5;
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
-      ctx.beginPath();
-      puntosValidos.forEach(({ i, valor }, idx) => {
-        const x = xDe(i);
-        const y = yDe(indicador.id, valor);
-        if (idx === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
+      for (const segmento of segmentos) {
+        if (segmento.length < 2) continue;
+        ctx.beginPath();
+        segmento.forEach(({ indice, valor }, idx) => {
+          const x = xDe(indice);
+          const y = yDe(indicador.id, valor);
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
 
       ctx.fillStyle = indicador.color;
-      for (const { i, valor } of puntosValidos) {
-        ctx.beginPath();
-        ctx.arc(xDe(i), yDe(indicador.id, valor), 3.5, 0, Math.PI * 2);
-        ctx.fill();
+      for (const segmento of segmentos) {
+        for (const { indice, valor } of segmento) {
+          ctx.beginPath();
+          ctx.arc(xDe(indice), yDe(indicador.id, valor), 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
   }
