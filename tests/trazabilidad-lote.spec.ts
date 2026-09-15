@@ -371,15 +371,28 @@ test.describe("HistorialTrazabilidadModal (HU-32)", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("HistorialTrazabilidadModal — HU-69 (número de remito)", () => {
-  test("muestra proveedor, tambo y número de remito junto al historial", async ({ page }) => {
+      test("muestra proveedor, tambo y número de remito junto al historial", async ({ page }) => {
     await mockTrazabilidadDeps(page);
-    await page.addInitScript(() => {
-      localStorage.setItem(
-        "optilacteo:remito-lote",
-        JSON.stringify({
-          1: { numeroRemito: "R-000123", registradoEn: "2026-08-01T12:00:00.000Z" },
+    // El modal lee numeroRemito de eventoRecepcion.detalle.numeroRemito en la
+    // respuesta de trazabilidad, no de lote.numeroRemito ni de localStorage.
+    await page.route(/\/lotes\/\d+\/trazabilidad/, async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...TRAZABILIDAD_MOCK,
+          eventos: [
+            {
+              ...TRAZABILIDAD_MOCK.eventos[0],
+              detalle: { ...TRAZABILIDAD_MOCK.eventos[0].detalle, numeroRemito: "R-000123" },
+            },
+            ...TRAZABILIDAD_MOCK.eventos.slice(1),
+          ],
         }),
-      );
+      });
     });
     await loginAsResponsableCalidad(page);
     await page.goto("/lotes");

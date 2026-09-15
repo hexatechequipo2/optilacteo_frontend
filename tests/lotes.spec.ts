@@ -567,29 +567,37 @@ test.describe("LoteFormModal — HU-69 (número de remito)", () => {
   });
 
   test("la tabla de lotes muestra el número de remito y permite buscar por él", async ({ page }) => {
-    await mockLotesDeps(page);
-    await page.addInitScript(() => {
-      localStorage.setItem(
-        "optilacteo:remito-lote",
-        JSON.stringify({
-          1: { numeroRemito: "R-000123", registradoEn: "2026-08-01T12:00:00.000Z" },
-        }),
-      );
+  await mockLotesDeps(page);
+
+  // LIFO: sobreescribe /lotes para que LOTE_1 incluya numeroRemito.
+  // El componente lee lote.numeroRemito de la respuesta del backend,
+  // no de localStorage (el campo fue migrado al modelo de Lote).
+  await page.route("**/lotes*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...LOTES_PAGINATED_MOCK,
+        data: [{ ...LOTE_1, numeroRemito: "R-000123" }, LOTE_2],
+      }),
     });
-    await loginAsResponsableCalidad(page);
-    await page.goto("/lotes");
-
-    // Se renderiza a la vez la fila de tabla (desktop) y la card (mobile,
-    // oculta por CSS) — se escopea a la tabla para no chocar con strict mode.
-    const table = page.getByRole("table");
-    await expect(table.getByText("Nº remito: R-000123")).toBeVisible();
-
-    await page
-      .getByPlaceholder("Buscar por lote, proveedor, tambo o nº de remito...")
-      .fill("R-000123");
-    await expect(table.getByText("LOT-2026-001")).toBeVisible();
-    await expect(table.getByText("LOT-2026-002")).not.toBeVisible();
   });
+
+  await loginAsResponsableCalidad(page);
+  await page.goto("/lotes");
+
+  const table = page.getByRole("table");
+  await expect(table.getByText("Nº remito: R-000123")).toBeVisible();
+
+  await page
+    .getByPlaceholder("Buscar por lote, proveedor, tambo o nº de remito...")
+    .fill("R-000123");
+  await expect(table.getByText("LOT-2026-001")).toBeVisible();
+  await expect(table.getByText("LOT-2026-002")).not.toBeVisible();
+});
 
   test("una búsqueda sin resultados muestra un mensaje específico, no el del filtro de rendimiento", async ({
     page,
@@ -883,6 +891,10 @@ test("un usuario sin rol de Responsable de Calidad ve acceso no autorizado", asy
       .getByRole("table")
       .getByTitle("Aprobar o rechazar lote")
       .click();
+
+    // Espera a que las llamadas de red del modal resuelvan
+    // (GET /config-parametros y GET /lotes/:id/revisiones)
+    await page.waitForLoadState("networkidle");
 
     await expect(
       page.getByRole("button", { name: "Confirmar decisión" }),

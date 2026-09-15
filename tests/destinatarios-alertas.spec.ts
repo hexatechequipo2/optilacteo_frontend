@@ -46,6 +46,18 @@ async function mockDestinatariosDeps(page: Page, configuraciones: object[] = [])
     });
   });
 
+  // loteService.getAll() hace return data.data — si el catch-all devuelve "[]",
+  // data.data = undefined → setLotes(undefined) → crash en FloatingDictadoVozButton.
+  await page.route("**/lote*", async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: [], meta: { page: 1, limit: 100, total: 0, totalPages: 1 } }),
+    });
+  });
+
   await page.route("**/user*", async (route) => {
     return route.fulfill({
       status: 200,

@@ -34,6 +34,18 @@ async function mockDashboardProduccionDeps(page: Page) {
     return route.continue();
   });
 
+   // loteService.getAll() hace return data.data — si el catch-all devuelve "[]",
+  // data.data = undefined → setLotes(undefined) → crash en FloatingDictadoVozButton.
+  await page.route("**/lote*", async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: [], meta: { page: 1, limit: 100, total: 0, totalPages: 1 } }),
+    });
+  });
+
   await page.route("**/notificacion*", async (route) => {
     const rt = route.request().resourceType();
     if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
@@ -68,7 +80,6 @@ async function mockDashboardProduccionDeps(page: Page) {
     });
   });
 
-  // LIFO: mayor prioridad → maneja GET /dashboard/lotes-procesados/historico.
   await page.route("**/dashboard/lotes-procesados/historico*", async (route) => {
     const rt = route.request().resourceType();
     if (rt !== "fetch" && rt !== "xhr") return route.continue();
