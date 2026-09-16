@@ -511,6 +511,176 @@ test.describe("ConfiguracionPage", () => {
       await expect(page.getByText("No se pudo eliminar el logo. Intentá nuevamente.")).toBeVisible();
     });
   });
+
+  test.describe("HorariosSilencioConfigTab", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.evaluate(() =>
+      localStorage.removeItem("optilacteo:horarios-silencio"),
+    );
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: "Horarios de silencio" }).click();
+  });
+
+  test("muestra estado vacío cuando no hay horarios configurados", async ({ page }) => {
+    await expect(
+      page.getByText("Todavía no hay horarios de silencio configurados."),
+    ).toBeVisible();
+    await expect(page.getByText("0 de 0 activos")).toBeVisible();
+  });
+
+  test("crear un horario nuevo lo agrega a la lista", async ({ page }) => {
+    await page.getByRole("button", { name: "+ Nuevo horario de silencio" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page.locator("#horario-silencio-nombre").fill("Turno mañana");
+    await page.locator("#horario-silencio-inicio").fill("08:00");
+    await page.locator("#horario-silencio-fin").fill("12:00");
+    await page.getByTitle("lun").click();
+    await page.getByRole("button", { name: "Guardar" }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+    await expect(page.getByText("Turno mañana")).toBeVisible();
+    await expect(page.getByText("08:00 - 12:00")).toBeVisible();
+    await expect(page.getByText("1 de 1 activos")).toBeVisible();
+  });
+
+    test("validación: muestra errores si se guarda sin completar el formulario", async ({ page }) => {
+    await page.getByRole("button", { name: "+ Nuevo horario de silencio" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page.getByRole("button", { name: "Guardar" }).click();
+    await expect(page.getByText("El nombre es obligatorio.")).toBeVisible();
+    await expect(page.getByText("Elegí hora de inicio y de fin.")).toBeVisible();
+    await expect(page.getByText("Elegí al menos un día.")).toBeVisible();
+  });
+
+    test("toggle activo/inactivo cambia el badge del horario", async ({ page }) => {
+    await page.evaluate(() =>
+      localStorage.setItem(
+        "optilacteo:horarios-silencio",
+        JSON.stringify([{
+          id: "1", nombre: "Turno noche", horaInicio: "22:00", horaFin: "06:00",
+          dias: ["lun"], activo: true, creadoEn: "2026-09-16T00:00:00.000Z",
+        }]),
+      ),
+    );
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: "Horarios de silencio" }).click();
+    await expect(page.getByText("Activo", { exact: true })).toBeVisible();
+    await page.getByRole("switch").click();
+    await expect(page.getByText("Inactivo", { exact: true })).toBeVisible();
+    await expect(page.getByText("0 de 1 activos")).toBeVisible();
+  });
+
+    test("editar un horario actualiza sus datos en la lista", async ({ page }) => {
+    await page.evaluate(() =>
+      localStorage.setItem(
+        "optilacteo:horarios-silencio",
+        JSON.stringify([{
+          id: "1", nombre: "Turno mañana", horaInicio: "08:00", horaFin: "12:00",
+          dias: ["lun"], activo: true, creadoEn: "2026-09-16T00:00:00.000Z",
+        }]),
+      ),
+    );
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: "Horarios de silencio" }).click();
+    await page.getByTitle("Editar").click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await expect(page.locator("#horario-silencio-nombre")).toHaveValue("Turno mañana");
+    await page.locator("#horario-silencio-nombre").fill("Turno tarde");
+    await page.getByRole("button", { name: "Guardar" }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+    await expect(page.getByText("Turno tarde")).toBeVisible();
+    await expect(page.getByText("Turno mañana")).not.toBeVisible();
+  });
+
+    test("eliminar un horario lo quita de la lista tras confirmar", async ({ page }) => {
+    await page.evaluate(() =>
+      localStorage.setItem(
+        "optilacteo:horarios-silencio",
+        JSON.stringify([{
+          id: "1", nombre: "Turno noche", horaInicio: "22:00", horaFin: "06:00",
+          dias: ["lun"], activo: true, creadoEn: "2026-09-16T00:00:00.000Z",
+        }]),
+      ),
+    );
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: "Horarios de silencio" }).click();
+    await expect(page.getByText("Turno noche")).toBeVisible();
+    await page.getByTitle("Eliminar").click();
+    await page.getByRole("alertdialog").waitFor({ state: "visible" });
+    await expect(page.getByText("Eliminar horario de silencio")).toBeVisible();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Eliminar" }).click();
+    await expect(page.getByText("Turno noche")).not.toBeVisible();
+    await expect(
+      page.getByText("Todavía no hay horarios de silencio configurados."),
+    ).toBeVisible();
+  });
+});
+
+test.describe("DestinosProductivosConfigTab", () => {
+  const DESTINOS_MOCK = [
+    { id: 1, nombre: "Queso", activo: true },
+    { id: 2, nombre: "Yogur", activo: true },
+    { id: 3, nombre: "Crema", activo: false },
+  ];
+
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(DESTINOS_MOCK),
+      });
+    });
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: "Destinos productivos" }).click();
+    await page.waitForLoadState("networkidle");
+  });
+
+  test("muestra el catálogo de destinos productivos cargado desde la API", async ({ page }) => {
+    await expect(page.getByText("Queso")).toBeVisible();
+    await expect(page.getByText("Yogur")).toBeVisible();
+    await expect(page.getByText("Crema")).toBeVisible();
+    await expect(page.getByText("Activo").first()).toBeVisible();
+  });
+
+  test("agregar un destino nuevo lo muestra en la lista con etiqueta local", async ({ page }) => {
+    await page.locator("#nuevo-destino-productivo").fill("Ricota");
+    await page.getByRole("button", { name: "+ Agregar destino" }).click();
+    await expect(page.getByText("Ricota")).toBeVisible();
+    await expect(page.getByText("(agregado localmente)")).toBeVisible();
+  });
+
+  test("desactivar un destino cambia su badge a Inactivo", async ({ page }) => {
+  const filaQueso = page.locator("tr").filter({ hasText: "Queso" });
+  await filaQueso.getByRole("button", { name: "Desactivar" }).click();
+
+  await expect(filaQueso.getByText("Inactivo")).toBeVisible();
+  await expect(filaQueso.getByRole("button", { name: "Reactivar" })).toBeVisible();
+  });
+
+  test("editar nombre inline actualiza el destino en la lista", async ({ page }) => {
+  const filaQueso = page.locator("tr").filter({ hasText: "Queso" });
+  await filaQueso.getByRole("button", { name: "Editar nombre" }).click();
+
+  // Después del click, "Queso" deja de ser texto DOM (pasa a value del input),
+  // así que hasText ya no matchea. Usar la fila que muestra "Guardar" en su lugar.
+  const filaEditando = page.locator("tr").filter({ hasText: "Guardar" });
+  const inputInline = filaEditando.locator("input");
+  await inputInline.clear();
+  await inputInline.fill("Queso artesanal");
+  await inputInline.press("Enter");
+
+  await expect(page.getByText("Queso artesanal")).toBeVisible();
+  await expect(page.getByText("Queso", { exact: true })).not.toBeVisible();
+});
+});
+
 });
 
 test("ConfiguracionPage - un Responsable de calidad ve los inputs de Comparación histórica deshabilitados", async ({ page }) => {
