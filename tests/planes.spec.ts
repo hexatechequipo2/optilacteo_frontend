@@ -59,6 +59,18 @@ async function mockPlanesDeps(page: Page, planes: unknown[] | null = PLANES_MOCK
     return route.continue();
   });
 
+  // loteService.getAll() hace return data.data — si el catch-all devuelve "[]",
+  // data.data = undefined → setLotes(undefined) → crash en FloatingDictadoVozButton.
+  await page.route("**/lote*", async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: [], meta: { page: 1, limit: 100, total: 0, totalPages: 1 } }),
+    });
+  });
+
   // Layout pide las notificaciones (campanita) en TODAS las páginas
   // autenticadas y espera la forma paginada {data, meta}: el catch-all de
   // arriba devuelve un array plano y notificaciones.filter(...) explota

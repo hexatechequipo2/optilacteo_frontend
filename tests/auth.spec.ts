@@ -252,6 +252,22 @@ async function mockCatchAllYNotificaciones(page: Parameters<typeof loginAsAdmini
       body: JSON.stringify({ data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } }),
     });
   });
+
+  // Sin esto, FloatingDictadoVozButton (Layout) crashea: loteService.getAll()
+  // hace return data.data y el catch-all devuelve [] → data.data = undefined.
+  await page.route("**/lotes*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: [],
+        meta: { page: 1, limit: 100, total: 0, totalPages: 1 },
+      }),
+    });
+  });
 }
 
 test.describe("Interceptor de refresh de token (401)", () => {
