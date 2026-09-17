@@ -405,3 +405,199 @@ test.describe("AlertasPage › Sensor desconectado", () => {
     await expect(page.getByText("No se pudieron cargar las alertas.")).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// HU-50 — Detección de anomalías en mediciones
+// ---------------------------------------------------------------------------
+
+const ALERTA_ANOMALIA = {
+  id: 20,
+  tipo: "alerta_anomalia",
+  mensaje: "Se detectó un patrón inusual de Materia grasa en el lote LOT-2026-001",
+  nivelAlerta: null,
+  estado: "abierta",
+  accionCorrectiva: null,
+  fechaResolucion: null,
+  loteId: 1,
+  loteCodigo: null,
+  parametro: "grasa",
+  sensorId: null,
+  tipoDesvio: "pico",
+  confianza: 91.5,
+  modeloVersion: "v1.3.0",
+  marcadaFalsoPositivoPorId: null,
+  fechaMarcadoFalsoPositivo: null,
+  leida: false,
+  createdAt: "2026-09-10T08:00:00.000Z",
+  data: {
+    loteId: 1,
+    loteCodigo: "LOT-2026-001",
+    parametro: "grasa",
+    tipoDesvio: "pico",
+    confianza: 91.5,
+    modeloVersion: "v1.3.0",
+  },
+};
+
+const ALERTA_ANOMALIA_TENDENCIA = {
+  ...ALERTA_ANOMALIA,
+  id: 21,
+  parametro: "temperatura",
+  tipoDesvio: "tendencia",
+  confianza: 62,
+  mensaje: "Se detectó una tendencia inusual de Temperatura en el lote LOT-2026-002",
+  data: { ...ALERTA_ANOMALIA.data, loteId: 2, loteCodigo: "LOT-2026-002", parametro: "temperatura", tipoDesvio: "tendencia", confianza: 62 },
+};
+
+test.describe("HU-50 — Detección de anomalías en mediciones", () => {
+  test("muestra la alerta de anomalía con parámetro, tipo de desvío y confianza", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_ANOMALIA]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    const card = page.locator("[role='button']").filter({ hasText: "LOT-2026-001" });
+    await expect(card).toBeVisible();
+    await expect(card.getByText("Materia grasa", { exact: true })).toBeVisible();
+    await expect(card.getByText("Pico")).toBeVisible();
+    await expect(card.getByText("Confianza alta")).toBeVisible();
+    await expect(card.getByText("Anomalía detectada")).toBeVisible();
+  });
+
+  test("distingue visualmente una alerta de anomalía de una alerta de umbral", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_CRITICA, ALERTA_ANOMALIA]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    const cardUmbral = page.locator("[role='button']").filter({ hasText: "LOT-2026-001" }).first();
+    const cardAnomalia = page.locator("[role='button']").filter({ hasText: "Anomalía detectada" });
+
+    // La de umbral tiene nivel de severidad (Crítica/Advertencia/Informativa);
+    // la de anomalía nunca lo tiene (HU-50: el modelo ML no compara contra
+    // un umbral, ver AlertaAnomaliaCard.tsx) — en cambio muestra el badge
+    // "Anomalía detectada" que la de umbral no tiene.
+    await expect(cardUmbral.getByText("Crítica")).toBeVisible();
+    await expect(cardUmbral.getByText("Anomalía detectada")).not.toBeVisible();
+    await expect(cardAnomalia.getByText("Anomalía detectada")).toBeVisible();
+    await expect(cardAnomalia.getByText("Crítica")).not.toBeVisible();
+    await expect(cardAnomalia.getByText("Advertencia")).not.toBeVisible();
+    await expect(cardAnomalia.getByText("Informativa")).not.toBeVisible();
+  });
+
+  test("abre el detalle y muestra parámetro, lote, tipo de desvío, confianza y versión del modelo", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_ANOMALIA]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await page.locator("[role='button']").filter({ hasText: "LOT-2026-001" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Materia grasa", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("LOT-2026-001", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Pico")).toBeVisible();
+    await expect(dialog.getByText("91.5%")).toBeVisible();
+    await expect(dialog.getByText("v1.3.0")).toBeVisible();
+  });
+
+  test("marcar como falso positivo pide confirmación y actualiza el estado de la alerta", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_ANOMALIA]);
+    await page.route("**/notificaciones/*/falso-positivo", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...ALERTA_ANOMALIA, estado: "falso_positivo", leida: true, marcadaFalsoPositivoPorId: 3 }),
+      });
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await page.locator("[role='button']").filter({ hasText: "LOT-2026-001" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Marcar como falso positivo" }).click();
+
+    const confirm = page.getByRole("alertdialog");
+    await expect(confirm.getByText("¿Marcar esta anomalía como falso positivo?")).toBeVisible();
+    await confirm.getByRole("button", { name: "Marcar como falso positivo" }).click();
+
+    // El panel se cierra tras confirmar (AlertaAnomaliaDetallePanel.handleConfirmarFalsoPositivo).
+    // marcarFalsoPositivo también marca la alerta como leída, así que con
+    // "Solo no leídas" tildado (default) desaparece del listado — mismo
+    // criterio que una alerta cerrada (HU-27) — hay que filtrar por estado
+    // "Falso positivo" para volver a verla.
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+    await page.locator("#alertas-filtro-estado").selectOption("falso_positivo");
+    const card = page.locator("[role='button']").filter({ hasText: "LOT-2026-001" });
+    await expect(card.getByText("Falso positivo")).toBeVisible();
+  });
+
+  test("cancelar la confirmación no marca la alerta como falso positivo", async ({ page }) => {
+    let llamadoPatch = false;
+    await mockAlertasDeps(page, [ALERTA_ANOMALIA]);
+    await page.route("**/notificaciones/*/falso-positivo", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      llamadoPatch = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await page.locator("[role='button']").filter({ hasText: "LOT-2026-001" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Marcar como falso positivo" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Cancelar" }).click();
+
+    expect(llamadoPatch).toBe(false);
+    await expect(page.getByRole("dialog")).toBeVisible();
+  });
+
+  test("error del servidor al marcar falso positivo muestra mensaje y no cierra el panel", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_ANOMALIA]);
+    await page.route("**/notificaciones/*/falso-positivo", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "Error del servidor" }) });
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await page.locator("[role='button']").filter({ hasText: "LOT-2026-001" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Marcar como falso positivo" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Marcar como falso positivo" }).click();
+
+    await expect(
+      page.getByText("No se pudo marcar la alerta como falso positivo. Reintentá en unos segundos."),
+    ).toBeVisible();
+    await expect(page.getByRole("dialog")).toBeVisible();
+  });
+
+  test("una alerta ya marcada como falso positivo no ofrece volver a marcarla", async ({ page }) => {
+    const ALERTA_YA_FALSO_POSITIVO = { ...ALERTA_ANOMALIA, estado: "falso_positivo", leida: true, marcadaFalsoPositivoPorId: 3, fechaMarcadoFalsoPositivo: "2026-09-10T09:00:00.000Z" };
+    await mockAlertasDeps(page, [ALERTA_YA_FALSO_POSITIVO]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+    // "Solo no leídas" está tildado por defecto y esta alerta ya está leída
+    await page.locator("#alertas-filtro-no-leidas").uncheck();
+
+    await page.locator("[role='button']").filter({ hasText: "LOT-2026-001" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Marcada como falso positivo")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Marcar como falso positivo" })).not.toBeVisible();
+  });
+
+  test("filtra las alertas por parámetro afectado", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_ANOMALIA, ALERTA_ANOMALIA_TENDENCIA]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await page.locator("#alertas-filtro-parametro").selectOption("grasa");
+    await expect(page.locator("[role='button']").filter({ hasText: "LOT-2026-001" })).toBeVisible();
+    await expect(page.locator("[role='button']").filter({ hasText: "LOT-2026-002" })).not.toBeVisible();
+  });
+
+  test("filtra las alertas por tipo de desvío", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_ANOMALIA, ALERTA_ANOMALIA_TENDENCIA]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await page.locator("#alertas-filtro-tipo-desvio").selectOption("tendencia");
+    await expect(page.locator("[role='button']").filter({ hasText: "LOT-2026-002" })).toBeVisible();
+    await expect(page.locator("[role='button']").filter({ hasText: "LOT-2026-001" })).not.toBeVisible();
+  });
+});

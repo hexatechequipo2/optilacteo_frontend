@@ -270,3 +270,282 @@ test("MedicionManualPage - un usuario sin rol de Operario ve acceso no autorizad
   await page.goto("/mediciones-manuales");
   await expect(page.getByText("Acceso no autorizado")).toBeVisible();
 });
+
+// ---------------------------------------------------------------------------
+// HU-55 — Registro de parámetros por voz
+// ---------------------------------------------------------------------------
+
+// Reemplaza la Web Speech API real por un mock controlable desde el test:
+// el navegador (Chromium) sí trae `webkitSpeechRecognition` nativo, pero
+// depende de un servicio de reconocimiento remoto que no está disponible en
+// un entorno de test headless — sin esto, .start() nunca dispararía
+// resultados reales ni de forma determinística. Se guarda la instancia en
+// window.__mockRecognitionInstance para poder disparar onresult/onerror/
+// onend a mano desde cada test.
+async function mockSpeechRecognitionSoportado(page: Page) {
+  await page.addInitScript(() => {
+    const w = globalThis as any;
+    function MockSpeechRecognition(this: any) {
+      this.lang = "";
+      this.continuous = false;
+      this.interimResults = false;
+      this.onresult = null;
+      this.onerror = null;
+      this.onend = null;
+      w.__mockRecognitionInstance = this;
+    }
+    MockSpeechRecognition.prototype.start = function () {};
+    MockSpeechRecognition.prototype.stop = function () {};
+    w.webkitSpeechRecognition = MockSpeechRecognition;
+    w.SpeechRecognition = undefined;
+  });
+}
+
+// Fuerza el camino "no soportado" (Firefox/Safari real) borrando lo que
+// Chromium trae nativo.
+async function mockSpeechRecognitionNoSoportado(page: Page) {
+  await page.addInitScript(() => {
+    const w = globalThis as any;
+    w.webkitSpeechRecognition = undefined;
+    w.SpeechRecognition = undefined;
+  });
+}
+
+async function simularResultadoFinal(page: Page, texto: string) {
+  await page.evaluate((t) => {
+    const instancia = (globalThis as any).__mockRecognitionInstance;
+    instancia.onresult({
+      resultIndex: 0,
+      results: [{ 0: { transcript: t }, isFinal: true, length: 1 }],
+    });
+  }, texto);
+}
+
+async function simularError(page: Page, error: string) {
+  await page.evaluate((e) => {
+    (globalThis as any).__mockRecognitionInstance.onerror({ error: e });
+  }, error);
+}
+
+test.describe("HU-55 — Registro de parámetros por voz", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockMedicionManualDeps(page);
+  });
+
+  test("el botón 'Dictar valores' abre el modal y arranca escuchando", async ({ page }) => {
+    await mockSpeechRecognitionSoportado(page);
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Dictando valores" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("Escuchando")).toBeVisible();
+  });
+
+  test("transcribe el dictado y lo muestra en pantalla antes de confirmar", async ({ page }) => {
+    await mockSpeechRecognitionSoportado(page);
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Dictando valores" });
+    await simularResultadoFinal(page, "ph 6.8, temperatura 4 grados");
+    await expect(dialog.getByText("ph 6.8, temperatura 4 grados")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Revisar y confirmar" })).toBeEnabled();
+  });
+
+  test("dicta varios parámetros con terminología técnica y los interpreta correctamente", async ({ page }) => {
+    await mockSpeechRecognitionSoportado(page);
+    await page.route(/\/lotes\/\d+\/dictado\/parsear/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          textoOriginal: "ph 6.8, materia grasa 3.4 por ciento",
+          parametros: [
+            { parametro: "ph", valor: 6.8, confianza: "alta", fueraDeRangoFisico: false, fueraDeUmbralEmpresa: false, textoOriginal: "ph 6.8" },
+            { parametro: "grasa", valor: 3.4, confianza: "alta", fueraDeRangoFisico: false, fueraDeUmbralEmpresa: null, textoOriginal: "materia grasa 3.4 por ciento" },
+          ],
+          noReconocido: [],
+          obligatoriosFaltantes: [],
+        }),
+      });
+    });
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+    await simularResultadoFinal(page, "ph 6.8, materia grasa 3.4 por ciento");
+    await page.getByRole("dialog", { name: "Dictando valores" })
+      .getByRole("button", { name: "Revisar y confirmar" }).click();
+
+    const revision = page.getByRole("dialog", { name: "Revisar dictado" });
+    await expect(revision).toBeVisible();
+    await expect(revision.locator("#revision-dictado-ph")).toHaveValue("6.8");
+    await expect(revision.locator("#revision-dictado-grasa")).toHaveValue("3.4");
+  });
+
+  test("texto no reconocido se lista aparte con el motivo", async ({ page }) => {
+    await mockSpeechRecognitionSoportado(page);
+    await page.route(/\/lotes\/\d+\/dictado\/parsear/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          textoOriginal: "temperatura",
+          parametros: [],
+          noReconocido: [{ texto: "temperatura", motivo: "sin_valor_asociado" }],
+          obligatoriosFaltantes: [],
+        }),
+      });
+    });
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+    await simularResultadoFinal(page, "temperatura");
+    await page.getByRole("dialog", { name: "Dictando valores" })
+      .getByRole("button", { name: "Revisar y confirmar" }).click();
+
+    const revision = page.getByRole("dialog", { name: "Revisar dictado" });
+    await expect(revision.getByText("No se reconoció ningún parámetro en el dictado.")).toBeVisible();
+    await expect(revision.getByText('"temperatura"')).toBeVisible();
+    await expect(
+      revision.getByText("Se nombró el parámetro pero no se detectó un valor"),
+    ).toBeVisible();
+  });
+
+  test("corrige manualmente un valor reconocido antes de confirmar el registro", async ({ page }) => {
+    await mockSpeechRecognitionSoportado(page);
+    await page.route(/\/lotes\/\d+\/dictado\/parsear/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          textoOriginal: "ph 6.8",
+          parametros: [
+            { parametro: "ph", valor: 6.8, confianza: "media", fueraDeRangoFisico: false, fueraDeUmbralEmpresa: false, textoOriginal: "ph 6.8" },
+          ],
+          noReconocido: [],
+          obligatoriosFaltantes: [],
+        }),
+      });
+    });
+    let payloadEnviado: unknown = null;
+    await page.route(/\/lotes\/\d+\/mediciones-manuales/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      payloadEnviado = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          loteId: 1, tipoMateriaPrima: "leche_cruda", usuarioId: 5,
+          mediciones: [{ id: 1, parametro: "ph", valor: 7.0, estado: "NORMAL", createdAt: "2026-08-01T10:00:00.000Z" }],
+        }),
+      });
+    });
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+    await simularResultadoFinal(page, "ph 6.8");
+    await page.getByRole("dialog", { name: "Dictando valores" })
+      .getByRole("button", { name: "Revisar y confirmar" }).click();
+
+    const revision = page.getByRole("dialog", { name: "Revisar dictado" });
+    await revision.locator("#revision-dictado-ph").fill("7.0");
+    await revision.getByRole("button", { name: "Confirmar registro" }).click();
+
+    await expect(revision.getByText("MEDICIÓN REGISTRADA")).toBeVisible();
+    expect(payloadEnviado).toEqual({
+      tipoMateriaPrima: "leche_cruda",
+      parametros: [{ parametro: "ph", valor: 7 }],
+    });
+  });
+
+  test("cancelar a mitad del dictado pide confirmación y no registra nada", async ({ page }) => {
+    let seEnvioParseo = false;
+    await mockSpeechRecognitionSoportado(page);
+    await page.route(/\/lotes\/\d+\/dictado\/parsear/, async (route) => {
+      seEnvioParseo = true;
+      await route.continue();
+    });
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+    await simularResultadoFinal(page, "ph 6.8");
+
+    const dialog = page.getByRole("dialog", { name: "Dictando valores" });
+    await dialog.getByRole("button", { name: "Cancelar" }).click();
+    await expect(dialog.getByText("¿Descartar el dictado en curso?")).toBeVisible();
+    await dialog.getByRole("button", { name: "Sí, descartar" }).click();
+
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+    expect(seEnvioParseo).toBe(false);
+  });
+
+  test("seguir dictando desde la confirmación de cancelar no pierde el texto", async ({ page }) => {
+    await mockSpeechRecognitionSoportado(page);
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+    await simularResultadoFinal(page, "ph 6.8");
+
+    const dialog = page.getByRole("dialog", { name: "Dictando valores" });
+    await dialog.getByRole("button", { name: "Cancelar" }).click();
+    await dialog.getByRole("button", { name: "Seguir dictando" }).click();
+
+    await expect(dialog.getByText("ph 6.8")).toBeVisible();
+  });
+
+  test("reconocimiento no soportado ofrece pasar al ingreso manual", async ({ page }) => {
+    await mockSpeechRecognitionNoSoportado(page);
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Dictando valores" });
+    await expect(dialog.getByText("No disponible")).toBeVisible();
+    await expect(
+      dialog.getByText("Este navegador no soporta dictado por voz."),
+    ).toBeVisible();
+    await dialog.getByRole("button", { name: "Ir al ingreso manual" }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+    await expect(page.locator("#medicion-manual-ph")).toBeVisible();
+  });
+
+  test("permiso de micrófono denegado ofrece pasar al ingreso manual", async ({ page }) => {
+    await mockSpeechRecognitionSoportado(page);
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+    await simularError(page, "not-allowed");
+
+    const dialog = page.getByRole("dialog", { name: "Dictando valores" });
+    await expect(dialog.getByText("Permiso denegado")).toBeVisible();
+    await expect(
+      dialog.getByText("No pudimos acceder al micrófono."),
+    ).toBeVisible();
+    await dialog.getByRole("button", { name: "Ir al ingreso manual" }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+  });
+
+  test("error al interpretar el dictado permite reintentar sin perder el texto", async ({ page }) => {
+    await mockSpeechRecognitionSoportado(page);
+    await page.route(/\/lotes\/\d+\/dictado\/parsear/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "Error del servidor" }) });
+    });
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+    await simularResultadoFinal(page, "ph 6.8");
+    const dialog = page.getByRole("dialog", { name: "Dictando valores" });
+    await dialog.getByRole("button", { name: "Revisar y confirmar" }).click();
+
+    await expect(dialog.getByText("Error del servidor")).toBeVisible();
+    // El texto dictado sigue disponible para reintentar, no se perdió.
+    await expect(dialog.getByText("ph 6.8")).toBeVisible();
+  });
+});

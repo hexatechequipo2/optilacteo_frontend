@@ -1627,6 +1627,360 @@ test("cambiar el destino vigente por otro envía PATCH con el nuevo destino", as
 });
 });
 
+// ---------------------------------------------------------------------------
+// HU-49 · Recomendaciones predictivas de destino productivo (ML)
+// HU-37 · Justificación de divergencia operador vs sistema
+// ---------------------------------------------------------------------------
+
+const RECOMENDACION_MOCK = {
+  id: 42,
+  destinoRecomendado: { id: 1, nombre: "Queso" },
+  confianza: 87,
+  estado: "pendiente",
+  destinoReal: null,
+};
+
+async function mockRecomendacionPendiente(page: Page, recomendacion: unknown) {
+  await page.route(/\/recomendaciones\/lote\/\d+/, async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (recomendacion === null) {
+      return route.fulfill({ status: 200, body: "" });
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(recomendacion),
+    });
+  });
+}
+
+test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockLotesDeps(page);
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(DESTINOS_MOCK),
+      });
+    });
+    // Sin destino vigente todavía (lote recién registrado)
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    });
+    await mockRecomendacionPendiente(page, RECOMENDACION_MOCK);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page.waitForLoadState("networkidle");
+  });
+
+  test("muestra el destino recomendado con su porcentaje de confianza", async ({ page }) => {
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Destino recomendado por el sistema: Queso")).toBeVisible();
+    await expect(dialog.getByText("87%")).toBeVisible();
+    await expect(dialog.getByText("Confianza alta")).toBeVisible();
+  });
+
+  test("confianza media y baja muestran el badge correspondiente", async ({ page }) => {
+    await mockRecomendacionPendiente(page, { ...RECOMENDACION_MOCK, confianza: 60 });
+    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    await expect(page.getByRole("dialog").getByText("Confianza media")).toBeVisible();
+
+    await mockRecomendacionPendiente(page, { ...RECOMENDACION_MOCK, confianza: 30 });
+    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    await expect(page.getByRole("dialog").getByText("Confianza baja")).toBeVisible();
+  });
+
+  test("aceptar la recomendación envía PATCH con aceptada true y muestra confirmación", async ({ page }) => {
+    let body: unknown = null;
+    await page.route(/\/recomendaciones\/\d+\/responder/, async (route) => {
+      body = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+
+    await page.getByRole("dialog").getByRole("button", { name: "Aceptar recomendación" }).click();
+    await expect(page.getByRole("dialog").getByText("Recomendación aceptada")).toBeVisible();
+    await expect(page.getByRole("dialog").getByText("Destino asignado: Queso")).toBeVisible();
+    expect(body).toEqual({ aceptada: true });
+  });
+
+  test("rechazar con justificación por debajo del mínimo mantiene el botón de confirmar deshabilitado", async ({ page }) => {
+    // El botón queda deshabilitado (AC2: el backend nunca llega a recibir
+    // una justificación corta) mientras el contador en pantalla muestra
+    // cuánto falta. El mensaje de error en rojo bajo el textarea solo se
+    // activa vía handleConfirmarRechazo, que nunca corre porque el propio
+    // atributo disabled del botón bloquea el click en un navegador real
+    // antes de llegar a ese handler — no se puede ejercitar por UI, ver nota
+    // en la documentación de HU-37.
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await dialog.locator("#recomendacion-destino-real").selectOption("2");
+    await dialog.locator("#justificacion-divergencia").fill("muy corta");
+    await expect(dialog.getByText("9/30 mínimo 30 caracteres")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Confirmar destino real" })).toBeDisabled();
+  });
+
+  test("rechazar con justificación válida envía PATCH con destino real y justificación", async ({ page }) => {
+    let body: unknown = null;
+    await page.route(/\/recomendaciones\/\d+\/responder/, async (route) => {
+      body = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await dialog.locator("#recomendacion-destino-real").selectOption("2");
+    const justificacion = "El proveedor informó menor contenido de grasa al ingreso.";
+    await dialog.locator("#justificacion-divergencia").fill(justificacion);
+    await dialog.getByRole("button", { name: "Confirmar destino real" }).click();
+
+    await expect(dialog.getByText("Recomendación rechazada")).toBeVisible();
+    await expect(dialog.getByText("Destino asignado: Yogur")).toBeVisible();
+    expect(body).toEqual({ aceptada: false, destinoRealId: 2, justificacion });
+  });
+
+  test("justificación con exactamente 30 caracteres es válida (límite exacto)", async ({ page }) => {
+    const treintaChars = "123456789012345678901234567890";
+    expect(treintaChars.length).toBe(30);
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await dialog.locator("#recomendacion-destino-real").selectOption("2");
+    await dialog.locator("#justificacion-divergencia").fill(treintaChars);
+    await expect(dialog.getByRole("button", { name: "Confirmar destino real" })).toBeEnabled();
+  });
+
+  test("recalcular vuelve a pedir la recomendación al backend", async ({ page }) => {
+    await page.route(/\/recomendaciones\/lote\/\d+/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(RECOMENDACION_MOCK),
+      });
+    });
+
+    const [response] = await Promise.all([
+      page.waitForResponse((res) => /\/recomendaciones\/lote\/\d+/.test(res.url())),
+      page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click(),
+    ]);
+    expect(response.status()).toBe(200);
+  });
+
+  test("error al cargar la recomendación permite reintentar", async ({ page }) => {
+    await page.route(/\/recomendaciones\/lote\/\d+/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 500, contentType: "application/json",
+        body: JSON.stringify({ message: "Error del servidor" }),
+      });
+    });
+
+    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Error del servidor")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Reintentar" })).toBeVisible();
+  });
+});
+
+test.describe("HU-49 — sin otro destino activo en el catálogo", () => {
+  test("avisa que no se puede registrar una divergencia si no hay otro destino disponible", async ({ page }) => {
+    await mockLotesDeps(page);
+    // Único destino activo = el mismo que recomienda el sistema (id 1)
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify([{ id: 1, nombre: "Queso" }]),
+      });
+    });
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    });
+    await mockRecomendacionPendiente(page, RECOMENDACION_MOCK);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page.waitForLoadState("networkidle");
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+
+    await expect(
+      dialog.getByText("No hay otro destino productivo configurado para elegir"),
+    ).toBeVisible();
+    await expect(dialog.locator("#recomendacion-destino-real")).toBeDisabled();
+  });
+});
+
+test.describe("HU-49 — sin recomendación disponible", () => {
+  test("lote sin historial suficiente muestra el mensaje de sin recomendación", async ({ page }) => {
+    await mockLotesDeps(page);
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(DESTINOS_MOCK) });
+    });
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    });
+    await mockRecomendacionPendiente(page, null);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    await expect(page.getByRole("dialog").getByText("Sin recomendación disponible")).toBeVisible();
+  });
+});
+
+test.describe("HU-37 — Justificación de divergencia operador vs sistema", () => {
+  test("una divergencia ya resuelta se muestra en el historial del lote con su justificación", async ({ page }) => {
+    await mockLotesDeps(page);
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(DESTINOS_MOCK) });
+    });
+    // Historial: el cambio vigente vino de rechazar la recomendación 5
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            destinoProductivoId: 2,
+            destinoProductivoNombre: "Yogur",
+            origen: "recomendacion_ml",
+            recomendacionDestinoId: 5,
+            createdAt: "2026-09-01T12:00:00.000Z",
+          },
+        ]),
+      });
+    });
+    await page.route(/\/recomendaciones\/todas/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            recomendacionId: 5,
+            loteId: 1,
+            loteCodigo: "LOT-2026-001",
+            estado: "rechazada",
+            destinoRecomendadoId: 1,
+            destinoRecomendadoNombre: "Queso",
+            destinoRealId: 2,
+            destinoRealNombre: "Yogur",
+            confianza: 87,
+            justificacion: "El proveedor informó menor contenido de grasa al ingreso.",
+            usuarioId: 3,
+            createdAt: "2026-09-01T11:00:00.000Z",
+            respondidaEn: "2026-09-01T12:00:00.000Z",
+          },
+        ]),
+      });
+    });
+    // Ya no hay recomendación pendiente para este lote (fue respondida)
+    await mockRecomendacionPendiente(page, null);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Destino asignado: Yogur")).toBeVisible();
+    await expect(dialog.getByText("Divergencia justificada respecto a la recomendación")).toBeVisible();
+    await expect(dialog.getByText("El sistema había recomendado Queso.")).toBeVisible();
+    await expect(
+      dialog.getByText("Justificación: El proveedor informó menor contenido de grasa al ingreso."),
+    ).toBeVisible();
+  });
+
+  test("una divergencia ya resuelta no tiene ningún control para editar la justificación", async ({ page }) => {
+    await mockLotesDeps(page);
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(DESTINOS_MOCK) });
+    });
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            destinoProductivoId: 2,
+            destinoProductivoNombre: "Yogur",
+            origen: "recomendacion_ml",
+            recomendacionDestinoId: 5,
+            createdAt: "2026-09-01T12:00:00.000Z",
+          },
+        ]),
+      });
+    });
+    await page.route(/\/recomendaciones\/todas/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            recomendacionId: 5,
+            loteId: 1,
+            loteCodigo: "LOT-2026-001",
+            estado: "rechazada",
+            destinoRecomendadoId: 1,
+            destinoRecomendadoNombre: "Queso",
+            destinoRealId: 2,
+            destinoRealNombre: "Yogur",
+            confianza: 87,
+            justificacion: "El proveedor informó menor contenido de grasa al ingreso.",
+            usuarioId: 3,
+            createdAt: "2026-09-01T11:00:00.000Z",
+            respondidaEn: "2026-09-01T12:00:00.000Z",
+          },
+        ]),
+      });
+    });
+    await mockRecomendacionPendiente(page, null);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Divergencia justificada respecto a la recomendación")).toBeVisible();
+    await expect(dialog.locator("textarea")).not.toBeVisible();
+    await expect(dialog.getByRole("button", { name: /editar|modificar/i })).not.toBeVisible();
+  });
+});
+
 test.describe("HU-34 — restricción de rol sobre edición de lote", () => {
   test("administrador no ve el botón Editar lote", async ({ page }) => {
     await mockLotesDeps(page);
