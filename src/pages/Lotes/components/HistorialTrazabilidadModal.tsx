@@ -3,6 +3,8 @@ import {
   ArrowRightLeft,
   CheckCircle2,
   ClipboardCheck,
+  Download,
+  GitBranch,
   HelpCircle,
   MapPin,
   PackagePlus,
@@ -11,11 +13,16 @@ import {
 import { Modal } from "../../../components/ui/Modal";
 import { Badge } from "../../../components/ui/Badge";
 import { ClasificacionLoteBadge } from "../../../components/ClasificacionLoteBadge";
+import { SectionHeader } from "../../../components/ui/SectionHeader";
 import { useTrazabilidadLote } from "../../../hooks/useTrazabilidadLote";
+import { useDestinoProductivoLote } from "../../../hooks/useDestinoProductivoLote";
+import { exportarTrazabilidadCsv } from "../../../utils/exportarTrazabilidadCsv";
+import { formatearNumeroRemito } from "../../../utils/numeroRemito";
 import { TIPO_MATERIA_PRIMA_TABS } from "../../Configuracion/constants/parametrosCalidad";
 import { UBICACION_LABEL } from "../../Sensores/constants/parametroSensor";
 import { UNIDAD_RENDIMIENTO_SIMBOLO } from "../constants/unidadRendimiento";
 import { ClasificacionLote, DecisionRevision, UnidadRendimiento } from "../../../types/lote.types";
+import type { Lote } from "../../../types/lote.types";
 import type { TipoMateriaPrima } from "../../../types/configParametro.types";
 import { Ubicacion } from "../../../types/sensor.types";
 import { TipoEventoTrazabilidad, type EventoTrazabilidad } from "../../../types/trazabilidad.types";
@@ -48,6 +55,10 @@ const TIPO_EVENTO_META: Record<TipoEventoTrazabilidad, { label: string; icon: Lu
     icon: ArrowRightLeft,
   },
   [TipoEventoTrazabilidad.FINALIZACION]: { label: "Finalización", icon: CheckCircle2 },
+  [TipoEventoTrazabilidad.RECOMENDACION_DESTINO]: {
+    label: "Recomendación de destino",
+    icon: GitBranch,
+  },
 };
 const TIPO_EVENTO_FALLBACK = { label: "Evento", icon: HelpCircle };
 
@@ -138,6 +149,40 @@ function DetalleEvento({ evento }: { evento: EventoTrazabilidad }) {
         </p>
       );
     }
+    case TipoEventoTrazabilidad.RECOMENDACION_DESTINO: {
+      const destinoRecomendadoNombre = d.destinoRecomendadoNombre as string | undefined;
+      const destinoRealNombre = d.destinoRealNombre as string | null | undefined;
+      const divergencia = d.divergencia as boolean | undefined;
+      const justificacion = d.justificacion as string | null | undefined;
+      const usuarioId = d.usuarioId as number | null | undefined;
+      return (
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Recomendado:{" "}
+            <strong className="text-slate-700 dark:text-slate-300">
+              {destinoRecomendadoNombre ?? "—"}
+            </strong>
+            {" · "}Elegido:{" "}
+            <strong className="text-slate-700 dark:text-slate-300">
+              {destinoRealNombre ?? "—"}
+            </strong>
+          </p>
+          {divergencia && <Badge variant="warning">Divergencia justificada</Badge>}
+          {justificacion && (
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Justificación: {justificacion}
+            </p>
+          )}
+          {usuarioId != null && (
+            // TODO(backend): el evento solo trae usuarioId numérico (ver
+            // lote-trazabilidad.service.ts) — pedir que resuelva a nombre o
+            // email, igual que ya se muestra en otros eventos del
+            // historial. No disimular con un fallback mientras tanto.
+            <p className="text-xs text-slate-400 dark:text-slate-500">Usuario ID: {usuarioId}</p>
+          )}
+        </div>
+      );
+    }
     default:
       return null;
   }
@@ -146,6 +191,13 @@ function DetalleEvento({ evento }: { evento: EventoTrazabilidad }) {
 interface HistorialTrazabilidadModalProps {
   isOpen: boolean;
   loteId: number | null;
+  // HU-69/HU-36: para mostrar proveedor/tambo y armar el nombre del CSV
+  // exportado (el remito en sí sale de `eventos`, no de acá — ver más abajo).
+  // Puede llegar null en el instante entre "se cerró el lote seleccionado" y
+  // "se cerró el modal" (mismo patrón que TrazabilidadLoteModal).
+  lote: Lote | null;
+  proveedorMap: Map<number, string>;
+  tamboMap: Map<number, string>;
   onClose: () => void;
 }
 
@@ -156,9 +208,47 @@ interface HistorialTrazabilidadModalProps {
 export function HistorialTrazabilidadModal({
   isOpen,
   loteId,
+  lote,
+  proveedorMap,
+  tamboMap,
   onClose,
 }: HistorialTrazabilidadModalProps) {
   const { eventos, codigoLote, isLoading, error, refetch } = useTrazabilidadLote(loteId);
+  const { historial: historialDestino, destinoVigente } = useDestinoProductivoLote(loteId);
+
+  const nombreProveedor = lote ? (proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`) : "—";
+  const nombreTambo = lote ? (tamboMap.get(lote.tamboId) ?? `Tambo #${lote.tamboId}`) : "—";
+
+  // HU-69 (AC2): viene en el evento RECEPCION de GET /lotes/:id/trazabilidad
+  // (eventos[].detalle.numeroRemito, ver lote-trazabilidad.service.ts en el
+  // backend) — no es un campo top-level de la respuesta. Se lee de acá y no
+  // de `lote.numeroRemito` para no depender de esa prop, que puede llegar
+  // desactualizada respecto de `loteId` (ver el comentario de la prop más
+  // abajo). 'S/D' es el backfill de la migración, no un remito real (ver
+  // utils/numeroRemito.ts) — se muestra igual que la ausencia de dato.
+  const eventoRecepcion = eventos.find((e) => e.tipo === TipoEventoTrazabilidad.RECEPCION);
+  const numeroRemito = eventoRecepcion?.detalle.numeroRemito as string | undefined;
+
+  const handleExportar = () => {
+    if (!lote) return;
+    const fecha = new Date().toISOString().slice(0, 10);
+    exportarTrazabilidadCsv({
+      codigoLote: lote.codigo,
+      proveedor: nombreProveedor,
+      tambo: nombreTambo,
+      numeroRemito,
+      eventos,
+      nombreArchivo: `trazabilidad-${lote.codigo}-${fecha}.csv`,
+    });
+  };
+
+  // HU-34: acá solo interesan las asignaciones manuales — las de origen
+  // "recomendacion_ml" (aceptadas o con divergencia) ya se muestran en el
+  // timeline real como evento RECOMENDACION_DESTINO (HU-37), listarlas
+  // también acá sería duplicar el mismo dato. El backend ya devuelve
+  // historialDestino ordenado del más nuevo al más viejo, no hace falta
+  // revertir el array.
+  const asignacionesManuales = historialDestino.filter((h) => h.origen === "manual");
 
   if (!isOpen) return null;
 
@@ -169,6 +259,87 @@ export function HistorialTrazabilidadModal({
       description={codigoLote ?? undefined}
       onClose={onClose}
     >
+      <div className="mb-6 flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <SectionHeader>DATOS DE INGRESO</SectionHeader>
+          <button
+            type="button"
+            onClick={handleExportar}
+            disabled={!lote || isLoading}
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <Download className="h-3.5 w-3.5" /> Exportar CSV
+          </button>
+        </div>
+        {/* HU-69: mismo estilo de tarjetas que "DATOS DE INGRESO" en
+            TrazabilidadLoteModal — proveedor y tambo de origen ya existían en
+            el lote, acá se suman para dar contexto junto al remito nuevo. */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="flex flex-col gap-1 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Proveedor</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">{nombreProveedor}</p>
+          </div>
+          <div className="flex flex-col gap-1 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Tambo de origen</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">{nombreTambo}</p>
+          </div>
+          <div className="flex flex-col gap-1 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Nº de remito</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">
+              {formatearNumeroRemito(numeroRemito)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* HU-34/HU-37: destino vigente + asignaciones manuales, aparte del
+          timeline real de arriba — GET /lotes/:id/destino-productivo/historial
+          (ver useDestinoProductivoLote.ts). Las de origen "recomendacion_ml"
+          no se listan acá (ver el comentario de asignacionesManuales). */}
+      {destinoVigente && (
+        <div className="mb-6 flex flex-col gap-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+          <SectionHeader>DESTINO PRODUCTIVO</SectionHeader>
+          <p className="text-sm text-slate-700 dark:text-slate-300">
+            Destino vigente:{" "}
+            <strong className="text-slate-900 dark:text-white">
+              {destinoVigente.destinoActualNombre}
+            </strong>
+          </p>
+          {asignacionesManuales.length > 0 && (
+            <ol className="flex flex-col gap-3">
+              {asignacionesManuales.map((cambio) => (
+                <li key={cambio.id} className="flex items-start gap-3">
+                  <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    <GitBranch className="h-4 w-4" />
+                  </span>
+                  <div className="flex flex-1 flex-col gap-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        {cambio.destinoAnteriorNombre ? (
+                          <>
+                            <strong>{cambio.destinoAnteriorNombre}</strong> →{" "}
+                          </>
+                        ) : null}
+                        <strong>{cambio.destinoProductivoNombre}</strong>
+                      </p>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                        {formatFecha(cambio.createdAt)}
+                      </span>
+                    </div>
+                    {/* TODO(backend): igual que en RECOMENDACION_DESTINO más
+                        abajo, solo llega usuarioId numérico — no disimular
+                        con un fallback. */}
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Usuario ID: {cambio.usuarioId}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
           <span>{error}</span>

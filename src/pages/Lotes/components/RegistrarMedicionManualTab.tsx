@@ -11,7 +11,10 @@ import { Parametro } from "../../../types/configParametro.types";
 import { EstadoLectura } from "../../../types/historialMediciones.types";
 import type { MedicionManualItem } from "../../../types/medicionManual.types";
 import type { Lote } from "../../../types/lote.types";
-import { PARAMETRO_LABEL, UNIDAD_POR_PARAMETRO } from "../../Sensores/constants/parametroSensor";
+import {
+  PARAMETRO_LABEL,
+  UNIDAD_POR_PARAMETRO,
+} from "../../Sensores/constants/parametroSensor";
 
 const ESTADO_LABEL: Record<EstadoLectura, string> = {
   [EstadoLectura.NORMAL]: "Normal",
@@ -19,11 +22,12 @@ const ESTADO_LABEL: Record<EstadoLectura, string> = {
   [EstadoLectura.SIN_UMBRAL_CONFIGURADO]: "Sin umbral configurado",
 };
 
-const ESTADO_VARIANT: Record<EstadoLectura, "success" | "danger" | "warning"> = {
-  [EstadoLectura.NORMAL]: "success",
-  [EstadoLectura.FUERA_DE_RANGO]: "danger",
-  [EstadoLectura.SIN_UMBRAL_CONFIGURADO]: "warning",
-};
+const ESTADO_VARIANT: Record<EstadoLectura, "success" | "danger" | "warning"> =
+  {
+    [EstadoLectura.NORMAL]: "success",
+    [EstadoLectura.FUERA_DE_RANGO]: "danger",
+    [EstadoLectura.SIN_UMBRAL_CONFIGURADO]: "warning",
+  };
 
 type ValoresForm = Partial<Record<Parametro, string>>;
 
@@ -31,10 +35,14 @@ interface RegistrarMedicionManualTabProps {
   lote: Lote;
 }
 
-export function RegistrarMedicionManualTab({ lote }: RegistrarMedicionManualTabProps) {
+export function RegistrarMedicionManualTab({
+  lote,
+}: RegistrarMedicionManualTabProps) {
   const [tipoMateriaPrima, setTipoMateriaPrima] = useState(lote.materiaPrima);
   const [valores, setValores] = useState<ValoresForm>({});
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<Parametro, string>>>({});
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<Parametro, string>>
+  >({});
   const [formError, setFormError] = useState("");
   const [serverError, setServerError] = useState("");
   const [resultado, setResultado] = useState<MedicionManualItem[] | null>(null);
@@ -88,7 +96,10 @@ export function RegistrarMedicionManualTab({ lote }: RegistrarMedicionManualTabP
       setValores({});
     } catch (err) {
       setServerError(
-        extraerMensajeError(err, "No se pudo registrar la medición manual. Intentá nuevamente."),
+        extraerMensajeError(
+          err,
+          "No se pudo registrar la medición manual. Intentá nuevamente.",
+        ),
       );
     }
   };
@@ -97,14 +108,17 @@ export function RegistrarMedicionManualTab({ lote }: RegistrarMedicionManualTabP
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         <SectionHeader>TIPO DE MATERIA PRIMA</SectionHeader>
-        <TipoMateriaPrimaSelector value={tipoMateriaPrima} onChange={setTipoMateriaPrima} />
+        <TipoMateriaPrimaSelector
+          value={tipoMateriaPrima}
+          onChange={setTipoMateriaPrima}
+        />
       </div>
 
       <div className="flex flex-col gap-3">
         <SectionHeader>PARÁMETROS MEDIDOS</SectionHeader>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Completá los parámetros que hayas medido manualmente. Los que sean obligatorios para
-          este tipo de materia prima se validan al guardar.
+          Completá los parámetros que hayas medido manualmente. Los que sean
+          obligatorios para este tipo de materia prima se validan al guardar.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {Object.values(Parametro).map((parametro) => {
@@ -151,11 +165,17 @@ export function RegistrarMedicionManualTab({ lote }: RegistrarMedicionManualTabP
           <SectionHeader>MEDICIÓN REGISTRADA</SectionHeader>
           <ul className="flex flex-col gap-2">
             {resultado.map((item) => (
-              <li key={item.id} className="flex items-center justify-between text-sm">
+              <li
+                key={item.id}
+                className="flex items-center justify-between text-sm"
+              >
                 <span className="text-slate-700 dark:text-slate-300">
-                  {PARAMETRO_LABEL[item.parametro] ?? item.parametro}: {item.valor}
+                  {PARAMETRO_LABEL[item.parametro] ?? item.parametro}:{" "}
+                  {item.valor}
                 </span>
-                <Badge variant={ESTADO_VARIANT[item.estado]}>{ESTADO_LABEL[item.estado]}</Badge>
+                <Badge variant={ESTADO_VARIANT[item.estado]}>
+                  {ESTADO_LABEL[item.estado]}
+                </Badge>
               </li>
             ))}
           </ul>

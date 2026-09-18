@@ -35,6 +35,22 @@ async function mockPlcDeps(
     });
   });
 
+  // FloatingDictadoVozButton (Layout) crashea si lotes devuelve [] plano:
+  // loteService.getAll() hace return data.data → undefined → useMemo crash.
+  await page.route("**/lotes*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: [],
+        meta: { page: 1, limit: 100, total: 0, totalPages: 1 },
+      }),
+    });
+  });
+
   // Estabiliza EmpresaContext (mismo criterio que configuracion.spec.ts)
   await page.route("**/empresa/me", async (route) => {
     const rt = route.request().resourceType();

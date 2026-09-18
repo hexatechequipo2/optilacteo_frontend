@@ -14,6 +14,7 @@ import type {
 import type { ComparacionHistoricaLote } from "../types/comparacionHistorica.types";
 import type { DesvioProveedorLote } from "../types/desvioProveedor.types";
 import type { TrazabilidadLoteResponse } from "../types/trazabilidad.types";
+import type { DestinoHistorialItem } from "../types/destinoProductivoHistorial.types";
 
 // El backend valida existencia del proveedor, rangos de parámetros y unicidad
 // del código directamente (404/400/409 con mensaje); no hace falta duplicar
@@ -110,6 +111,30 @@ export const loteService = {
   // useTrazabilidadLote).
   getTrazabilidad: async (id: number): Promise<TrazabilidadLoteResponse> => {
     const { data } = await api.get<TrazabilidadLoteResponse>(`/lotes/${id}/trazabilidad`);
+    return data;
+  },
+
+  // HU-34/HU-37: historial unificado de cambios de destino productivo
+  // (asignación manual o resultado de responder una recomendación ML), ya
+  // ordenado por el backend del más reciente al más viejo — el primer
+  // elemento es siempre el destino vigente. Reemplaza los mocks en
+  // localStorage (useDestinoProductivoManual / useDestinoProductivoRecomendacion).
+  getHistorialDestino: async (id: number): Promise<DestinoHistorialItem[]> => {
+    const { data } = await api.get<DestinoHistorialItem[]>(
+      `/lotes/${id}/destino-productivo/historial`,
+    );
+    return data;
+  },
+
+  // HU-34 AC1/AC3: asignación o cambio manual del destino productivo,
+  // independiente de aceptar/rechazar una recomendación ML (eso va por
+  // recomendacionService.responder). El backend responde 400 si el lote ya
+  // está finalizado/rechazado y 404 si el destino no existe, no está activo
+  // o es de otra empresa.
+  asignarDestinoProductivo: async (id: number, destinoProductivoId: number): Promise<Lote> => {
+    const { data } = await api.patch<Lote>(`/lotes/${id}/destino-productivo`, {
+      destinoProductivoId,
+    });
     return data;
   },
 };

@@ -18,9 +18,28 @@ export const TipoNotificacion = {
   // y genera esta alerta para cada destinatario configurado en nivel CRITICA
   // (misma tabla que ya administra DestinatariosAlertasPage, HU-26/29).
   ALERTA_SENSOR_DESCONECTADO: "alerta_sensor_desconectado",
+  // HU-50: el backend consulta al microservicio ML (AnomaliaService.evaluarAnomalia,
+  // llamado best-effort desde el registro de cada medición) y genera esta
+  // alerta cuando detecta un patrón inusual — a diferencia de ALERTA_UMBRAL,
+  // no depende de un umbral configurado sino de un modelo entrenado. Nunca
+  // trae nivelAlerta ni data.valor/umbralMin/umbralMax (ver AlertaAnomaliaData
+  // más abajo): es una forma de datos distinta, no una variante de alerta_umbral.
+  ALERTA_ANOMALIA: "alerta_anomalia",
 } as const;
 
 export type TipoNotificacion = (typeof TipoNotificacion)[keyof typeof TipoNotificacion];
+
+// HU-50: tipo de desvío detectado por el modelo ML de anomalías (ver
+// enums/tipo-desvio-anomalia.enum.ts, backend). Solo se completa para
+// notificaciones de tipo ALERTA_ANOMALIA.
+export const TipoDesvioAnomalia = {
+  PICO: "pico",
+  TENDENCIA: "tendencia",
+  VARIANZA_ATIPICA: "varianza_atipica",
+  NIVEL_ATIPICO: "nivel_atipico",
+} as const;
+
+export type TipoDesvioAnomalia = (typeof TipoDesvioAnomalia)[keyof typeof TipoDesvioAnomalia];
 
 // Severidad del desvío respecto al umbral configurado (nivelAlerta en el
 // backend). Solo se completa para tipo ALERTA_UMBRAL — el resto de
@@ -40,9 +59,15 @@ export type NivelAlerta = (typeof NivelAlerta)[keyof typeof NivelAlerta];
 // optilacteo-backend). Opcional/nullable en Notificacion porque solo se
 // completa para tipo ALERTA_UMBRAL — el resto de notificaciones (ej.
 // lote_no_apto) lo dejan null/undefined, igual que nivelAlerta arriba.
+// HU-50 criterio 4: solo se llega a este estado marcando una alerta_anomalia
+// como falso positivo (PATCH /notificaciones/:id/falso-positivo, endpoint
+// separado de /resolver — ver NotificacionesService.marcarFalsoPositivo en
+// el backend). El backend exige que la alerta esté ABIERTA para permitir la
+// transición; una vez en FALSO_POSITIVO no hay forma de revertirla.
 export const EstadoAlerta = {
   ABIERTA: "abierta",
   CERRADA: "cerrada",
+  FALSO_POSITIVO: "falso_positivo",
 } as const;
 
 export type EstadoAlerta = (typeof EstadoAlerta)[keyof typeof EstadoAlerta];
@@ -58,14 +83,23 @@ export interface Notificacion {
   accionCorrectiva?: string | null;
   fechaResolucion?: string | null;
   // NotificacionMapper.toResponse (backend) siempre manda estos 4 campos a
-  // nivel raíz, no solo para ALERTA_UMBRAL/ALERTA_SENSOR_DESCONECTADO — para
-  // el resto de tipos (ej. lote_no_apto) quedan en null. loteId/loteCodigo/
-  // parametro solo se completan para ALERTA_UMBRAL; sensorId solo para
-  // ALERTA_SENSOR_DESCONECTADO (HU-31).
+  // nivel raíz, no solo para ALERTA_UMBRAL/ALERTA_SENSOR_DESCONECTADO/
+  // ALERTA_ANOMALIA — para el resto de tipos (ej. lote_no_apto) quedan en
+  // null. loteId/loteCodigo/parametro se completan para ALERTA_UMBRAL y
+  // ALERTA_ANOMALIA (ver AnomaliaService.evaluarAnomalia, backend); sensorId
+  // solo para ALERTA_SENSOR_DESCONECTADO (HU-31).
   loteId?: number | null;
   loteCodigo?: string | null;
   parametro?: string | null;
   sensorId?: number | null;
+  // HU-50: NotificacionMapper.toResponse (backend) manda estos 5 campos a
+  // nivel raíz para toda notificación, igual que nivelAlerta/estado arriba —
+  // solo se completan (no quedan null) para tipo ALERTA_ANOMALIA.
+  tipoDesvio?: TipoDesvioAnomalia | null;
+  confianza?: number | null;
+  modeloVersion?: string | null;
+  marcadaFalsoPositivoPorId?: number | null;
+  fechaMarcadoFalsoPositivo?: string | null;
   leida: boolean;
   createdAt: string;
 }
@@ -162,6 +196,49 @@ export function esAlertaSensorDesconectado(
   return (
     n.tipo === TipoNotificacion.ALERTA_SENSOR_DESCONECTADO && n.nivelAlerta != null && n.data != null
   );
+}
+
+// HU-50: forma real de `data` cuando tipo === ALERTA_ANOMALIA (ver
+// AnomaliaService.evaluarAnomalia, backend). A diferencia de AlertaUmbralData,
+// no hay valor/umbralMin/umbralMax/desvioPorcentaje/nivelAlerta — el modelo
+// ML no compara contra un umbral configurado, así que esos campos no
+// existen para este tipo (queda fuera de alcance el gráfico de serie
+// histórica que mostraría el patrón detectado: el DTO no expone ninguna
+// serie, solo el resultado puntual de la detección).
+export interface AlertaAnomaliaData {
+  [key: string]: unknown;
+  loteId: number;
+  loteCodigo: string;
+  parametro: Parametro;
+  tipoDesvio: TipoDesvioAnomalia;
+  confianza: number;
+  modeloVersion: string;
+}
+
+// Vista angosta de Notificacion para HU-50: mismo criterio que
+// AlertaSensorDesconectadoNotificacion (HU-31) arriba — tipo estructuralmente
+// distinto a AlertaNotificacion (alerta_umbral), no una variante con
+// tipoDesvio encima. Nunca trae nivelAlerta (el backend no lo setea para
+// este tipo, ver NotificacionMapper.toEntity/AnomaliaService).
+export interface AlertaAnomaliaNotificacion extends Notificacion {
+  tipo: typeof TipoNotificacion.ALERTA_ANOMALIA;
+  tipoDesvio: TipoDesvioAnomalia;
+  confianza: number;
+  modeloVersion: string;
+  data: AlertaAnomaliaData;
+  estado: EstadoAlerta;
+  // Nunca se completa para este tipo (no pasa por el flujo de accionCorrectiva
+  // de HU-27, ver comentario en AlertaAnomaliaConCierre) — se narrowea a
+  // requerido igual que en AlertaNotificacion/AlertaSensorDesconectadoNotificacion
+  // solo para que CierreAlerta ("accionCorrectiva: string | null") no choque
+  // con el opcional heredado de Notificacion.
+  accionCorrectiva: string | null;
+  marcadaFalsoPositivoPorId: number | null;
+  fechaMarcadoFalsoPositivo: string | null;
+}
+
+export function esAlertaAnomalia(n: Notificacion): n is AlertaAnomaliaNotificacion {
+  return n.tipo === TipoNotificacion.ALERTA_ANOMALIA && n.tipoDesvio != null && n.data != null;
 }
 
 // GET /notificaciones ahora pagina (NotificacionPaginadaResponseDto en el

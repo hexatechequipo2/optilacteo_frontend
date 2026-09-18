@@ -9,6 +9,7 @@ export type ModuloSistema =
   | "asistente_voz";
 
 export interface PermisoType {
+  id:number;
   modulo: ModuloSistema;
   canRead: boolean;
   canWrite: boolean;
@@ -26,4 +27,15 @@ export interface UpdatePermisoDto {
   modulo: ModuloSistema;
   canRead: boolean;
   canWrite: boolean;
+}
+
+export interface PermisoActualizadoType {
+  id: number;
+  modulo: ModuloSistema;
+  canRead: boolean;
+  canWrite: boolean;
+  rol: {
+    id: number;
+    nombre: string;
+  };
 }

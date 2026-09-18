@@ -5,11 +5,14 @@ import { Button } from "../../components/ui/Button";
 import { Tabs } from "../../components/ui/Tabs";
 import { useDashboardProduccion } from "../../hooks/useDashboardProduccion";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
+import { useAuth } from "../../hooks/useAuth";
 import type { FiltroPeriodoDashboard } from "../../types/dashboardProduccion.types";
 import { MetricaCard } from "./components/MetricaCard";
 import { LotesProcesadosChart } from "./components/LotesProcesadosChart";
 import { LineaCalidadPanel } from "./components/LineaCalidadPanel";
 import { ReporteProduccionPDF } from "./components/ReporteProduccionPDF";
+import { PrediccionVolumenSemanalCard } from "./components/PrediccionVolumenSemanalCard";
+import { EvolucionIndicadoresPanel } from "./components/EvolucionIndicadoresPanel";
 
 const HOY = new Date().toLocaleDateString("es-AR", {
   weekday: "long",
@@ -49,6 +52,13 @@ function segundosDesde(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
 }
 
+// HU-51: el backend habilita esta sección a Responsable de producción,
+// Gerente y Administrador (@Roles en PrediccionVolumenController) — acá
+// solo hace falta cubrir los dos primeros porque son los únicos roles que
+// llegan a esta pantalla (ver allowedRoles en App.tsx; Administrador no
+// tiene ruta a este dashboard).
+const ROLES_CON_PREDICCION_VOLUMEN = ["responsable de producción", "gerente"];
+
 // HU-38: pantalla de inicio del rol "Responsable de producción" ("jefe de
 // producción" en el backlog). AC1+AC3: métricas del día con tendencia. AC2:
 // auto-refresh sin recarga manual (useDashboardProduccion hace polling).
@@ -59,7 +69,14 @@ export default function DashboardProduccionPage() {
   const { resumen, historico, isLoading, error, filtro, setFiltro, refetch } =
     useDashboardProduccion();
   const { empresa } = useEmpresaActual();
+  const { user } = useAuth();
   const [, forceTick] = useState(0);
+
+  // Comparación normalizada, mismo criterio que el resto de los checks por
+  // rol en LotesPage.tsx.
+  const puedeVerPrediccionVolumen = ROLES_CON_PREDICCION_VOLUMEN.includes(
+    (user?.rolNombre ?? "").trim().toLowerCase(),
+  );
 
   // Recalcula el texto "actualizado hace Xs" cada segundo sin re-pedir datos.
   useEffect(() => {
@@ -143,6 +160,22 @@ export default function DashboardProduccionPage() {
                 {FILTRO_LABEL[filtro]}
               </p>
               <LotesProcesadosChart datos={historico?.puntos ?? []} />
+            </div>
+
+            {puedeVerPrediccionVolumen && (
+              <div className="mt-6">
+                <PrediccionVolumenSemanalCard />
+              </div>
+            )}
+
+            {/* HU-39: mismo trío de roles que ya gatea esta página
+                (Responsable de producción + Gerente, vía allowedRoles en
+                App.tsx) coincide con los @Roles de
+                GET /dashboard/indicadores/evolucion — a diferencia de
+                PrediccionVolumenSemanalCard de arriba, no hace falta un
+                gating adicional por rol acá. */}
+            <div className="mt-6">
+              <EvolucionIndicadoresPanel />
             </div>
           </div>
 

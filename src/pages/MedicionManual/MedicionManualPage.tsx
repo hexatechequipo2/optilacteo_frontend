@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import { Mic } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Tabs } from "../../components/ui/Tabs";
 import { LoteActivoSelector } from "../../components/LoteActivoSelector";
 import { useLotes } from "../../hooks/useLotes";
+import { useLoteContexto } from "../../hooks/useLoteContexto";
 import { useSensores } from "../../hooks/useSensores";
 import { EstadoLote } from "../../types/lote.types";
 import { RegistrarMedicionManualTab } from "../Lotes/components/RegistrarMedicionManualTab";
 import { HistorialMedicionesManualesTab } from "../Lotes/components/HistorialMedicionesManualesTab";
+import { DictadoVozFlow } from "./components/DictadoVozFlow";
 
 type TabMedicionManual = "registro" | "historial";
 
@@ -18,14 +21,28 @@ const TABS: { value: TabMedicionManual; label: string }[] = [
 export default function MedicionManualPage() {
   const { lotes, isLoading, error, refetch } = useLotes();
   const { sensores } = useSensores();
-  const [loteSeleccionadoId, setLoteSeleccionadoId] = useState<number | null>(null);
+  const { setLoteEnContexto } = useLoteContexto();
+  const [loteSeleccionadoId, setLoteSeleccionadoId] = useState<number | null>(
+    null,
+  );
   const [tabActiva, setTabActiva] = useState<TabMedicionManual>("registro");
+
+  // HU-55: dictado por voz conectado a la Web Speech API y al backend real
+  // (ver DictadoVozFlow). Feedback de Jimena tras el primer merge del mock:
+  // el botón tiene que ser visible y prominente (antes era chico, al lado
+  // de "Parámetros medidos"), no depender de la pestaña "Registrar medición".
+  const [dictadoVozAbierto, setDictadoVozAbierto] = useState(false);
 
   // HU-20 es respaldo TOTAL: solo aplica a lotes sin ningún sensor asociado
   // (si tiene uno, corresponde HU-15, ingreso manual por sensor puntual).
   // Mismo criterio que LotesPage.tsx / LoteMedicionesModal.tsx.
   const lotesConSensorAsociado = useMemo(
-    () => new Set(sensores.filter((s) => s.loteActualId != null).map((s) => s.loteActualId)),
+    () =>
+      new Set(
+        sensores
+          .filter((s) => s.loteActualId != null)
+          .map((s) => s.loteActualId),
+      ),
     [sensores],
   );
 
@@ -36,7 +53,8 @@ export default function MedicionManualPage() {
     () =>
       lotes.filter(
         (lote) =>
-          (lote.estado === EstadoLote.REGISTRADO || lote.estado === EstadoLote.EN_PROCESO) &&
+          (lote.estado === EstadoLote.REGISTRADO ||
+            lote.estado === EstadoLote.EN_PROCESO) &&
           !lotesConSensorAsociado.has(lote.id),
       ),
     [lotes, lotesConSensorAsociado],
@@ -46,13 +64,26 @@ export default function MedicionManualPage() {
   // un sensor, etc.), volvemos a auto-seleccionar en vez de dejar la
   // pantalla apuntando a un lote fantasma.
   useEffect(() => {
-    if (loteSeleccionadoId != null && lotesElegibles.some((l) => l.id === loteSeleccionadoId)) {
+    if (
+      loteSeleccionadoId != null &&
+      lotesElegibles.some((l) => l.id === loteSeleccionadoId)
+    ) {
       return;
     }
     setLoteSeleccionadoId(lotesElegibles[0]?.id ?? null);
   }, [lotesElegibles, loteSeleccionadoId]);
 
-  const loteSeleccionado = lotesElegibles.find((l) => l.id === loteSeleccionadoId) ?? null;
+  const loteSeleccionado =
+    lotesElegibles.find((l) => l.id === loteSeleccionadoId) ?? null;
+
+  // HU-55 (botón flotante global): mientras esta pantalla ya tiene un lote
+  // elegido, el botón fijo de dictado (ver FloatingDictadoVozButton, montado
+  // en Layout) lo usa directo, sin volver a mostrar su propio selector. Se
+  // limpia al desmontar para no arrastrar este lote a otra pantalla.
+  useEffect(() => {
+    setLoteEnContexto(loteSeleccionado);
+    return () => setLoteEnContexto(null);
+  }, [loteSeleccionado, setLoteEnContexto]);
 
   return (
     <Layout breadcrumb="Consola > Medición manual">
@@ -61,8 +92,24 @@ export default function MedicionManualPage() {
           Medición manual
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Respaldo total para cargar parámetros de calidad cuando el lote no tiene sensores
-          asociados.
+          Respaldo total para cargar parámetros de calidad cuando el lote no
+          tiene sensores asociados.
+        </p>
+      </div>
+
+      <div className="mb-6 flex flex-col items-start gap-2">
+        <button
+          type="button"
+          onClick={() => setDictadoVozAbierto(true)}
+          disabled={!loteSeleccionado}
+          className="flex items-center gap-2 rounded-xl bg-[#3d6fcf] px-6 py-3 text-base font-semibold text-white shadow-md transition hover:bg-[#3460b5] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Mic className="h-5 w-5" /> Dictar valores
+        </button>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {loteSeleccionado
+            ? "Modo alternativo, con las manos ocupadas. El formulario de abajo sigue disponible para cargar a mano."
+            : "Elegí un lote de la lista de abajo para poder dictar sus valores."}
         </p>
       </div>
 
@@ -81,7 +128,9 @@ export default function MedicionManualPage() {
 
       {isLoading ? (
         <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16 dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Cargando lotes...</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Cargando lotes...
+          </p>
         </div>
       ) : lotesElegibles.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
@@ -89,8 +138,8 @@ export default function MedicionManualPage() {
             No hay lotes pendientes de medición manual
           </p>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Solo aparecen acá los lotes activos (registrado o en proceso) que todavía no tienen
-            un sensor asociado.
+            Solo aparecen acá los lotes activos (registrado o en proceso) que
+            todavía no tienen un sensor asociado.
           </p>
         </div>
       ) : (
@@ -117,6 +166,13 @@ export default function MedicionManualPage() {
           )}
         </div>
       )}
+
+      <DictadoVozFlow
+        isOpen={dictadoVozAbierto}
+        lotes={lotesElegibles}
+        loteInicial={loteSeleccionado}
+        onClose={() => setDictadoVozAbierto(false)}
+      />
     </Layout>
   );
 }

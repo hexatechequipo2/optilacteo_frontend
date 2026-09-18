@@ -38,9 +38,35 @@ const EMPRESAS_MOCK = {
 
 const ROLES_MOCK = [
   { id: 1, nombre: "Administrador", permisos: [] },
-  { id: 2, nombre: "Gerente", permisos: [] },
-  { id: 3, nombre: "Operador", permisos: [] },
-];
+  {
+    id: 2,
+    nombre: "Gerente",
+    permisos: [
+      { id: 201, modulo: "dashboard", canRead: false, canWrite: false },
+      { id: 202, modulo: "recepcion", canRead: false, canWrite: false },
+      { id: 203, modulo: "destino_productivo_ia", canRead: false, canWrite: false },
+      { id: 204, modulo: "monitoreo_alertas", canRead: false, canWrite: false },
+      { id: 205, modulo: "sensores_iot", canRead: false, canWrite: false },
+      { id: 206, modulo: "trazabilidad", canRead: false, canWrite: false },
+      { id: 207, modulo: "reportes_forecast", canRead: false, canWrite: false },
+      { id: 208, modulo: "asistente_voz", canRead: false, canWrite: false },
+    ],
+  },
+  {
+    id: 3,
+    nombre: "Operador",
+    permisos: [
+      { id: 301, modulo: "dashboard", canRead: false, canWrite: false },
+      { id: 302, modulo: "recepcion", canRead: false, canWrite: false },
+      { id: 303, modulo: "destino_productivo_ia", canRead: false, canWrite: false },
+      { id: 304, modulo: "monitoreo_alertas", canRead: false, canWrite: false },
+      { id: 305, modulo: "sensores_iot", canRead: false, canWrite: false },
+      { id: 306, modulo: "trazabilidad", canRead: false, canWrite: false },
+      { id: 307, modulo: "reportes_forecast", canRead: false, canWrite: false },
+      { id: 308, modulo: "asistente_voz", canRead: false, canWrite: false },
+    ],
+  },
+]; 
 
 async function mockUsuariosDeps(page: Page) {
   // Red de seguridad: cualquier otro request XHR/fetch que no matcheemos
@@ -54,6 +80,20 @@ async function mockUsuariosDeps(page: Page) {
       return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
     }
     return route.continue();
+  });
+
+  // loteService.getAll() hace return data.data (espera paginado). Si el
+  // catch-all devuelve "[]", data.data = undefined -> setLotes(undefined)
+  // -> useMemo en FloatingDictadoVozButton (HU-55) crashea con
+  // "Cannot read properties of undefined (reading 'filter')".
+  await page.route("**/lote*", async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: [], meta: { page: 1, limit: 100, total: 0, totalPages: 1 } }),
+    });
   });
 
   await page.route("**/user*", async (route) => {
@@ -713,34 +753,44 @@ test.describe("EditarUsuarioModal", () => {
 
 test.describe("MatrizPermisos", () => {
   test("cambiar el nivel de acceso de un módulo llama a updatePermiso", async ({ page }) => {
-    await mockUsuariosDeps(page);
-    await loginAsAdministrador(page);
+  await mockUsuariosDeps(page);
+  await loginAsAdministrador(page);
 
-    await page.route("**/rol/2/permisos", async (route) => {
-      if (route.request().method() !== "PATCH") return route.continue();
-      const payload = route.request().postDataJSON();
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          ...ROLES_MOCK[1],
-          permisos: [{ modulo: payload.modulo, canRead: payload.canRead, canWrite: payload.canWrite }],
-        }),
-      });
+  // El endpoint real es PATCH /permiso/:id (useRoles.updatePermiso → rol.service.updatePermiso).
+  // La respuesta debe tener { id, modulo, canRead, canWrite, rol: { id } } para que
+  // setRoles() en useRoles pueda hacer el merge local sin refetch.
+  await page.route("**/permiso/*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    const payload = route.request().postDataJSON();
+    const url = route.request().url();
+    const permisoId = parseInt(url.split("/").pop() ?? "0");
+    // IDs 200-299 → Gerente (id 2), IDs 300-399 → Operador (id 3)
+    const rolId = permisoId >= 300 ? 3 : 2;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: permisoId,
+        modulo: payload.modulo,
+        canRead: payload.canRead,
+        canWrite: payload.canWrite,
+        rol: { id: rolId },
+      }),
     });
-
-    await page.goto("/usuarios");
-
-    // Gerente (id 2) arranca en "Sin acceso" para Dashboard (permisos: []).
-    const boton = page.getByRole("button", { name: "Ver dashboard · Gerente · Sin acceso" });
-    await expect(boton).toBeVisible();
-    await boton.click();
-
-    // El ciclo pasa a "Solo ver" — el aria-label solo cambia una vez que
-    // onTogglePermiso (updatePermiso + merge de estado) resolvió.
-    await expect(
-      page.getByRole("button", { name: "Ver dashboard · Gerente · Solo ver" }),
-    ).toBeVisible();
   });
+
+  await page.goto("/usuarios");
+
+  // Gerente arranca en "Sin acceso" para Dashboard (canRead: false, canWrite: false).
+  const boton = page.getByRole("button", { name: "Ver dashboard · Gerente · Sin acceso" });
+  await expect(boton).toBeVisible();
+  await boton.click();
+
+  // El ciclo pasa a "Solo ver" — el aria-label cambia una vez que
+  // onTogglePermiso (updatePermiso + merge de estado local en useRoles) resolvió.
+  await expect(
+    page.getByRole("button", { name: "Ver dashboard · Gerente · Solo ver" }),
+  ).toBeVisible();
+});
 });
 });

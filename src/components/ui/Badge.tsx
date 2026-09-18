@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 
-type BadgeVariant = "success" | "warning" | "neutral" | "danger" | "info";
+export type BadgeVariant =
+  | "success"
+  | "warning"
+  | "neutral"
+  | "danger"
+  | "info";
 
 interface BadgeProps {
   variant?: BadgeVariant;
@@ -8,8 +13,10 @@ interface BadgeProps {
 }
 
 const VARIANT_CLASSES: Record<BadgeVariant, string> = {
-  success: "bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-400",
-  warning: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+  success:
+    "bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-400",
+  warning:
+    "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
   neutral: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
   danger: "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400",
   info: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400",

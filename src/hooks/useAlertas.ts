@@ -3,7 +3,12 @@ import { createSocket } from "../services/socket";
 import { notificacionService } from "../services/notificacion.service";
 import { alertaCierreService } from "../services/alertaCierre.service";
 import type { Notificacion } from "../types/notificacion.types";
-import { EstadoAlerta, esAlertaSensorDesconectado, esAlertaUmbral } from "../types/notificacion.types";
+import {
+  EstadoAlerta,
+  esAlertaSensorDesconectado,
+  esAlertaUmbral,
+  esAlertaAnomalia,
+} from "../types/notificacion.types";
 import type { AlertaConCierre } from "../types/alertaCierre.types";
 
 // HU-31: a diferencia de la creación (push por WS, evento "notificacion:nueva"),
@@ -24,6 +29,7 @@ interface UseAlertasResult {
   isRealtimeConnected: boolean;
   marcarLeida: (id: number) => Promise<void>;
   cerrarAlerta: (id: number, accionCorrectiva: string) => Promise<void>;
+  marcarFalsoPositivo: (id: number) => Promise<void>;
 }
 
 // HU-25: mismo patrón que useNotificaciones.ts (HU-21) — carga inicial por
@@ -160,13 +166,46 @@ export function useAlertas(): UseAlertasResult {
     [notificaciones],
   );
 
-  // HU-31: el listado ahora combina alerta_umbral (HU-25) y
-  // alerta_sensor_desconectado — AlertasPage.tsx decide con qué card/panel
-  // renderizar cada una según `alerta.tipo`.
+  // HU-50 criterio 4: marca una alerta_anomalia como falso positivo. Mismo
+  // criterio que cerrarAlerta arriba — marca leída primero (si no lo
+  // estaba) para que deje de requerir atención, y aborta si eso falla.
+  const marcarFalsoPositivo = useCallback(
+    async (id: number) => {
+      const notificacion = notificaciones.find((n) => n.id === id);
+      if (notificacion && !notificacion.leida) {
+        setNotificaciones((prev) => prev.map((n) => (n.id === id ? { ...n, leida: true } : n)));
+        try {
+          await notificacionService.marcarLeida(id);
+        } catch (err) {
+          setNotificaciones((prev) => prev.map((n) => (n.id === id ? { ...n, leida: false } : n)));
+          throw err;
+        }
+      }
+      const resultado = await alertaCierreService.marcarFalsoPositivo(id);
+      setNotificaciones((prev) =>
+        prev.map((n) =>
+          n.id === id
+            ? {
+                ...n,
+                estado: resultado.estado,
+                marcadaFalsoPositivoPorId: resultado.marcadaFalsoPositivoPorId,
+                fechaMarcadoFalsoPositivo: resultado.fechaMarcadoFalsoPositivo,
+              }
+            : n,
+        ),
+      );
+    },
+    [notificaciones],
+  );
+
+  // HU-31/50: el listado ahora combina alerta_umbral (HU-25),
+  // alerta_sensor_desconectado (HU-31) y alerta_anomalia (HU-50) —
+  // AlertasPage.tsx decide con qué card/panel renderizar cada una según
+  // `alerta.tipo`.
   const alertas = useMemo<AlertaConCierre[]>(
     () =>
       notificaciones
-        .filter((n) => esAlertaUmbral(n) || esAlertaSensorDesconectado(n))
+        .filter((n) => esAlertaUmbral(n) || esAlertaSensorDesconectado(n) || esAlertaAnomalia(n))
         .map((alerta) => ({
           ...alerta,
           cerradaEn: alerta.fechaResolucion ?? null,
@@ -174,5 +213,13 @@ export function useAlertas(): UseAlertasResult {
     [notificaciones],
   );
 
-  return { alertas, isLoading, error, isRealtimeConnected, marcarLeida, cerrarAlerta };
+  return {
+    alertas,
+    isLoading,
+    error,
+    isRealtimeConnected,
+    marcarLeida,
+    cerrarAlerta,
+    marcarFalsoPositivo,
+  };
 }

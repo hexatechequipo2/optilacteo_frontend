@@ -67,6 +67,13 @@ export interface Lote {
   ubicacionInicial?: Ubicacion | null;
   estado: EstadoLote;
   parametros: LoteParametro[];
+  // HU-69: número de remito del proveedor, obligatorio y columna NOT NULL
+  // en el backend (LoteResponseDto/LoteMapper) — nunca null ni undefined.
+  // OJO: en lotes creados antes de la migración de esta HU llega como 'S/D'
+  // (backfill de la migración, no un remito real) — usar tieneNumeroRemito/
+  // formatearNumeroRemito de utils/numeroRemito.ts para tratarlo como
+  // ausencia de dato en vez de mostrarlo tal cual.
+  numeroRemito: string;
   // HU-66: cantidad comprometida por el proveedor según remito. Nullable:
   // opcional si no se contaba con el remito al momento de la carga (AC4).
   cantidadComprometidaKg?: number | null;
@@ -98,6 +105,11 @@ export interface CreateLoteDto {
   // HU-68: obligatoria en el backend (CreateLoteDto.cantidad, @IsPositive).
   // Habilita el consumo parcial posterior (POST /lotes/:id/consumos).
   cantidad: number;
+  // HU-69 (AC1, AC3): obligatorio y validado por el backend con
+  // @Matches(/^[a-zA-Z0-9-]+$/) — alfanumérico, permite guiones (formato real
+  // de remito de proveedor, ej. '0001-00012345'). Inmutable una vez creado
+  // el lote: no existe en UpdateLoteDto.
+  numeroRemito: string;
   // HU-66: opcional (AC4) — cantidad comprometida por el proveedor según
   // remito, a nivel lote.
   cantidadComprometidaKg?: number;

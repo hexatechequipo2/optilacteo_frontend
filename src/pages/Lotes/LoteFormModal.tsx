@@ -1,15 +1,22 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { RadioCard } from "../../components/ui/RadioCard";
 import { SectionHeader } from "../../components/ui/SectionHeader";
 import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
-import { extraerMensajeError } from "../../services/lote.service";
-import { sensorService, extraerMensajeError as extraerMensajeErrorSensor } from "../../services/sensor.service";
+import { extraerMensajeError, loteService } from "../../services/lote.service";
+import {
+  sensorService,
+  extraerMensajeError as extraerMensajeErrorSensor,
+} from "../../services/sensor.service";
 import { useConfigParametros } from "../../hooks/useConfigParametros";
 import { useTambosPorProveedor } from "../../hooks/useTambos";
+import { useAuth } from "../../hooks/useAuth";
+import { RecomendacionDestinoCard } from "./components/RecomendacionDestinoCard";
+import { useCatalogoDestinosProductivos } from "../../hooks/useCatalogoDestinosProductivos";
+import { useDestinoProductivoLote } from "../../hooks/useDestinoProductivoLote";
+import { ROLES } from "../../constants/roles";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -22,6 +29,7 @@ import type { ConfigParametro } from "../../types/configParametro.types";
 import { Ubicacion, type Sensor } from "../../types/sensor.types";
 import {
   DestinoLote,
+  EstadoLote,
   type CreateLoteDto,
   type Lote,
   type LoteCreateResponse,
@@ -32,16 +40,44 @@ import type { Proveedor } from "../../types/proveedor.types";
 
 const UBICACION_OPTIONS = [
   { value: "", label: "Sin definir" },
-  ...Object.values(Ubicacion).map((u) => ({ value: u, label: UBICACION_LABEL[u] })),
+  ...Object.values(Ubicacion).map((u) => ({
+    value: u,
+    label: UBICACION_LABEL[u],
+  })),
 ];
+
+// HU-34: mismos roles que @Roles en lote.controller.ts para
+// PATCH /lotes/:id/destino-productivo. Si se abre este modal a un rol fuera
+// de esta lista, el selector queda deshabilitado en vez de dejar que el
+// PATCH le devuelva 403 sin explicación (ver puedeAsignarDestinoProductivo
+// más abajo). Hoy puedeEditarLote en LotesPage.tsx ya limita a Responsable
+// de calidad y Responsable de producción, ambos incluidos acá.
+const ROLES_CON_PERMISO_DESTINO_PRODUCTIVO: string[] = [
+  ROLES.RESPONSABLE_PRODUCCION,
+  ROLES.RESPONSABLE_CALIDAD,
+  ROLES.GERENTE,
+  ROLES.ADMINISTRADOR,
+];
+
+const DESTINO_LABEL: Record<DestinoLote, string> = {
+  [DestinoLote.PRODUCCION]: "Producción",
+  [DestinoLote.ALMACENAMIENTO]: "Almacenamiento",
+  [DestinoLote.TRATAMIENTO]: "Tratamiento",
+  [DestinoLote.DESCARTE]: "Descarte",
+};
 
 const DESTINO_OPTIONS = [
   { value: "", label: "Seleccioná un destino" },
-  { value: DestinoLote.PRODUCCION, label: "Producción" },
-  { value: DestinoLote.ALMACENAMIENTO, label: "Almacenamiento" },
-  { value: DestinoLote.TRATAMIENTO, label: "Tratamiento" },
-  { value: DestinoLote.DESCARTE, label: "Descarte" },
+  ...Object.values(DestinoLote).map((destino) => ({
+    value: destino,
+    label: DESTINO_LABEL[destino],
+  })),
 ];
+
+// HU-69 (AC3, Pantalla 9): "formato alfanumérico válido" — letras, números y
+// guiones, mismo ejemplo del prototipo ("R-000123"). Sin espacios ni otros
+// símbolos.
+const NUMERO_REMITO_REGEX = /^[A-Za-z0-9-]+$/;
 
 interface FormValues {
   proveedorId: string;
@@ -54,10 +90,17 @@ interface FormValues {
   parametros: Record<ParametroVisible, string>;
   destinoInicial: DestinoLote | "";
   ubicacionInicial: Ubicacion | "";
-  // HU-66: datos del remito, opcionales (AC4) — el lote se guarda igual sin
-  // ellos.
+  // HU-69 (AC1): obligatorio, a diferencia del resto de "datos del remito".
+  numeroRemito: string;
+  // HU-66: cantidad/calidad comprometidas, opcionales (AC4) — el lote se
+  // guarda igual sin ellas.
   cantidadComprometida: string;
   parametrosComprometidos: Record<ParametroVisible, string>;
+  // HU-34 (mock visual): destino productivo del catálogo configurable
+  // (queso, yogur, crema, etc.) — no confundir con `destinoInicial`, el
+  // enum fijo de arriba. Opcional acá, obligatorio recién para poder
+  // cerrar el ciclo del lote (ver botón "Cerrar ciclo del lote").
+  destinoProductivoId: number | "";
 }
 
 interface FormErrors {
@@ -68,6 +111,7 @@ interface FormErrors {
   destinoInicial?: string;
   parametros?: Partial<Record<ParametroVisible, string>>;
   parametrosGeneral?: string;
+  numeroRemito?: string;
   cantidadComprometida?: string;
   parametrosComprometidos?: Partial<Record<ParametroVisible, string>>;
 }
@@ -90,8 +134,10 @@ function buildInitialValues(lote?: Lote): FormValues {
       parametros: buildParametrosVacios(),
       destinoInicial: "",
       ubicacionInicial: "",
+      numeroRemito: "",
       cantidadComprometida: "",
       parametrosComprometidos: buildParametrosVacios(),
+      destinoProductivoId: "",
     };
   }
   return {
@@ -105,9 +151,17 @@ function buildInitialValues(lote?: Lote): FormValues {
     parametros: buildParametrosVacios(),
     destinoInicial: lote.destinoInicial ?? "",
     ubicacionInicial: lote.ubicacionInicial ?? "",
+    // HU-69: no aplica en edición, la sección "Datos del remito" solo se
+    // muestra al crear (ver !esEdicion más abajo).
+    numeroRemito: "",
     // HU-66: tampoco editable en PATCH /lotes/:id.
     cantidadComprometida: "",
     parametrosComprometidos: buildParametrosVacios(),
+    // HU-34/HU-37: el destino vigente se carga async (GET
+    // /lotes/:id/destino-productivo/historial, ver useDestinoProductivoLote)
+    // y se aplica una sola vez cuando llega — ver el efecto que sincroniza
+    // destinoHistorial más abajo. Acá arranca vacío.
+    destinoProductivoId: "",
   };
 }
 
@@ -119,18 +173,26 @@ function buscarConfig(
   parametro: ParametroVisible,
   materiaPrima: TipoMateriaPrima,
 ): ConfigParametro | undefined {
-  return configs.find((c) => c.parametro === parametro && c.tipoMateriaPrima === materiaPrima);
+  return configs.find(
+    (c) => c.parametro === parametro && c.tipoMateriaPrima === materiaPrima,
+  );
 }
 
-function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boolean): FormErrors {
+function validate(
+  values: FormValues,
+  configs: ConfigParametro[],
+  esEdicion: boolean,
+): FormErrors {
   const errors: FormErrors = {};
 
   if (!values.proveedorId) errors.proveedorId = "El proveedor es obligatorio";
   // HU-36 AC1/AC4: tambo de origen obligatorio, igual de estricto que
   // proveedorId (CreateLoteDto.tamboId en el backend no tiene @IsOptional).
   if (!values.tamboId) errors.tamboId = "El tambo de origen es obligatorio";
-  if (!values.fechaIngreso) errors.fechaIngreso = "La fecha de ingreso es obligatoria";
-  if (!values.destinoInicial) errors.destinoInicial = "El destino inicial es obligatorio";
+  if (!values.fechaIngreso)
+    errors.fechaIngreso = "La fecha de ingreso es obligatoria";
+  if (!values.destinoInicial)
+    errors.destinoInicial = "El destino inicial es obligatorio";
 
   // PATCH /lotes/:id no acepta cantidad ni parametros (ver UpdateLoteDto /
   // LoteService.update en el backend): en edición no hay nada más que
@@ -141,7 +203,10 @@ function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boo
   // habilita el consumo parcial posterior de este lote.
   if (values.cantidad.trim() === "") {
     errors.cantidad = "La cantidad ingresada es obligatoria";
-  } else if (Number.isNaN(Number(values.cantidad)) || Number(values.cantidad) <= 0) {
+  } else if (
+    Number.isNaN(Number(values.cantidad)) ||
+    Number(values.cantidad) <= 0
+  ) {
     errors.cantidad = "Debe ser un número mayor a 0";
   }
 
@@ -169,14 +234,28 @@ function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boo
     // validar el rango real en el POST /lotes y devuelve el error ahí.
     const config = buscarConfig(configs, parametro, values.materiaPrima);
     if (config && (valor < config.umbralMin || valor > config.umbralMax)) {
-      parametrosErrors[parametro] = `Debe estar entre ${config.umbralMin} y ${config.umbralMax}`;
+      parametrosErrors[parametro] =
+        `Debe estar entre ${config.umbralMin} y ${config.umbralMax}`;
     }
   }
-  if (Object.keys(parametrosErrors).length > 0) errors.parametros = parametrosErrors;
-  if (!algunoCargado) errors.parametrosGeneral = "Cargá al menos un parámetro de calidad";
+  if (Object.keys(parametrosErrors).length > 0)
+    errors.parametros = parametrosErrors;
+  if (!algunoCargado)
+    errors.parametrosGeneral = "Cargá al menos un parámetro de calidad";
 
-  // HU-66: datos del remito, opcionales (AC4) — solo se valida formato de
-  // lo que sí se cargó.
+  // HU-69 (AC1, AC3, AC5): a diferencia del resto de "datos del remito",
+  // obligatorio y con formato validado — dos mensajes distintos según el
+  // motivo del rechazo (Pantalla 9: "valida en tiempo real dos situaciones
+  // diferenciadas: el campo vacío y el ingreso de caracteres inválidos").
+  const numeroRemitoTrim = values.numeroRemito.trim();
+  if (numeroRemitoTrim === "") {
+    errors.numeroRemito = "El número de remito es obligatorio.";
+  } else if (!NUMERO_REMITO_REGEX.test(numeroRemitoTrim)) {
+    errors.numeroRemito = "Formato inválido. Usá solo letras, números y guiones.";
+  }
+
+  // HU-66: cantidad/calidad comprometidas, opcionales (AC4) — solo se valida
+  // formato de lo que sí se cargó.
   if (values.cantidadComprometida.trim() !== "") {
     const valor = Number(values.cantidadComprometida);
     if (Number.isNaN(valor) || valor <= 0) {
@@ -199,7 +278,8 @@ function validate(values: FormValues, configs: ConfigParametro[], esEdicion: boo
     // hay item donde mandar el comprometido (se perdería el dato). La UI ya
     // deshabilita el input en ese caso, pero se valida igual por las dudas.
     if (values.parametros[parametro].trim() === "") {
-      comprometidosErrors[parametro] = "Cargá primero el valor real medido de este parámetro";
+      comprometidosErrors[parametro] =
+        "Cargá primero el valor real medido de este parámetro";
     }
   }
   if (Object.keys(comprometidosErrors).length > 0) {
@@ -231,10 +311,31 @@ export function LoteFormModal({
   onUpdate,
 }: LoteFormModalProps) {
   const esEdicion = !!lote;
+  // HU-34: "procesado" = ya no admite cambios de destino productivo.
+  const loteEstaProcesado =
+    !!lote && (lote.estado === EstadoLote.FINALIZADO || lote.estado === EstadoLote.RECHAZADO);
+  const { user } = useAuth();
+  const puedeAsignarDestinoProductivo = ROLES_CON_PERMISO_DESTINO_PRODUCTIVO.includes(
+    user?.rolNombre ?? "",
+  );
   const { configs } = useConfigParametros();
+  // HU-34/HU-37: el destino vigente puede venir de una asignación manual
+  // (este modal) o de haber aceptado/rechazado una recomendación ML
+  // (RecomendacionDestinoCard, que recibe destinoVigente/divergenciaVigente
+  // por prop para no duplicar el fetch) — se calcula acá una sola vez con
+  // el historial real del backend, GET /lotes/:id/destino-productivo/historial.
+  const destinoHistorial = useDestinoProductivoLote(esEdicion ? lote!.id : null);
+  const { destinoVigente } = destinoHistorial;
+  // Ver el efecto de sincronización más abajo: evita pisar la elección del
+  // usuario si destinoHistorial se vuelve a disparar durante la misma
+  // apertura del modal.
+  const destinoVigenteAplicado = useRef(false);
+  const { destinosActivos: destinosProductivos } = useCatalogoDestinosProductivos();
   const [values, setValues] = useState<FormValues>(() => buildInitialValues(lote));
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState("");
+  const [cerrarCicloError, setCerrarCicloError] = useState("");
+  const [cerrarCicloMensaje, setCerrarCicloMensaje] = useState("");
 
   // Tras crear el lote, si el backend sugiere sensoresDisponibles (activos
   // en la misma ubicacionInicial), se ofrece asociarlos sin salir del modal
@@ -242,7 +343,9 @@ export function LoteFormModal({
   const [paso, setPaso] = useState<Paso>("form");
   const [loteCreadoId, setLoteCreadoId] = useState<number | null>(null);
   const [sensoresDisponibles, setSensoresDisponibles] = useState<Sensor[]>([]);
-  const [sensoresSeleccionados, setSensoresSeleccionados] = useState<Set<number>>(new Set());
+  const [sensoresSeleccionados, setSensoresSeleccionados] = useState<
+    Set<number>
+  >(new Set());
   const [isAsociando, setIsAsociando] = useState(false);
   const [asociarError, setAsociarError] = useState("");
 
@@ -251,24 +354,58 @@ export function LoteFormModal({
   // se pierdan silenciosamente cerrando el modal solo.
   const [warnings, setWarnings] = useState<string[]>([]);
 
-  // HU-66: colapsada por defecto — es común no tener el remito al momento
-  // de la carga (AC4), no queremos que el form se vea más largo/obligatorio
-  // de lo que es cuando no aplica.
-  const [remitoAbierto, setRemitoAbierto] = useState(false);
+  // HU-69: si ya se tocó el campo de número de remito — recién ahí se
+  // muestran sus errores en tiempo real (Pantalla 9), para no arrancar el
+  // form con un campo obligatorio en rojo antes de que el usuario escriba
+  // nada.
+  const [numeroRemitoTocado, setNumeroRemitoTocado] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     setValues(buildInitialValues(lote));
     setErrors({});
     setServerError("");
+    setCerrarCicloError("");
+    setCerrarCicloMensaje("");
     setPaso("form");
     setLoteCreadoId(null);
     setSensoresDisponibles([]);
     setSensoresSeleccionados(new Set());
     setAsociarError("");
     setWarnings([]);
-    setRemitoAbierto(false);
+    setNumeroRemitoTocado(false);
+    destinoVigenteAplicado.current = false;
   }, [isOpen, lote]);
+
+  // HU-34/HU-37: destinoVigente llega async (ver arriba) — se completa acá,
+  // una sola vez por apertura del modal, para no pisar lo que el usuario ya
+  // haya elegido en el selector si el fetch tarda o se vuelve a disparar.
+  useEffect(() => {
+    if (!isOpen || !esEdicion) return;
+    if (destinoHistorial.isLoading) return;
+    if (destinoVigenteAplicado.current) return;
+    destinoVigenteAplicado.current = true;
+    setValues((prev) => ({
+      ...prev,
+      destinoProductivoId: destinoVigente?.destinoActualId ?? "",
+    }));
+  }, [isOpen, esEdicion, destinoHistorial.isLoading, destinoVigente]);
+
+  // HU-69 (AC1, AC3, Pantalla 9): validación en tiempo real, no solo al
+  // enviar — "manteniendo deshabilitada la confirmación hasta que el valor
+  // resulte válido". Dos mensajes distintos, mismo criterio que validate().
+  const numeroRemitoTrimmed = values.numeroRemito.trim();
+  const numeroRemitoVacio = numeroRemitoTrimmed === "";
+  const numeroRemitoFormatoInvalido =
+    !numeroRemitoVacio && !NUMERO_REMITO_REGEX.test(numeroRemitoTrimmed);
+  const numeroRemitoValido = !numeroRemitoVacio && !numeroRemitoFormatoInvalido;
+  const numeroRemitoErrorEnVivo = !numeroRemitoTocado
+    ? undefined
+    : numeroRemitoVacio
+      ? "El número de remito es obligatorio."
+      : numeroRemitoFormatoInvalido
+        ? "Formato inválido. Usá solo letras, números y guiones."
+        : undefined;
 
   // HU-36: combo encadenado — la lista de tambos depende del proveedor
   // elegido (GET /tambos?proveedorId=xxx). En edición, proveedorId ya viene
@@ -283,13 +420,18 @@ export function LoteFormModal({
 
   const proveedorOptions = [
     { value: "", label: "Seleccioná un proveedor" },
-    ...proveedores.map((p) => ({ value: String(p.id), label: `${p.razonSocial} (${p.cuit})` })),
+    ...proveedores.map((p) => ({
+      value: String(p.id),
+      label: `${p.razonSocial} (${p.cuit})`,
+    })),
   ];
 
   const tamboOptions = [
     {
       value: "",
-      label: values.proveedorId ? "Seleccioná un tambo" : "Elegí primero un proveedor",
+      label: values.proveedorId
+        ? "Seleccioná un tambo"
+        : "Elegí primero un proveedor",
     },
     ...tambos.map((t) => ({ value: String(t.id), label: t.nombre })),
   ];
@@ -310,11 +452,53 @@ export function LoteFormModal({
     });
   };
 
-  const setParametroComprometido = (parametro: ParametroVisible, valor: string) => {
+  const setParametroComprometido = (
+    parametro: ParametroVisible,
+    valor: string,
+  ) => {
     setValues((prev) => ({
       ...prev,
-      parametrosComprometidos: { ...prev.parametrosComprometidos, [parametro]: valor },
+      parametrosComprometidos: {
+        ...prev.parametrosComprometidos,
+        [parametro]: valor,
+      },
     }));
+  };
+
+  // HU-34 AC1/AC3: PATCH /lotes/:id/destino-productivo — solo se llama si
+  // efectivamente se eligió un destino distinto al vigente (AC3: "sin
+  // duplicar registros" cuando no cambió nada). Devuelve un mensaje de
+  // error si falló, o null si no hacía falta hacer nada o si salió bien.
+  const asignarDestinoProductivoSiCorresponde = async (
+    loteId: number,
+  ): Promise<string | null> => {
+    if (values.destinoProductivoId === "") return null;
+    if (values.destinoProductivoId === destinoVigente?.destinoActualId) return null;
+    try {
+      await loteService.asignarDestinoProductivo(loteId, values.destinoProductivoId);
+      destinoHistorial.refetch();
+      return null;
+    } catch (err) {
+      return extraerMensajeError(
+        err,
+        "No se pudo asignar el destino productivo elegido.",
+      );
+    }
+  };
+
+  // HU-34 (AC4, mock visual): "cerrar el ciclo" en sí no tiene endpoint
+  // real todavía — lo único implementado es el bloqueo cuando falta el
+  // destino productivo, que es lo que pide el criterio de aceptación.
+  const handleCerrarCiclo = () => {
+    setCerrarCicloMensaje("");
+    if (!destinoVigente) {
+      setCerrarCicloError("El destino productivo es obligatorio para cerrar el ciclo del lote.");
+      return;
+    }
+    setCerrarCicloError("");
+    setCerrarCicloMensaje(
+      "Destino productivo asignado — validación lista. El cierre real del ciclo todavía no está conectado al backend.",
+    );
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -330,13 +514,29 @@ export function LoteFormModal({
         // no se puede editar proveedor, ubicacionInicial ni parametros.
         await onUpdate(lote!.id, {
           materiaPrima: values.materiaPrima,
-          fechaIngreso: new Date(`${values.fechaIngreso}T12:00:00`).toISOString(),
+          fechaIngreso: new Date(
+            `${values.fechaIngreso}T12:00:00`,
+          ).toISOString(),
           destinoInicial: values.destinoInicial as DestinoLote,
         });
-        onClose();
       } catch (err) {
-        setServerError(extraerMensajeError(err, "No se pudo actualizar el lote. Intentá nuevamente."));
+        setServerError(
+          extraerMensajeError(
+            err,
+            "No se pudo actualizar el lote. Intentá nuevamente.",
+          ),
+        );
+        return;
       }
+      // El lote ya se actualizó — si falla solo esta parte, no tiene
+      // sentido revertir lo anterior: se muestra el error y se deja el
+      // modal abierto para que se pueda reintentar únicamente el destino.
+      const errorDestino = await asignarDestinoProductivoSiCorresponde(lote!.id);
+      if (errorDestino) {
+        setServerError(errorDestino);
+        return;
+      }
+      onClose();
       return;
     }
 
@@ -348,7 +548,9 @@ export function LoteFormModal({
         parametro,
         valor: Number(values.parametros[parametro]),
         // HU-66: opcional (AC4) — solo viaja si se cargó el valor comprometido.
-        ...(comprometido !== "" ? { valorComprometido: Number(comprometido) } : {}),
+        ...(comprometido !== ""
+          ? { valorComprometido: Number(comprometido) }
+          : {}),
       };
     });
 
@@ -362,25 +564,43 @@ export function LoteFormModal({
         ubicacionInicial: values.ubicacionInicial || undefined,
         parametros,
         cantidad: Number(values.cantidad),
+        // HU-69 (AC1): obligatorio — la validación ya garantizó que llegue
+        // no vacío y con formato válido antes de este punto.
+        numeroRemito: numeroRemitoTrimmed,
         // HU-66: opcional (AC4) — solo viaja si se cargó la cantidad comprometida.
         ...(values.cantidadComprometida.trim() !== ""
           ? { cantidadComprometidaKg: Number(values.cantidadComprometida) }
           : {}),
       });
 
-      setWarnings(respuesta.warnings ?? []);
+      // El lote ya se creó — si la asignación de destino falla, no tiene
+      // sentido perder el resto del flujo (asociar sensores, etc.): se
+      // suma como una advertencia más en vez de cortar acá.
+      const advertencias = [...(respuesta.warnings ?? [])];
+      const errorDestino = await asignarDestinoProductivoSiCorresponde(respuesta.lote.id);
+      if (errorDestino) {
+        advertencias.push(
+          `${errorDestino} Podés asignarlo después desde "Editar lote".`,
+        );
+      }
+      setWarnings(advertencias);
 
       if (respuesta.sensoresDisponibles.length > 0) {
         setLoteCreadoId(respuesta.lote.id);
         setSensoresDisponibles(respuesta.sensoresDisponibles);
         setPaso("asociar");
-      } else if ((respuesta.warnings ?? []).length > 0) {
+      } else if (advertencias.length > 0) {
         setPaso("warnings");
       } else {
         onClose();
       }
     } catch (err) {
-      setServerError(extraerMensajeError(err, "No se pudo registrar el lote. Intentá nuevamente."));
+      setServerError(
+        extraerMensajeError(
+          err,
+          "No se pudo registrar el lote. Intentá nuevamente.",
+        ),
+      );
     }
   };
 
@@ -402,11 +622,16 @@ export function LoteFormModal({
     setAsociarError("");
     setIsAsociando(true);
     try {
-      await sensorService.asociarALote(loteCreadoId, [...sensoresSeleccionados]);
+      await sensorService.asociarALote(loteCreadoId, [
+        ...sensoresSeleccionados,
+      ]);
       onClose();
     } catch (err) {
       setAsociarError(
-        extraerMensajeErrorSensor(err, "No se pudieron asociar los sensores seleccionados."),
+        extraerMensajeErrorSensor(
+          err,
+          "No se pudieron asociar los sensores seleccionados.",
+        ),
       );
     } finally {
       setIsAsociando(false);
@@ -518,21 +743,57 @@ export function LoteFormModal({
       }
       onClose={onClose}
       footer={
-        <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            Cancelar
-          </button>
-          <Button type="submit" form="lote-form" isLoading={isSubmitting} className="!w-auto px-6">
-            {esEdicion ? "Guardar cambios" : "Registrar lote"}
-          </Button>
+        <div className="flex flex-col items-end gap-2">
+          {cerrarCicloError && (
+            <p className="text-sm text-red-600 dark:text-red-400">{cerrarCicloError}</p>
+          )}
+          {cerrarCicloMensaje && (
+            <p className="text-sm text-emerald-600 dark:text-emerald-400">{cerrarCicloMensaje}</p>
+          )}
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Cancelar
+            </button>
+            <Button
+              type="submit"
+              form="lote-form"
+              isLoading={isSubmitting}
+              // HU-69 (Pantalla 9): "manteniendo deshabilitada la
+              // confirmación hasta que el valor resulte válido" — solo
+              // aplica al crear, la sección de remito no existe en edición.
+              disabled={!esEdicion && !numeroRemitoValido}
+              className="!w-auto px-6"
+            >
+              {esEdicion ? "Guardar destino" : "Registrar lote"}
+            </Button>
+            {/* HU-34 (AC4, mock visual): valida que haya un destino
+                productivo asignado. El cierre de ciclo en sí todavía no
+                tiene endpoint real — a propósito no reemplaza ni reutiliza
+                el flujo real de "Finalizar lote" (FinalizarLoteModal, HU-62). */}
+            {esEdicion && (
+              <button
+                type="button"
+                onClick={handleCerrarCiclo}
+                title="Pendiente de conexión real con el backend — valida el destino productivo"
+                className="rounded-lg bg-[#3d6fcf] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#3460b5]"
+              >
+                Cerrar ciclo del lote
+              </button>
+            )}
+          </div>
         </div>
       }
     >
-      <form id="lote-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
+      <form
+        id="lote-form"
+        onSubmit={handleSubmit}
+        noValidate
+        className="flex flex-col gap-6"
+      >
         {/* Datos del lote */}
         <div className="flex flex-col gap-3">
           <SectionHeader>DATOS DEL LOTE</SectionHeader>
@@ -564,7 +825,11 @@ export function LoteFormModal({
               // Cambiar de proveedor invalida el tambo ya elegido (pertenece
               // al proveedor anterior): se limpia para forzar una nueva
               // selección dentro de la lista encadenada correcta.
-              setValues((prev) => ({ ...prev, proveedorId: e.target.value, tamboId: "" }))
+              setValues((prev) => ({
+                ...prev,
+                proveedorId: e.target.value,
+                tamboId: "",
+              }))
             }
             error={errors.proveedorId}
           />
@@ -582,7 +847,9 @@ export function LoteFormModal({
             options={tamboOptions}
             value={values.tamboId}
             disabled={esEdicion || !values.proveedorId || isLoadingTambos}
-            onChange={(e) => setValues((prev) => ({ ...prev, tamboId: e.target.value }))}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, tamboId: e.target.value }))
+            }
             error={errors.tamboId}
           />
           {esEdicion && (
@@ -604,7 +871,10 @@ export function LoteFormModal({
                   label={tab.label}
                   checked={values.materiaPrima === tab.value}
                   onChange={(value) =>
-                    setValues((prev) => ({ ...prev, materiaPrima: value as TipoMateriaPrima }))
+                    setValues((prev) => ({
+                      ...prev,
+                      materiaPrima: value as TipoMateriaPrima,
+                    }))
                   }
                 />
               ))}
@@ -616,7 +886,9 @@ export function LoteFormModal({
             type="date"
             label="Fecha de ingreso *"
             value={values.fechaIngreso}
-            onChange={(e) => setValues((prev) => ({ ...prev, fechaIngreso: e.target.value }))}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, fechaIngreso: e.target.value }))
+            }
             error={errors.fechaIngreso}
           />
 
@@ -628,7 +900,9 @@ export function LoteFormModal({
                 Cantidad ingresada
               </span>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                {lote!.cantidad != null ? `${lote!.cantidad} L` : "No registrada"}
+                {lote!.cantidad != null
+                  ? `${lote!.cantidad} L`
+                  : "No registrada"}
               </p>
             </div>
           ) : (
@@ -638,7 +912,9 @@ export function LoteFormModal({
               inputMode="decimal"
               label="Cantidad ingresada (L) *"
               value={values.cantidad}
-              onChange={(e) => setValues((prev) => ({ ...prev, cantidad: e.target.value }))}
+              onChange={(e) =>
+                setValues((prev) => ({ ...prev, cantidad: e.target.value }))
+              }
               error={errors.cantidad}
             />
           )}
@@ -648,7 +924,9 @@ export function LoteFormModal({
             UpdateLoteDto), así que en edición se muestran de solo lectura. */}
         <div className="flex flex-col gap-3">
           <SectionHeader>
-            {esEdicion ? "PARÁMETROS DE CALIDAD" : "PARÁMETROS DE CALIDAD (opcional, al menos uno)"}
+            {esEdicion
+              ? "PARÁMETROS DE CALIDAD"
+              : "PARÁMETROS DE CALIDAD (opcional, al menos uno)"}
           </SectionHeader>
           {esEdicion ? (
             lote!.parametros.length > 0 ? (
@@ -659,9 +937,12 @@ export function LoteFormModal({
                     className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800"
                   >
                     <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      {PARAMETROS_META[p.parametro as ParametroVisible]?.label ?? p.parametro}
+                      {PARAMETROS_META[p.parametro as ParametroVisible]
+                        ?.label ?? p.parametro}
                     </p>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white">{p.valor}</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                      {p.valor}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -673,12 +954,18 @@ export function LoteFormModal({
           ) : (
             <>
               {errors.parametrosGeneral && (
-                <p className="text-sm text-red-600 dark:text-red-400">{errors.parametrosGeneral}</p>
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {errors.parametrosGeneral}
+                </p>
               )}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {ORDEN_PARAMETROS.map((parametro) => {
                   const meta = PARAMETROS_META[parametro];
-                  const config = buscarConfig(configs, parametro, values.materiaPrima);
+                  const config = buscarConfig(
+                    configs,
+                    parametro,
+                    values.materiaPrima,
+                  );
                   return (
                     <Input
                       key={parametro}
@@ -686,7 +973,11 @@ export function LoteFormModal({
                       label={`${meta.label} (${meta.unidad})`}
                       type="number"
                       inputMode="decimal"
-                      placeholder={config ? `${config.umbralMin} a ${config.umbralMax}` : ""}
+                      placeholder={
+                        config
+                          ? `${config.umbralMin} a ${config.umbralMax}`
+                          : ""
+                      }
                       value={values.parametros[parametro]}
                       onChange={(e) => setParametro(parametro, e.target.value)}
                       error={errors.parametros?.[parametro]}
@@ -698,84 +989,159 @@ export function LoteFormModal({
           )}
         </div>
 
-        {/* HU-66: datos del remito, opcionales (AC4) — colapsado por
-            defecto porque no siempre se cuenta con el remito al momento de
-            la carga. PATCH /lotes/:id tampoco acepta estos campos, así que
-            en edición no se muestra la sección. */}
+        {/* HU-66/HU-69: datos del remito. Ya no es una sección opcional
+            colapsada: desde HU-69 el número de remito es obligatorio (AC1),
+            así que se muestra siempre expandida — ocultar por defecto un
+            campo requerido detrás de un acordeón habría sido peor que
+            mostrarlo siempre. Cantidad y calidad comprometidas siguen
+            siendo opcionales (HU-66 AC4), sin cambios ahí. PATCH
+            /lotes/:id no acepta ninguno de estos campos, así que en
+            edición no se muestra la sección (mismo criterio que antes). */}
         {!esEdicion && (
           <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => setRemitoAbierto((prev) => !prev)}
-              className="flex w-full items-center gap-3"
-            >
-              {remitoAbierto ? (
-                <ChevronDown className="h-4 w-4 flex-shrink-0 text-slate-400 dark:text-slate-500" />
-              ) : (
-                <ChevronRight className="h-4 w-4 flex-shrink-0 text-slate-400 dark:text-slate-500" />
-              )}
-              <span className="text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500">
-                DATOS DEL REMITO (OPCIONAL)
-              </span>
-              <span className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
-            </button>
+            <SectionHeader>DATOS DEL REMITO</SectionHeader>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              El número de remito es obligatorio. La cantidad y la calidad
+              comprometidas son opcionales si no contás con el remito
+              completo al momento de la carga.
+            </p>
 
-            {remitoAbierto && (
-              <div className="flex flex-col gap-3 border-l-2 border-slate-100 pl-4 dark:border-slate-800">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Cargá lo comprometido por el proveedor según el remito para detectar desvíos
-                  contra lo efectivamente recibido. Si no contás con el remito todavía, podés
-                  dejar esta sección vacía y el lote se guarda igual.
-                </p>
+            <Input
+              id="lote-numeroRemito"
+              label="Número de remito *"
+              placeholder="R-000123"
+              value={values.numeroRemito}
+              onChange={(e) => {
+                setNumeroRemitoTocado(true);
+                setValues((prev) => ({ ...prev, numeroRemito: e.target.value }));
+              }}
+              onBlur={() => setNumeroRemitoTocado(true)}
+              error={numeroRemitoErrorEnVivo ?? errors.numeroRemito}
+            />
+            <p className="-mt-2 text-xs text-slate-400 dark:text-slate-500">
+              Alfanumérico, letras y números con guiones. Ejemplo: R-000123.
+            </p>
 
-                <Input
-                  id="lote-cantidadComprometida"
-                  type="number"
-                  inputMode="decimal"
-                  label="Cantidad comprometida según remito"
-                  value={values.cantidadComprometida}
-                  onChange={(e) =>
-                    setValues((prev) => ({ ...prev, cantidadComprometida: e.target.value }))
-                  }
-                  error={errors.cantidadComprometida}
-                />
+            <Input
+              id="lote-cantidadComprometida"
+              type="number"
+              inputMode="decimal"
+              label="Cantidad comprometida según remito"
+              value={values.cantidadComprometida}
+              onChange={(e) =>
+                setValues((prev) => ({
+                  ...prev,
+                  cantidadComprometida: e.target.value,
+                }))
+              }
+              error={errors.cantidadComprometida}
+            />
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {ORDEN_PARAMETROS.map((parametro) => {
-                    const meta = PARAMETROS_META[parametro];
-                    const tieneValorReal = values.parametros[parametro].trim() !== "";
-                    return (
-                      <Input
-                        key={`comprometido-${parametro}`}
-                        id={`lote-param-comprometido-${parametro}`}
-                        label={`${meta.label} comprometido (${meta.unidad})`}
-                        type="number"
-                        inputMode="decimal"
-                        disabled={!tieneValorReal}
-                        placeholder={tieneValorReal ? "" : "Cargá primero el valor real"}
-                        value={values.parametrosComprometidos[parametro]}
-                        onChange={(e) => setParametroComprometido(parametro, e.target.value)}
-                        error={errors.parametrosComprometidos?.[parametro]}
-                        className={!tieneValorReal ? "opacity-60" : ""}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {ORDEN_PARAMETROS.map((parametro) => {
+                const meta = PARAMETROS_META[parametro];
+                const tieneValorReal =
+                  values.parametros[parametro].trim() !== "";
+                return (
+                  <Input
+                    key={`comprometido-${parametro}`}
+                    id={`lote-param-comprometido-${parametro}`}
+                    label={`${meta.label} comprometido (${meta.unidad})`}
+                    type="number"
+                    inputMode="decimal"
+                    disabled={!tieneValorReal}
+                    placeholder={
+                      tieneValorReal ? "" : "Cargá primero el valor real"
+                    }
+                    value={values.parametrosComprometidos[parametro]}
+                    onChange={(e) =>
+                      setParametroComprometido(parametro, e.target.value)
+                    }
+                    error={errors.parametrosComprometidos?.[parametro]}
+                    className={!tieneValorReal ? "opacity-60" : ""}
+                  />
+                );
+              })}
+            </div>
           </div>
         )}
 
         {/* Destino */}
         <div className="flex flex-col gap-3">
-          <SectionHeader>DESTINO</SectionHeader>
+          <SectionHeader>DESTINO PRODUCTIVO</SectionHeader>
+          {esEdicion && (
+            <RecomendacionDestinoCard
+              loteId={lote!.id}
+              destinoVigente={destinoHistorial.destinoVigente}
+              divergenciaVigente={destinoHistorial.divergenciaVigente}
+              onDestinoRespondido={destinoHistorial.refetch}
+            />
+          )}
+
+          {/* HU-34: selector plano del catálogo configurable de destinos
+              productivos (queso, yogur, crema, etc.), PATCH
+              /lotes/:id/destino-productivo — no confundir con "Destino
+              inicial" de más abajo, que es el enum fijo de
+              ubicación/tratamiento. Editable mientras el lote no esté
+              procesado (finalizado o rechazado). */}
+          {loteEstaProcesado ? (
+            <div>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Destino productivo
+              </span>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {destinoVigente?.destinoActualNombre ?? "Sin asignar"}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                El lote ya fue procesado: el destino productivo no se puede modificar.
+              </p>
+            </div>
+          ) : !puedeAsignarDestinoProductivo ? (
+            <div>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Destino productivo
+              </span>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {destinoVigente?.destinoActualNombre ?? "Sin asignar"}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Tu rol no tiene permiso para asignar o cambiar el destino productivo.
+              </p>
+            </div>
+          ) : (
+            <>
+              <Select
+                id="lote-destino-productivo"
+                label="Destino productivo"
+                options={[
+                  { value: "", label: "Sin asignar" },
+                  ...destinosProductivos.map((d) => ({ value: String(d.id), label: d.nombre })),
+                ]}
+                value={values.destinoProductivoId === "" ? "" : String(values.destinoProductivoId)}
+                onChange={(e) =>
+                  setValues((prev) => ({
+                    ...prev,
+                    destinoProductivoId: e.target.value === "" ? "" : Number(e.target.value),
+                  }))
+                }
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Opcional al registrar el lote. Es obligatorio para cerrar el ciclo y se puede
+                modificar mientras el lote no esté procesado.
+              </p>
+            </>
+          )}
+
           <Select
             id="lote-destino"
             label="Destino inicial *"
             options={DESTINO_OPTIONS}
             value={values.destinoInicial}
             onChange={(e) =>
-              setValues((prev) => ({ ...prev, destinoInicial: e.target.value as DestinoLote }))
+              setValues((prev) => ({
+                ...prev,
+                destinoInicial: e.target.value as DestinoLote,
+              }))
             }
             error={errors.destinoInicial}
           />
@@ -786,7 +1152,10 @@ export function LoteFormModal({
             value={values.ubicacionInicial}
             disabled={esEdicion}
             onChange={(e) =>
-              setValues((prev) => ({ ...prev, ubicacionInicial: e.target.value as Ubicacion }))
+              setValues((prev) => ({
+                ...prev,
+                ubicacionInicial: e.target.value as Ubicacion,
+              }))
             }
           />
           {esEdicion && (

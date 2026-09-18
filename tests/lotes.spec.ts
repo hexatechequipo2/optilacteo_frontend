@@ -68,6 +68,12 @@ const LOTE_2 = {
   createdAt: "2026-08-01T12:00:00.000Z",
 };
 
+const DESTINOS_MOCK = [
+  { id: 1, nombre: "Queso" },
+  { id: 2, nombre: "Yogur" },
+  { id: 3, nombre: "Crema" },
+];
+
 // GET /lotes devuelve formato paginado; GET /lotes/no-aptos devuelve Lote[] plano
 const LOTES_PAGINATED_MOCK = {
   data: [LOTE_1, LOTE_2],
@@ -355,7 +361,10 @@ test.describe("LotesPage", () => {
 
     await page.getByRole("button", { name: /nuevo lote/i }).click();
 
-    // Intentamos enviar sin completar ningún campo
+    // El botón queda deshabilitado (HU-69) hasta cargar un número de remito
+    // válido — se completa solo ese campo para poder disparar el submit y
+    // ver la validación del resto de los campos obligatorios.
+    await page.getByLabel("Número de remito *").fill("R-000123");
     await page.getByRole("button", { name: "Registrar lote" }).click();
 
     await expect(
@@ -404,6 +413,7 @@ test.describe("LotesPage", () => {
     await page.getByText("Leche cruda").click();
     await page.getByLabel("pH (sin unidad)").fill("6.8");
     await page.getByLabel("Destino inicial *").selectOption({ value: "produccion" });
+    await page.getByLabel("Número de remito *").fill("R-000123");
 
     await page.getByRole("button", { name: "Registrar lote" }).click();
 
@@ -437,6 +447,7 @@ test.describe("LotesPage", () => {
     await page.getByText("Leche cruda").click();
     await page.getByLabel("pH (sin unidad)").fill("6.8");
     await page.getByLabel("Destino inicial *").selectOption({ value: "produccion" });
+    await page.getByLabel("Número de remito *").fill("R-000123");
 
     await page.getByRole("button", { name: "Registrar lote" }).click();
 
@@ -498,10 +509,115 @@ test.describe("LotesPage", () => {
     // pH por debajo del mínimo configurado (6–7.5)
     await page.getByLabel("pH (sin unidad)").fill("2");
     await page.getByLabel("Destino inicial *").selectOption({ value: "produccion" });
+    await page.getByLabel("Número de remito *").fill("R-000123");
 
     await page.getByRole("button", { name: "Registrar lote" }).click();
 
     await expect(page.getByText("Debe estar entre 6 y 7.5")).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-69 · Anexo de número de remito a lote
+// ---------------------------------------------------------------------------
+
+test.describe("LoteFormModal — HU-69 (número de remito)", () => {
+  test("el botón Registrar lote queda deshabilitado hasta cargar un número de remito válido", async ({
+    page,
+  }) => {
+    await mockLotesDeps(page);
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    await page.getByRole("button", { name: /nuevo lote/i }).click();
+
+    await expect(page.getByRole("button", { name: "Registrar lote" })).toBeDisabled();
+
+    await page.getByLabel("Número de remito *").fill("R-000123");
+    await expect(page.getByRole("button", { name: "Registrar lote" })).toBeEnabled();
+  });
+
+  test("valida en tiempo real: campo vacío y formato inválido muestran mensajes distintos", async ({
+    page,
+  }) => {
+    await mockLotesDeps(page);
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    await page.getByRole("button", { name: /nuevo lote/i }).click();
+    const campo = page.getByLabel("Número de remito *");
+
+    // Tocar el campo y dejarlo vacío (blur) dispara el mensaje de obligatorio.
+    // exact:true porque el texto de ayuda estático arranca con la misma
+    // frase ("El número de remito es obligatorio. La cantidad y...").
+    await campo.click();
+    await campo.blur();
+    await expect(
+      page.getByText("El número de remito es obligatorio.", { exact: true }),
+    ).toBeVisible();
+
+    // Caracteres inválidos (espacio y barra) disparan el mensaje de formato
+    await campo.fill("R 000/123");
+    await expect(
+      page.getByText("Formato inválido. Usá solo letras, números y guiones."),
+    ).toBeVisible();
+    await expect(
+      page.getByText("El número de remito es obligatorio.", { exact: true }),
+    ).not.toBeVisible();
+
+    // Un valor válido no muestra ningún error
+    await campo.fill("R-000123");
+    await expect(
+      page.getByText("Formato inválido. Usá solo letras, números y guiones."),
+    ).not.toBeVisible();
+  });
+
+  test("la tabla de lotes muestra el número de remito y permite buscar por él", async ({ page }) => {
+  await mockLotesDeps(page);
+
+  // LIFO: sobreescribe /lotes para que LOTE_1 incluya numeroRemito.
+  // El componente lee lote.numeroRemito de la respuesta del backend,
+  // no de localStorage (el campo fue migrado al modelo de Lote).
+  await page.route("**/lotes*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...LOTES_PAGINATED_MOCK,
+        data: [{ ...LOTE_1, numeroRemito: "R-000123" }, LOTE_2],
+      }),
+    });
+  });
+
+  await loginAsResponsableCalidad(page);
+  await page.goto("/lotes");
+
+  const table = page.getByRole("table");
+  await expect(table.getByText("Nº remito: R-000123")).toBeVisible();
+
+  await page
+    .getByPlaceholder("Buscar por lote, proveedor, tambo o nº de remito...")
+    .fill("R-000123");
+  await expect(table.getByText("LOT-2026-001")).toBeVisible();
+  await expect(table.getByText("LOT-2026-002")).not.toBeVisible();
+});
+
+  test("una búsqueda sin resultados muestra un mensaje específico, no el del filtro de rendimiento", async ({
+    page,
+  }) => {
+    await mockLotesDeps(page);
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    await page
+      .getByPlaceholder("Buscar por lote, proveedor, tambo o nº de remito...")
+      .fill("no existe ningún lote así");
+
+    await expect(page.getByText('Ningún lote coincide con "no existe ningún lote así".')).toBeVisible();
+    await expect(page.getByText(/rendimiento en undefined/)).not.toBeVisible();
   });
 });
 
@@ -781,6 +897,10 @@ test("un usuario sin rol de Responsable de Calidad ve acceso no autorizado", asy
       .getByRole("table")
       .getByTitle("Aprobar o rechazar lote")
       .click();
+
+    // Espera a que las llamadas de red del modal resuelvan
+    // (GET /config-parametros y GET /lotes/:id/revisiones)
+    await page.waitForLoadState("networkidle");
 
     await expect(
       page.getByRole("button", { name: "Confirmar decisión" }),
@@ -1264,5 +1384,619 @@ test.describe("LotesPage › IngresoManualFallbackLoteTab", () => {
       .getByRole("button", { name: "Cargar" })
       .click();
     await expect(dialog.getByText("Valor manual registrado.")).toBeVisible();
+  });
+});
+
+test.describe("HU-34 — Destino productivo de lote", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockLotesDeps(page);
+    // Catálogo de destinos productivos
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(DESTINOS_MOCK),
+      });
+    });
+    // Historial de destino productivo → sin destino asignado
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    });
+    // Recomendaciones → ninguna (necesario para useDestinoProductivoLote)
+    await page.route(/\/recomendaciones\/lote\/\d+/, async (route) => {
+            const rt = route.request().resourceType();
+            if (rt !== "fetch" && rt !== "xhr") return route.continue();
+            await route.fulfill({ status: 200, body: "" });
+          });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+  });
+
+
+  test("el selector de destino productivo muestra las opciones del catálogo", async ({ page }) => {
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    const select = page.locator("#lote-destino-productivo");
+    await expect(select).toContainText("Queso");
+    await expect(select).toContainText("Yogur");
+    await expect(select).toContainText("Crema");
+  });
+  
+  test("cerrar ciclo del lote sin destino asignado muestra error", async ({ page }) => {
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page.getByRole("button", { name: "Cerrar ciclo del lote" }).click();
+    await expect(
+    page.getByText("El destino productivo es obligatorio para cerrar el ciclo del lote."),
+  ).toBeVisible();
+});
+
+test("asignar un destino y guardar envía PATCH al destino productivo", async ({ page }) => {
+  await page.route(/\/lotes\/\d+$/, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(LOTE_1) });
+  });
+  await page.route(/\/lotes\/\d+\/destino-productivo/, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({}) });
+  });
+
+  await page.getByTitle("Editar lote").first().click();
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  await page.waitForLoadState("networkidle");
+  await page.locator("#lote-destino-productivo").selectOption("1");
+
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (res) =>
+        /\/lotes\/\d+\/destino-productivo$/.test(res.url()) &&
+        res.request().method() === "PATCH",
+    ),
+    page.getByRole("button", { name: "Guardar destino" }).click(),
+  ]);
+
+  expect(response.status()).toBe(200);
+});
+
+test("cerrar ciclo del lote con destino asignado muestra mensaje de éxito", async ({ page }) => {
+  // LIFO: sobreescribe el historial del beforeEach → lote con destino vigente
+  await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          destinoProductivoId: 1,
+          destinoProductivoNombre: "Queso",
+          origen: "asignacion_manual",
+          createdAt: "2026-08-01T12:00:00.000Z",
+        },
+      ]),
+    });
+  });
+
+  await page.getByTitle("Editar lote").first().click();
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Cerrar ciclo del lote" }).click();
+  await expect(page.getByText("Destino productivo asignado")).toBeVisible();
+});
+
+test("error del servidor al asignar destino productivo muestra el error en el modal", async ({ page }) => {
+  await page.route(/\/lotes\/\d+$/, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(LOTE_1) });
+  });
+  await page.route(/\/lotes\/\d+\/destino-productivo/, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    await route.fulfill({
+      status: 422,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "Destino no disponible" }),
+    });
+  });
+
+  await page.getByTitle("Editar lote").first().click();
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  await page.waitForLoadState("networkidle");
+  await page.locator("#lote-destino-productivo").selectOption("1");
+  await page.getByRole("button", { name: "Guardar destino" }).click();
+  await page.waitForLoadState("networkidle");
+
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByText("Destino no disponible")).toBeVisible();
+});
+
+test("lote procesado muestra el destino productivo como solo lectura", async ({ page }) => {
+  const LOTE_FINALIZADO = { ...LOTE_1, estado: "finalizado" };
+
+  await page.route("**/lotes*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue(); // ← deja pasar el HTML de /lotes
+    if (route.request().method() !== "GET") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...LOTES_PAGINATED_MOCK, data: [LOTE_FINALIZADO, LOTE_2] }),
+    });
+  });
+
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+
+  await page.getByTitle("Editar lote").first().click();
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  await page.waitForLoadState("networkidle");
+
+  await expect(page.locator("#lote-destino-productivo")).not.toBeVisible();
+  await expect(
+    page.getByText("El lote ya fue procesado: el destino productivo no se puede modificar."),
+  ).toBeVisible();
+});
+
+test("guardar sin cambiar el destino vigente no envía PATCH al destino productivo", async ({ page }) => {
+  // Lote con destino vigente = Queso (id 1)
+  await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          destinoProductivoId: 1,
+          destinoProductivoNombre: "Queso",
+          origen: "asignacion_manual",
+          createdAt: "2026-08-01T12:00:00.000Z",
+        },
+      ]),
+    });
+  });
+  await page.route(/\/lotes\/\d+$/, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(LOTE_1) });
+  });
+
+  let patchDestinoLlamado = false;
+  await page.route(/\/lotes\/\d+\/destino-productivo/, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    patchDestinoLlamado = true;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({}) });
+  });
+
+  await page.getByTitle("Editar lote").first().click();
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  await page.waitForLoadState("networkidle");
+  // El efecto ya sincronizó el select con destinoProductivoId: 1 — no cambiamos nada
+  await page.getByRole("button", { name: "Guardar destino" }).click();
+  await page.waitForLoadState("networkidle");
+
+  expect(patchDestinoLlamado).toBe(false);
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+});
+
+test("cambiar el destino vigente por otro envía PATCH con el nuevo destino", async ({ page }) => {
+  // Lote con destino vigente = Queso (id 1)
+  await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          destinoProductivoId: 1,
+          destinoProductivoNombre: "Queso",
+          origen: "asignacion_manual",
+          createdAt: "2026-08-01T12:00:00.000Z",
+        },
+      ]),
+    });
+  });
+  await page.route(/\/lotes\/\d+$/, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(LOTE_1) });
+  });
+  await page.route(/\/lotes\/\d+\/destino-productivo/, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({}) });
+  });
+
+  await page.getByTitle("Editar lote").first().click();
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+  await page.waitForLoadState("networkidle");
+  // Vigente es "1" (Queso) — cambiamos a "2" (Yogur)
+  await page.locator("#lote-destino-productivo").selectOption("2");
+
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (res) =>
+        /\/lotes\/\d+\/destino-productivo$/.test(res.url()) &&
+        res.request().method() === "PATCH",
+    ),
+    page.getByRole("button", { name: "Guardar destino" }).click(),
+  ]);
+
+  expect(response.status()).toBe(200);
+});
+});
+
+// ---------------------------------------------------------------------------
+// HU-49 · Recomendaciones predictivas de destino productivo (ML)
+// HU-37 · Justificación de divergencia operador vs sistema
+// ---------------------------------------------------------------------------
+
+const RECOMENDACION_MOCK = {
+  id: 42,
+  destinoRecomendado: { id: 1, nombre: "Queso" },
+  confianza: 87,
+  estado: "pendiente",
+  destinoReal: null,
+};
+
+async function mockRecomendacionPendiente(page: Page, recomendacion: unknown) {
+  await page.route(/\/recomendaciones\/lote\/\d+/, async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (recomendacion === null) {
+      return route.fulfill({ status: 200, body: "" });
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(recomendacion),
+    });
+  });
+}
+
+test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockLotesDeps(page);
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(DESTINOS_MOCK),
+      });
+    });
+    // Sin destino vigente todavía (lote recién registrado)
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    });
+    await mockRecomendacionPendiente(page, RECOMENDACION_MOCK);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page.waitForLoadState("networkidle");
+  });
+
+  test("muestra el destino recomendado con su porcentaje de confianza", async ({ page }) => {
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Destino recomendado por el sistema: Queso")).toBeVisible();
+    await expect(dialog.getByText("87%")).toBeVisible();
+    await expect(dialog.getByText("Confianza alta")).toBeVisible();
+  });
+
+  test("confianza media y baja muestran el badge correspondiente", async ({ page }) => {
+    await mockRecomendacionPendiente(page, { ...RECOMENDACION_MOCK, confianza: 60 });
+    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    await expect(page.getByRole("dialog").getByText("Confianza media")).toBeVisible();
+
+    await mockRecomendacionPendiente(page, { ...RECOMENDACION_MOCK, confianza: 30 });
+    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    await expect(page.getByRole("dialog").getByText("Confianza baja")).toBeVisible();
+  });
+
+  test("aceptar la recomendación envía PATCH con aceptada true y muestra confirmación", async ({ page }) => {
+    let body: unknown = null;
+    await page.route(/\/recomendaciones\/\d+\/responder/, async (route) => {
+      body = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+
+    await page.getByRole("dialog").getByRole("button", { name: "Aceptar recomendación" }).click();
+    await expect(page.getByRole("dialog").getByText("Recomendación aceptada")).toBeVisible();
+    await expect(page.getByRole("dialog").getByText("Destino asignado: Queso")).toBeVisible();
+    expect(body).toEqual({ aceptada: true });
+  });
+
+  test("rechazar con justificación por debajo del mínimo mantiene el botón de confirmar deshabilitado", async ({ page }) => {
+    // El botón queda deshabilitado (AC2: el backend nunca llega a recibir
+    // una justificación corta) mientras el contador en pantalla muestra
+    // cuánto falta. El mensaje de error en rojo bajo el textarea solo se
+    // activa vía handleConfirmarRechazo, que nunca corre porque el propio
+    // atributo disabled del botón bloquea el click en un navegador real
+    // antes de llegar a ese handler — no se puede ejercitar por UI, ver nota
+    // en la documentación de HU-37.
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await dialog.locator("#recomendacion-destino-real").selectOption("2");
+    await dialog.locator("#justificacion-divergencia").fill("muy corta");
+    await expect(dialog.getByText("9/30 mínimo 30 caracteres")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Confirmar destino real" })).toBeDisabled();
+  });
+
+  test("rechazar con justificación válida envía PATCH con destino real y justificación", async ({ page }) => {
+    let body: unknown = null;
+    await page.route(/\/recomendaciones\/\d+\/responder/, async (route) => {
+      body = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await dialog.locator("#recomendacion-destino-real").selectOption("2");
+    const justificacion = "El proveedor informó menor contenido de grasa al ingreso.";
+    await dialog.locator("#justificacion-divergencia").fill(justificacion);
+    await dialog.getByRole("button", { name: "Confirmar destino real" }).click();
+
+    await expect(dialog.getByText("Recomendación rechazada")).toBeVisible();
+    await expect(dialog.getByText("Destino asignado: Yogur")).toBeVisible();
+    expect(body).toEqual({ aceptada: false, destinoRealId: 2, justificacion });
+  });
+
+  test("justificación con exactamente 30 caracteres es válida (límite exacto)", async ({ page }) => {
+    const treintaChars = "123456789012345678901234567890";
+    expect(treintaChars.length).toBe(30);
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await dialog.locator("#recomendacion-destino-real").selectOption("2");
+    await dialog.locator("#justificacion-divergencia").fill(treintaChars);
+    await expect(dialog.getByRole("button", { name: "Confirmar destino real" })).toBeEnabled();
+  });
+
+  test("recalcular vuelve a pedir la recomendación al backend", async ({ page }) => {
+    await page.route(/\/recomendaciones\/lote\/\d+/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(RECOMENDACION_MOCK),
+      });
+    });
+
+    const [response] = await Promise.all([
+      page.waitForResponse((res) => /\/recomendaciones\/lote\/\d+/.test(res.url())),
+      page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click(),
+    ]);
+    expect(response.status()).toBe(200);
+  });
+
+  test("error al cargar la recomendación permite reintentar", async ({ page }) => {
+    await page.route(/\/recomendaciones\/lote\/\d+/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 500, contentType: "application/json",
+        body: JSON.stringify({ message: "Error del servidor" }),
+      });
+    });
+
+    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Error del servidor")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Reintentar" })).toBeVisible();
+  });
+});
+
+test.describe("HU-49 — sin otro destino activo en el catálogo", () => {
+  test("avisa que no se puede registrar una divergencia si no hay otro destino disponible", async ({ page }) => {
+    await mockLotesDeps(page);
+    // Único destino activo = el mismo que recomienda el sistema (id 1)
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify([{ id: 1, nombre: "Queso" }]),
+      });
+    });
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    });
+    await mockRecomendacionPendiente(page, RECOMENDACION_MOCK);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page.waitForLoadState("networkidle");
+
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+
+    await expect(
+      dialog.getByText("No hay otro destino productivo configurado para elegir"),
+    ).toBeVisible();
+    await expect(dialog.locator("#recomendacion-destino-real")).toBeDisabled();
+  });
+});
+
+test.describe("HU-49 — sin recomendación disponible", () => {
+  test("lote sin historial suficiente muestra el mensaje de sin recomendación", async ({ page }) => {
+    await mockLotesDeps(page);
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(DESTINOS_MOCK) });
+    });
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    });
+    await mockRecomendacionPendiente(page, null);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    await expect(page.getByRole("dialog").getByText("Sin recomendación disponible")).toBeVisible();
+  });
+});
+
+test.describe("HU-37 — Justificación de divergencia operador vs sistema", () => {
+  test("una divergencia ya resuelta se muestra en el historial del lote con su justificación", async ({ page }) => {
+    await mockLotesDeps(page);
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(DESTINOS_MOCK) });
+    });
+    // Historial: el cambio vigente vino de rechazar la recomendación 5
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            destinoProductivoId: 2,
+            destinoProductivoNombre: "Yogur",
+            origen: "recomendacion_ml",
+            recomendacionDestinoId: 5,
+            createdAt: "2026-09-01T12:00:00.000Z",
+          },
+        ]),
+      });
+    });
+    await page.route(/\/recomendaciones\/todas/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            recomendacionId: 5,
+            loteId: 1,
+            loteCodigo: "LOT-2026-001",
+            estado: "rechazada",
+            destinoRecomendadoId: 1,
+            destinoRecomendadoNombre: "Queso",
+            destinoRealId: 2,
+            destinoRealNombre: "Yogur",
+            confianza: 87,
+            justificacion: "El proveedor informó menor contenido de grasa al ingreso.",
+            usuarioId: 3,
+            createdAt: "2026-09-01T11:00:00.000Z",
+            respondidaEn: "2026-09-01T12:00:00.000Z",
+          },
+        ]),
+      });
+    });
+    // Ya no hay recomendación pendiente para este lote (fue respondida)
+    await mockRecomendacionPendiente(page, null);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Destino asignado: Yogur")).toBeVisible();
+    await expect(dialog.getByText("Divergencia justificada respecto a la recomendación")).toBeVisible();
+    await expect(dialog.getByText("El sistema había recomendado Queso.")).toBeVisible();
+    await expect(
+      dialog.getByText("Justificación: El proveedor informó menor contenido de grasa al ingreso."),
+    ).toBeVisible();
+  });
+
+  test("una divergencia ya resuelta no tiene ningún control para editar la justificación", async ({ page }) => {
+    await mockLotesDeps(page);
+    await page.route("**/destinos-productivos*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(DESTINOS_MOCK) });
+    });
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            destinoProductivoId: 2,
+            destinoProductivoNombre: "Yogur",
+            origen: "recomendacion_ml",
+            recomendacionDestinoId: 5,
+            createdAt: "2026-09-01T12:00:00.000Z",
+          },
+        ]),
+      });
+    });
+    await page.route(/\/recomendaciones\/todas/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            recomendacionId: 5,
+            loteId: 1,
+            loteCodigo: "LOT-2026-001",
+            estado: "rechazada",
+            destinoRecomendadoId: 1,
+            destinoRecomendadoNombre: "Queso",
+            destinoRealId: 2,
+            destinoRealNombre: "Yogur",
+            confianza: 87,
+            justificacion: "El proveedor informó menor contenido de grasa al ingreso.",
+            usuarioId: 3,
+            createdAt: "2026-09-01T11:00:00.000Z",
+            respondidaEn: "2026-09-01T12:00:00.000Z",
+          },
+        ]),
+      });
+    });
+    await mockRecomendacionPendiente(page, null);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Divergencia justificada respecto a la recomendación")).toBeVisible();
+    await expect(dialog.locator("textarea")).not.toBeVisible();
+    await expect(dialog.getByRole("button", { name: /editar|modificar/i })).not.toBeVisible();
+  });
+});
+
+test.describe("HU-34 — restricción de rol sobre edición de lote", () => {
+  test("administrador no ve el botón Editar lote", async ({ page }) => {
+    await mockLotesDeps(page);
+    await loginAsAdministrador(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTitle("Editar lote").first()).not.toBeVisible();
+  });
+
+  test("operario no ve el botón Editar lote", async ({ page }) => {
+    await mockLotesDeps(page);
+    await loginAsOperario(page);
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTitle("Editar lote").first()).not.toBeVisible();
   });
 });

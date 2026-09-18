@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FlaskConical, GitMerge, History, Pencil, Route } from "lucide-react";
+import { CheckCircle2, FlaskConical, GitMerge, History, Pencil, Route, Search } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
@@ -8,6 +8,10 @@ import { AuditoriaModal } from "../../components/AuditoriaModal";
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
+import { recomendacionService } from "../../services/recomendacion.service";
+import type { RecomendacionDestinoItem } from "../../types/recomendacionDestino.types";
+import { Badge } from "../../components/ui/Badge";
+import { tieneNumeroRemito } from "../../utils/numeroRemito";
 import { proveedoresService } from "../../services/proveedores.service";
 import { tamboService } from "../../services/tambo.service";
 import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
@@ -95,6 +99,53 @@ export default function LotesPage() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [tambos, setTambos] = useState<Tambo[]>([]);
   const [filtroUnidadRendimiento, setFiltroUnidadRendimiento] = useState("");
+  // HU-37: universo de recomendaciones de la empresa para aproximar, en la
+  // tabla, qué lotes tienen una divergencia justificada — ver el TODO en
+  // divergenciaVigentePorLote más abajo. Una sola llamada acá, no una por
+  // fila (mismo patrón que proveedores/tambos, arriba).
+  const [recomendacionesTodas, setRecomendacionesTodas] = useState<RecomendacionDestinoItem[]>(
+    [],
+  );
+  useEffect(() => {
+    recomendacionService
+      .getTodas()
+      .then(setRecomendacionesTodas)
+      .catch(() => setRecomendacionesTodas([]));
+  }, []);
+  // TODO(backend): esto es una aproximación, no el destino vigente real de
+  // cada lote (para eso, ver useDestinoProductivoLote.ts — GET
+  // /lotes/:id/destino-productivo/historial — que sí es preciso pero es
+  // por lote, no sirve para pintar 100 filas de una). Toma, por loteId, la
+  // recomendación resuelta (aceptada o rechazada) más reciente según
+  // respondidaEn y marca "divergencia" si quedó rechazada. Dos límites
+  // conocidos, ambos hacia el lado de "puede sobrar el badge", nunca
+  // "puede faltar" cuando realmente no hubo divergencia:
+  // 1. No sabe si después hubo una asignación MANUAL (HU-34) que reemplazó
+  //    ese destino — el badge puede quedar vigente aunque ya no lo esté.
+  // 2. No distingue una recomendación de un consumo parcial posterior
+  //    (HU-68) de la del lote original: comparten el mismo loteId y el DTO
+  //    de /recomendaciones/todas no expone loteConsumoId para separarlas.
+  // Por eso la tabla ya NO muestra el nombre del destino productivo vigente
+  // (solo el badge de divergencia): mostrar un nombre sacado únicamente de
+  // acá sería directamente incorrecto para un lote reasignado a mano
+  // después de la recomendación, no solo impreciso.
+  const divergenciaVigentePorLote = useMemo(() => {
+    const masRecientePorLote = new Map<number, RecomendacionDestinoItem>();
+    for (const r of recomendacionesTodas) {
+      if (r.estado === "pendiente" || !r.respondidaEn) continue;
+      const actual = masRecientePorLote.get(r.loteId);
+      if (!actual || r.respondidaEn > actual.respondidaEn!) {
+        masRecientePorLote.set(r.loteId, r);
+      }
+    }
+    const mapa = new Map<number, boolean>();
+    for (const [loteId, r] of masRecientePorLote) {
+      mapa.set(loteId, r.estado === "rechazada");
+    }
+    return mapa;
+  }, [recomendacionesTodas]);
+  const [soloConDivergencias, setSoloConDivergencias] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLote, setEditingLote] = useState<Lote | null>(null);
   const [loteMediciones, setLoteMediciones] = useState<Lote | null>(null);
@@ -119,6 +170,9 @@ export default function LotesPage() {
   // implementada igual en frontend y backend. Se deja anotado acá para que
   // quede trazable en el código, no solo en la conversación.
   const puedeCrearLote = user?.rolNombre === "Responsable de calidad";
+  const puedeEditarLote =
+    user?.rolNombre === "Responsable de calidad" ||
+    user?.rolNombre === "Responsable de producción";
 
   // HU-63: quién creó el lote y, si aplica, quién lo modificó por última
   // vez. El backend manda el bloque `auditoria` para cualquier rol que
@@ -283,9 +337,53 @@ export default function LotesPage() {
   // ("Todas") no filtra nada; con "" el lote no tiene rendimiento cargado
   // (no finalizado o finalizado sin rendimiento) y no matchea ninguna unidad.
   const lotesFiltrados = useMemo(() => {
-    if (filtroUnidadRendimiento === "") return lotes;
-    return lotes.filter((lote) => lote.unidadRendimiento === filtroUnidadRendimiento);
-  }, [lotes, filtroUnidadRendimiento]);
+    let resultado = lotes;
+    if (filtroUnidadRendimiento !== "") {
+      resultado = resultado.filter((lote) => lote.unidadRendimiento === filtroUnidadRendimiento);
+    }
+    if (soloConDivergencias) {
+      resultado = resultado.filter((lote) => divergenciaVigentePorLote.get(lote.id) ?? false);
+    }
+    // HU-69 (AC "el listado de lotes... habilita la búsqueda por número de
+    // remito"): client-side, sobre los campos ya cargados en pantalla — no
+    // hay ningún query param de búsqueda combinada en GET /lotes. Los lotes
+    // con 'S/D' (backfill de la migración, ver utils/numeroRemito.ts) no
+    // matchean por remito: no tienen uno real que buscar.
+    const termino = busqueda.trim().toLowerCase();
+    if (termino !== "") {
+      resultado = resultado.filter((lote) => {
+        const proveedor = proveedorMap.get(lote.proveedorId) ?? "";
+        const tambo = tamboMap.get(lote.tamboId) ?? "";
+        const remito = tieneNumeroRemito(lote.numeroRemito) ? lote.numeroRemito : "";
+        return (
+          lote.codigo.toLowerCase().includes(termino) ||
+          proveedor.toLowerCase().includes(termino) ||
+          tambo.toLowerCase().includes(termino) ||
+          remito.toLowerCase().includes(termino)
+        );
+      });
+    }
+    return resultado;
+  }, [
+    lotes,
+    filtroUnidadRendimiento,
+    soloConDivergencias,
+    divergenciaVigentePorLote,
+    busqueda,
+    proveedorMap,
+    tamboMap,
+  ]);
+
+  // HU-37: cuenta sobre el universo ya filtrado por unidad de rendimiento
+  // (no sobre `lotes` sin filtrar), para que el número del checkbox
+  // coincida con lo que efectivamente se puede llegar a ver.
+  const cantidadConDivergencias = useMemo(() => {
+    const base =
+      filtroUnidadRendimiento === ""
+        ? lotes
+        : lotes.filter((lote) => lote.unidadRendimiento === filtroUnidadRendimiento);
+    return base.filter((lote) => divergenciaVigentePorLote.get(lote.id) ?? false).length;
+  }, [lotes, filtroUnidadRendimiento, divergenciaVigentePorLote]);
 
   // HU-68: se busca por id en la lista ya cargada (no un GET /lotes/:id
   // aparte) para que, tras registrar un consumo y refetchear /lotes, el
@@ -294,6 +392,11 @@ export default function LotesPage() {
   const loteTrazabilidad = useMemo(
     () => lotes.find((l) => l.id === loteTrazabilidadId) ?? null,
     [lotes, loteTrazabilidadId],
+  );
+
+  const loteHistorial = useMemo(
+    () => lotes.find((l) => l.id === loteHistorialId) ?? null,
+    [lotes, loteHistorialId],
   );
 
   const headers = useMemo(() => {
@@ -315,6 +418,15 @@ export default function LotesPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+            <input
+              type="checkbox"
+              checked={soloConDivergencias}
+              onChange={(e) => setSoloConDivergencias(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700"
+            />
+            Solo lotes con divergencias justificadas ({cantidadConDivergencias})
+          </label>
           <Select
             id="filtro-unidad-rendimiento"
             label="Unidad de rendimiento"
@@ -329,6 +441,19 @@ export default function LotesPage() {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* HU-69: búsqueda client-side por código de lote, proveedor, tambo o
+          número de remito — no hay query param combinado en GET /lotes. */}
+      <div className="relative mb-4 max-w-md">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+        <input
+          type="text"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          placeholder="Buscar por lote, proveedor, tambo o nº de remito..."
+          className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+        />
       </div>
 
       {error && (
@@ -365,14 +490,22 @@ export default function LotesPage() {
             Ningún lote coincide con el filtro
           </p>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            No hay lotes finalizados con rendimiento en{" "}
-            {UNIDAD_RENDIMIENTO_LABEL[filtroUnidadRendimiento as UnidadRendimiento]?.toLowerCase()}.
+            {/* HU-69: el buscador es un filtro más sobre lotesFiltrados —
+                sin este caso, una búsqueda sin resultados caía en el mensaje
+                del filtro de rendimiento (con "undefined" si ese filtro no
+                estaba activo). Se prioriza porque es el más específico: si
+                hay texto buscado, es la razón más probable del vacío. */}
+            {busqueda.trim() !== ""
+              ? `Ningún lote coincide con "${busqueda.trim()}".`
+              : soloConDivergencias
+                ? "No hay lotes con divergencias justificadas que coincidan con el resto de los filtros."
+                : `No hay lotes finalizados con rendimiento en ${UNIDAD_RENDIMIENTO_LABEL[filtroUnidadRendimiento as UnidadRendimiento]?.toLowerCase()}.`}
           </p>
         </div>
       ) : (
         <>
           {/* Tabla (md+) */}
-          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
+          <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800">
@@ -390,7 +523,14 @@ export default function LotesPage() {
                 {lotesFiltrados.map((lote) => (
                   <tr key={lote.id} className="text-sm">
                     <td className="px-5 py-3 font-mono text-xs font-medium text-slate-900 dark:text-white">
-                      {lote.codigo}
+                      <div className="flex flex-col gap-0.5">
+                        <span>{lote.codigo}</span>
+                        {tieneNumeroRemito(lote.numeroRemito) && (
+                          <span className="font-sans text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                            Nº remito: {lote.numeroRemito}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-slate-700 dark:text-slate-300">
                       {proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`}
@@ -407,8 +547,20 @@ export default function LotesPage() {
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {new Date(lote.fechaIngreso).toLocaleDateString("es-AR")}
                     </td>
-                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                      {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
+                    <td className="px-5 py-3">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-slate-600 dark:text-slate-400">
+                          {lote.destinoInicial ? DESTINO_LABEL[lote.destinoInicial] : "—"}
+                        </span>
+                        {/* HU-37: el nombre del destino productivo vigente
+                            se ve en el detalle del lote (Editar lote /
+                            Historial de trazabilidad) — acá, ver el TODO de
+                            divergenciaVigentePorLote arriba, solo se puede
+                            aproximar el badge de forma confiable. */}
+                        {divergenciaVigentePorLote.get(lote.id) && (
+                          <Badge variant="warning">Divergencia</Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       {formatRendimiento(lote)}
@@ -460,7 +612,7 @@ export default function LotesPage() {
                             <GitMerge className="h-4 w-4" />
                           </button>
                         )}
-                        {puedeCrearLote && (
+                        {puedeEditarLote && (
                           <button
                             type="button"
                             onClick={() => abrirEdicion(lote)}
@@ -511,6 +663,11 @@ export default function LotesPage() {
                     <p className="truncate font-mono text-xs font-medium text-slate-900 dark:text-white">
                       {lote.codigo}
                     </p>
+                    {tieneNumeroRemito(lote.numeroRemito) && (
+                      <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">
+                        Nº remito: {lote.numeroRemito}
+                      </p>
+                    )}
                     <p className="truncate text-sm text-slate-700 dark:text-slate-300">
                       {proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`}
                     </p>
@@ -552,7 +709,7 @@ export default function LotesPage() {
                         <GitMerge className="h-4 w-4" />
                       </button>
                     )}
-                    {puedeCrearLote && (
+                    {puedeEditarLote && (
                       <button
                         type="button"
                         onClick={() => abrirEdicion(lote)}
@@ -630,6 +787,19 @@ export default function LotesPage() {
                     </dd>
                   </div>
                   <div className="col-span-2">
+                    <dt className="text-slate-400 dark:text-slate-500">Destino productivo</dt>
+                    <dd>
+                      {/* HU-37: ver el TODO de divergenciaVigentePorLote —
+                          el nombre del destino vigente se ve en el detalle
+                          del lote, acá solo el badge aproximado. */}
+                      {divergenciaVigentePorLote.get(lote.id) ? (
+                        <Badge variant="warning">Divergencia</Badge>
+                      ) : (
+                        <span className="italic text-slate-400 dark:text-slate-500">—</span>
+                      )}
+                    </dd>
+                  </div>
+                  <div className="col-span-2">
                     <dt className="text-slate-400 dark:text-slate-500">Rendimiento</dt>
                     <dd className="text-slate-600 dark:text-slate-400">{formatRendimiento(lote)}</dd>
                   </div>
@@ -640,7 +810,7 @@ export default function LotesPage() {
         </>
       )}
 
-      {puedeCrearLote && (
+      {puedeEditarLote && (
         <LoteFormModal
           isOpen={isModalOpen}
           proveedores={proveedores}
@@ -677,6 +847,9 @@ export default function LotesPage() {
       <HistorialTrazabilidadModal
         isOpen={loteHistorialId !== null}
         loteId={loteHistorialId}
+        lote={loteHistorial}
+        proveedorMap={proveedorMap}
+        tamboMap={tamboMap}
         onClose={() => setLoteHistorialId(null)}
       />
 

@@ -1,5 +1,5 @@
 import api from "./api";
-import type { RolType, UpdatePermisoDto } from "../types/rol.types";
+import type { RolType, UpdatePermisoDto, PermisoActualizadoType } from "../types/rol.types";
 
 export async function getRoles(): Promise<RolType[]> {
   const { data } = await api.get("/rol");
@@ -7,9 +7,9 @@ export async function getRoles(): Promise<RolType[]> {
 }
 
 export async function updatePermiso(
-  rolId: number,
+  permisoId: number,
   payload: UpdatePermisoDto,
-): Promise<RolType> {
-  const { data } = await api.patch(`/rol/${rolId}/permisos`, payload);
+): Promise<PermisoActualizadoType> {
+  const { data } = await api.patch(`/permiso/${permisoId}`, payload);
   return data;
 }

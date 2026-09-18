@@ -14,6 +14,7 @@ import {
   Cpu,
   FlaskConical,
   Bell,
+  Moon,
   Siren,
   History,
   Snowflake,
@@ -102,8 +103,18 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     user?.rolNombre === "Operario de línea";
   // HU-29: Administrador y Gerente configuran destinatarios de alertas
   // (AC1/AC4 del backlog — ver allowedRoles en App.tsx para la ruta
-  // protegida).
+  // protegida). A partir de HU-30, Responsable de producción también entra
+  // a esta misma ruta, pero con su propio nav item (ver
+  // puedeVerHorariosSilencio más abajo): en esa página solo llega a ver la
+  // card de horarios de silencio, no destinatarios.
   const puedeVerAlertasDestinatarios = esAdmin || esGerente;
+  // HU-30: Responsable de producción administra horarios de silencio desde
+  // la misma ruta /alertas/destinatarios (@Roles en
+  // NotificacionesController.listarHorariosSilencio incluye
+  // RESPONSABLE_PRODUCCION), pero con un nav item propio en vez de reusar
+  // "Alertas" — ese label ya lo usa puedeVerAlertasMonitoreo para /alertas
+  // (HU-25) y tener dos ítems iguales sería confuso.
+  const puedeVerHorariosSilencio = esResponsableProduccion;
   // HU-25: pantalla "Monitoreo y Alertas", exclusiva de Responsable de
   // producción (ver allowedRoles en App.tsx).
   const puedeVerAlertasMonitoreo = esResponsableProduccion;
@@ -232,6 +243,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(puedeVerAlertasDestinatarios
       ? [{ label: "Alertas", icon: Bell, path: "/alertas/destinatarios" }]
       : []),
+    ...(puedeVerHorariosSilencio
+      ? [{ label: "Horarios de silencio", icon: Moon, path: "/alertas/destinatarios" }]
+      : []),
     ...(puedeVerAlertasMonitoreo
       ? [{ label: "Alertas", icon: Siren, path: "/alertas" }]
       : []),
@@ -268,7 +282,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         <span className="flex-shrink-0 rounded-md bg-blue-100 px-3 py-1 text-xs font-semibold uppercase text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
-          {user?.rolNombre ?? "Sin rol"}
+          {/* Badge de rol arriba a la izquierda: para Responsable de
+              producción se abrevia a "Producción" para que no se corte con
+              nombres de empresa largos (el resto de los roles no cambia). */}
+          {esResponsableProduccion ? "Producción" : (user?.rolNombre ?? "Sin rol")}
         </span>
 
         <button
