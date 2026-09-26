@@ -8,8 +8,17 @@ import type { SensorFilterQuery } from "../../types/sensor.types";
 import { RegistroSensoresTab } from "./components/RegistroSensoresTab";
 import { EstadoDiagnosticoTab } from "./components/EstadoDiagnosticoTab";
 import { HistorialMedicionesTab } from "./components/HistorialMedicionesTab";
+import { MonitoreoSemaforoTab } from "./components/MonitoreoSemaforoTab";
 
-type TabSensores = "estado" | "registro" | "historial";
+type TabSensores = "semaforo" | "estado" | "registro" | "historial";
+
+// HU-40 (Sprint 5, mock visual): pensada para Operario de línea — ver
+// MonitoreoSemaforoTab para el detalle de por qué esta pestaña todavía no
+// tiene datos reales.
+const TAB_SEMAFORO: { value: TabSensores; label: string } = {
+  value: "semaforo",
+  label: "Monitoreo en línea",
+};
 
 const TABS_BASE: { value: TabSensores; label: string }[] = [
   { value: "estado", label: "Estado y diagnóstico" },
@@ -38,7 +47,13 @@ export default function SensoresPage() {
   } = useSensores(filtros);
   const { user } = useAuth();
   const { empresa } = useEmpresaActual();
-  const [tabActiva, setTabActiva] = useState<TabSensores>("registro");
+  const esOperarioDeLinea = (user?.rolNombre ?? "").trim().toLowerCase() === "operario de línea";
+  // HU-40: el Operario de línea entra directo al semáforo (es la vista que
+  // le pide el backlog); el resto de los roles mantiene el default previo
+  // para no cambiarles el flujo con el que ya venían trabajando.
+  const [tabActiva, setTabActiva] = useState<TabSensores>(
+    esOperarioDeLinea ? "semaforo" : "registro",
+  );
 
   // POST/PATCH/DELETE /sensores (backend): exclusivo Responsable de
   // producción y Responsable de calidad (ver @Roles en sensor.controller.ts).
@@ -72,7 +87,9 @@ export default function SensoresPage() {
     );
   }, [user?.rolNombre]);
 
-  const tabs = puedeVerHistorial ? [...TABS_BASE, TAB_HISTORIAL] : TABS_BASE;
+  const tabs = puedeVerHistorial
+    ? [TAB_SEMAFORO, ...TABS_BASE, TAB_HISTORIAL]
+    : [TAB_SEMAFORO, ...TABS_BASE];
 
   return (
     <Layout breadcrumb="Consola > Sensores">
@@ -89,7 +106,9 @@ export default function SensoresPage() {
         <Tabs tabs={tabs} value={tabActiva} onChange={setTabActiva} />
       </div>
 
-      {tabActiva === "estado" ? (
+      {tabActiva === "semaforo" ? (
+        <MonitoreoSemaforoTab />
+      ) : tabActiva === "estado" ? (
         <EstadoDiagnosticoTab />
       ) : tabActiva === "historial" ? (
         puedeVerHistorial ? <HistorialMedicionesTab /> : null
