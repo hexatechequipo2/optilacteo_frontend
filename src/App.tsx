@@ -24,6 +24,7 @@ import DestinatariosAlertasPage from "./pages/Alertas/DestinatariosAlertasPage";
 import AlertasPage from "./pages/Alertas/AlertasPage";
 import HistorialAlertasPage from "./pages/Alertas/HistorialAlertasPage";
 import IngresoCamaraPage from "./pages/IngresoCamara/IngresoCamaraPage";
+import AuditoriaPage from "./pages/Auditoria/AuditoriaPage";
 import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
 import { InactivityMonitor } from "./components/layout/InactivityMonitor";
@@ -327,6 +328,15 @@ function App() {
               />
 
               {/* SIN FUNCIONALIDADES (roles sin implementación en este sprint) */}
+              <Route
+                path="/auditoria"
+                element={
+                  <ProtectedRoute allowedRoles={["Administrador"]}>
+                    <AuditoriaPage />
+                  </ProtectedRoute>
+                }
+              />
+
               <Route
                 path="/sin-funcionalidades"
                 element={
