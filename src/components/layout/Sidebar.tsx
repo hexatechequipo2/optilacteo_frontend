@@ -19,6 +19,7 @@ import {
   History,
   Snowflake,
   Droplets,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
@@ -50,6 +51,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   // también lo puede consultar (ver allowedRoles en App.tsx).
   const puedeVerDashboardProduccion = esResponsableProduccion || esGerente;
   const puedeVerUsuarios = esAdmin || esGerente;
+  // HU-43: log de auditoría transversal, exclusivo de Administrador (mock
+  // visual, ver AuditoriaPage.tsx — no confundir con AuditoriaModal.tsx de
+  // HU-63, que es el historial de creación/edición de un registro puntual).
+  const puedeVerAuditoria = esAdmin;
   const puedeVerEmpresas = esAdmin;
   // HU-23: Responsable de calidad entra en modo solo lectura (ver
   // ConfiguracionPage.tsx / App.tsx).
@@ -210,6 +215,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       : []),
     ...(puedeVerUsuarios
       ? [{ label: "Usuarios", icon: Users, count: counts.usuarios, path: "/usuarios" }]
+      : []),
+    ...(puedeVerAuditoria
+      ? [{ label: "Auditoría", icon: ShieldCheck, path: "/auditoria" }]
       : []),
     ...(puedeVerPlanes
       ? [{ label: "Planes", icon: Package, count: counts.planes, path: "/planes" }]
