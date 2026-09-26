@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Layout } from "../../components/layout/Layout";
 import { Tabs } from "../../components/ui/Tabs";
+import { ROLES } from "../../constants/roles";
 import { useSensores } from "../../hooks/useSensores";
 import { useAuth } from "../../hooks/useAuth";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
@@ -12,9 +13,7 @@ import { MonitoreoSemaforoTab } from "./components/MonitoreoSemaforoTab";
 
 type TabSensores = "semaforo" | "estado" | "registro" | "historial";
 
-// HU-40 (Sprint 5, mock visual): pensada para Operario de línea — ver
-// MonitoreoSemaforoTab para el detalle de por qué esta pestaña todavía no
-// tiene datos reales.
+// HU-40: pensada para Operario de línea (ver MonitoreoSemaforoTab).
 const TAB_SEMAFORO: { value: TabSensores; label: string } = {
   value: "semaforo",
   label: "Monitoreo en línea",
@@ -47,13 +46,27 @@ export default function SensoresPage() {
   } = useSensores(filtros);
   const { user } = useAuth();
   const { empresa } = useEmpresaActual();
-  const esOperarioDeLinea = (user?.rolNombre ?? "").trim().toLowerCase() === "operario de línea";
-  // HU-40: el Operario de línea entra directo al semáforo (es la vista que
-  // le pide el backlog); el resto de los roles mantiene el default previo
-  // para no cambiarles el flujo con el que ya venían trabajando.
-  const [tabActiva, setTabActiva] = useState<TabSensores>(
-    esOperarioDeLinea ? "semaforo" : "registro",
-  );
+  const esOperarioDeLinea = user?.rolNombre === ROLES.OPERARIO_LINEA;
+  // HU-40: el Operario de línea entra directo al semáforo; el resto de los
+  // roles mantiene el default previo. El default se deriva en cada render
+  // (no se fija en el useState inicial) para que se corrija si `user` llega
+  // después del primer render; una vez que el usuario elige una pestaña a
+  // mano, esa elección manda.
+  const [tabElegida, setTabElegida] = useState<TabSensores | null>(null);
+  const tabActiva: TabSensores = tabElegida ?? (esOperarioDeLinea ? "semaforo" : "registro");
+
+  // GET /dashboard/lote/:id/semaforo y GET /lotes/:id/mediciones-manuales
+  // (backend) no incluyen a Responsable de calidad en @Roles: la pestaña se
+  // muestra solo a los roles que el backend deja pasar.
+  const puedeVerSemaforo = useMemo(() => {
+    const rolesPermitidos: string[] = [
+      ROLES.OPERARIO_LINEA,
+      ROLES.RESPONSABLE_PRODUCCION,
+      ROLES.GERENTE,
+      ROLES.ADMINISTRADOR,
+    ];
+    return rolesPermitidos.includes(user?.rolNombre ?? "");
+  }, [user?.rolNombre]);
 
   // POST/PATCH/DELETE /sensores (backend): exclusivo Responsable de
   // producción y Responsable de calidad (ver @Roles en sensor.controller.ts).
@@ -87,9 +100,11 @@ export default function SensoresPage() {
     );
   }, [user?.rolNombre]);
 
-  const tabs = puedeVerHistorial
-    ? [TAB_SEMAFORO, ...TABS_BASE, TAB_HISTORIAL]
-    : [TAB_SEMAFORO, ...TABS_BASE];
+  const tabs = [
+    ...(puedeVerSemaforo ? [TAB_SEMAFORO] : []),
+    ...TABS_BASE,
+    ...(puedeVerHistorial ? [TAB_HISTORIAL] : []),
+  ];
 
   return (
     <Layout breadcrumb="Consola > Sensores">
@@ -103,11 +118,11 @@ export default function SensoresPage() {
       </div>
 
       <div className="mb-6">
-        <Tabs tabs={tabs} value={tabActiva} onChange={setTabActiva} />
+        <Tabs tabs={tabs} value={tabActiva} onChange={setTabElegida} />
       </div>
 
       {tabActiva === "semaforo" ? (
-        <MonitoreoSemaforoTab />
+        puedeVerSemaforo ? <MonitoreoSemaforoTab /> : null
       ) : tabActiva === "estado" ? (
         <EstadoDiagnosticoTab />
       ) : tabActiva === "historial" ? (
