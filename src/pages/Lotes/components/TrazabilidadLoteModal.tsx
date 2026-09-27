@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Check } from "lucide-react";
+import { Check, FileText } from "lucide-react";
 import { Modal } from "../../../components/ui/Modal";
 import { Badge } from "../../../components/ui/Badge";
 import { Input } from "../../../components/ui/Input";
@@ -10,6 +10,10 @@ import { useConsumosLote } from "../../../hooks/useConsumosLote";
 import { useLotesProduccion } from "../../../hooks/useLotesProduccion";
 import { useRegistrarConsumo } from "../../../hooks/useRegistrarConsumo";
 import { useConfigParametros } from "../../../hooks/useConfigParametros";
+import { useTrazabilidadLote } from "../../../hooks/useTrazabilidadLote";
+import { useDestinoProductivoLote } from "../../../hooks/useDestinoProductivoLote";
+import { useEmpresaActual } from "../../../hooks/useEmpresaActual";
+import { generarReporteTrazabilidadPdf } from "../../../utils/generarReporteTrazabilidadPdf";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -50,6 +54,9 @@ interface TrazabilidadLoteModalProps {
   // en modo solo lectura (tienen acceso a GET /lotes/:id/consumos pero no al
   // POST).
   puedeRegistrarConsumo: boolean;
+  // HU-45: solo Responsable de calidad ve el botón de generar reporte
+  // (ver comentario en LotesPage, puedeGenerarReporteTrazabilidad).
+  puedeGenerarReporte: boolean;
   onClose: () => void;
   // Se dispara tras registrar un consumo con éxito: LotesPage hace
   // refetch() de useLotes() para que este mismo lote (buscado de nuevo por
@@ -65,6 +72,7 @@ export function TrazabilidadLoteModal({
   proveedorMap,
   tamboMap,
   puedeRegistrarConsumo,
+  puedeGenerarReporte,
   onClose,
   onConsumoRegistrado,
 }: TrazabilidadLoteModalProps) {
@@ -74,6 +82,16 @@ export function TrazabilidadLoteModal({
   const { lotesProduccion } = useLotesProduccion();
   const { configs } = useConfigParametros();
   const { registrar, isSubmitting, error: errorRegistro, resetError } = useRegistrarConsumo();
+  // HU-45: el reporte reutiliza el mismo historial real que ya usa
+  // HistorialTrazabilidadModal (GET /lotes/:id/trazabilidad) y el destino
+  // vigente — no hay nada mockeado en el contenido del PDF, solo en la
+  // "firma digital" (ver generarReporteTrazabilidadPdf.ts).
+  const { eventos, codigoLote, isLoading: isLoadingTrazabilidad } = useTrazabilidadLote(
+    puedeGenerarReporte ? loteId : null,
+  );
+  const { destinoVigente } = useDestinoProductivoLote(puedeGenerarReporte ? loteId : null);
+  const { empresa } = useEmpresaActual();
+  const [isGenerandoReporte, setIsGenerandoReporte] = useState(false);
 
   const [cantidad, setCantidad] = useState("");
   const [loteProduccionId, setLoteProduccionId] = useState("");
@@ -175,12 +193,58 @@ export function TrazabilidadLoteModal({
     }
   };
 
+  // HU-45 (AC2/AC3): "un solo clic" — no hay paso intermedio de
+  // confirmación, el PDF se genera y descarga directo. isGenerandoReporte
+  // es solo para no permitir doble clic mientras isLoadingTrazabilidad
+  // todavía no trajo los eventos reales.
+  const handleGenerarReporte = () => {
+    setIsGenerandoReporte(true);
+    try {
+      generarReporteTrazabilidadPdf({
+        codigoLote: codigoLote ?? lote.codigo,
+        empresaNombre: empresa?.name ?? "OptiLácteo",
+        empresaCuit: empresa?.cuit,
+        proveedor: proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`,
+        tambo: tamboMap.get(lote.tamboId) ?? `Tambo #${lote.tamboId}`,
+        numeroRemito: lote.numeroRemito,
+        destinoVigente: destinoVigente?.destinoActualNombre ?? null,
+        eventos,
+      });
+    } finally {
+      setIsGenerandoReporte(false);
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
       title="Detalle de trazabilidad de lote"
       description={lote.codigo}
       onClose={onClose}
+      footer={
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Cerrar
+          </button>
+          {puedeGenerarReporte && (
+            <Button
+              type="button"
+              isLoading={isGenerandoReporte || isLoadingTrazabilidad}
+              disabled={isLoadingTrazabilidad}
+              onClick={handleGenerarReporte}
+              className="!w-auto items-center gap-1.5 px-6"
+              title="Genera y descarga el reporte de trazabilidad en PDF para presentar ante inspecciones"
+            >
+              <FileText className="h-4 w-4" />
+              Generar reporte
+            </Button>
+          )}
+        </div>
+      }
     >
       <div className="flex flex-col gap-8">
         {/* Datos de ingreso */}
