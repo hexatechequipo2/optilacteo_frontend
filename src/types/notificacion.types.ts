@@ -25,6 +25,11 @@ export const TipoNotificacion = {
   // trae nivelAlerta ni data.valor/umbralMin/umbralMax (ver AlertaAnomaliaData
   // más abajo): es una forma de datos distinta, no una variante de alerta_umbral.
   ALERTA_ANOMALIA: "alerta_anomalia",
+  // HU-48: aviso anticipado (60 días) de registros que cumplen el período de
+  // retención. Hoy lo genera useAvisosRetencionMock en el frontend (ids
+  // negativos, nunca llegan al backend) — TODO(backend): que lo emita
+  // NotificacionesService con este mismo tipo.
+  RETENCION_PROXIMO_VENCIMIENTO: "retencion_proximo_vencimiento",
 } as const;
 
 export type TipoNotificacion = (typeof TipoNotificacion)[keyof typeof TipoNotificacion];

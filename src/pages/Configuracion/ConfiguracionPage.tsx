@@ -11,6 +11,7 @@ import { PlcGatewayConfigTab } from "./components/PlcGatewayConfigTab";
 import { SkusConfigTab } from "./components/SkusConfigTab";
 import { DestinosProductivosConfigTab } from "./components/DestinosProductivosConfigTab";
 import { HorariosSilencioConfigTab } from "./components/HorariosSilencioConfigTab";
+import { RetencionDatosTab } from "./components/RetencionDatosTab";
 
 type TabConfiguracion =
   | "umbrales"
@@ -19,7 +20,8 @@ type TabConfiguracion =
   | "plc-gateway"
   | "skus"
   | "destinos-productivos"
-  | "horarios-silencio";
+  | "horarios-silencio"
+  | "retencion-datos";
 
 // HU-67 (AC 2): tab de catálogo de SKUs, solo para Gerente. POST /skus en el
 // backend está restringido a ADMINISTRADOR/GERENTE (ver sku.controller.ts),
@@ -34,6 +36,8 @@ const TABS_GERENTE: { value: TabConfiguracion; label: string }[] = [
   { value: "skus", label: "Catálogo de SKUs" },
   { value: "destinos-productivos", label: "Destinos productivos" },
   { value: "horarios-silencio", label: "Horarios de silencio" },
+  // HU-48: solo Gerente (ver/editar). No se suma a ningún otro array de roles.
+  { value: "retencion-datos", label: "Retención de datos" },
 ];
 
 // HU-23: a diferencia de Umbrales/Logo (Gerente-only, ver allowedRoles en
@@ -100,6 +104,7 @@ export default function ConfiguracionPage() {
         <DestinosProductivosConfigTab puedeAdministrar={esGerente} />
       )}
       {tabActiva === "horarios-silencio" && <HorariosSilencioConfigTab />}
+      {tabActiva === "retencion-datos" && esGerente && <RetencionDatosTab />}
     </Layout>
   );
 }
