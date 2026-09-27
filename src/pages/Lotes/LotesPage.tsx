@@ -278,6 +278,15 @@ export default function LotesPage() {
     return rol === "responsable de calidad" || rol === "responsable de producción";
   }, [user?.rolNombre]);
 
+  // HU-45 (Sprint 5, mock visual): "Reporte de trazabilidad de un lote
+  // específico" — el backlog lo asigna puntualmente a Responsable de
+  // calidad (documentación para inspecciones del CAA/SENASA), no al resto
+  // de los roles que también pueden abrir este mismo modal en modo lectura.
+  const puedeGenerarReporteTrazabilidad = useMemo(() => {
+    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
+    return rol === "responsable de calidad";
+  }, [user?.rolNombre]);
+
   // HU-32: GET /lotes/:id/trazabilidad (backend) — Responsable de calidad,
   // Gerente, Administrador. A diferencia de puedeVerTrazabilidad (que gatea
   // el panel de consumo parcial de HU-68), este NO incluye a Responsable de
@@ -840,6 +849,7 @@ export default function LotesPage() {
         proveedorMap={proveedorMap}
         tamboMap={tamboMap}
         puedeRegistrarConsumo={puedeRegistrarConsumo}
+        puedeGenerarReporte={puedeGenerarReporteTrazabilidad}
         onClose={() => setLoteTrazabilidadId(null)}
         onConsumoRegistrado={() => void refetch()}
       />
