@@ -51,10 +51,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   // también lo puede consultar (ver allowedRoles en App.tsx).
   const puedeVerDashboardProduccion = esResponsableProduccion || esGerente;
   const puedeVerUsuarios = esAdmin || esGerente;
-  // HU-43: log de auditoría transversal, exclusivo de Administrador (mock
-  // visual, ver AuditoriaPage.tsx — no confundir con AuditoriaModal.tsx de
-  // HU-63, que es el historial de creación/edición de un registro puntual).
-  const puedeVerAuditoria = esAdmin;
+  // HU-43: log de auditoría transversal, exclusivo de Gerente (GET
+  // /audit-log tiene @Roles(GERENTE) solo; Administrador recibe 403). No
+  // confundir con AuditoriaModal.tsx de HU-63 (historial de un registro).
+  const puedeVerAuditoria = esGerente;
   const puedeVerEmpresas = esAdmin;
   // HU-23: Responsable de calidad entra en modo solo lectura (ver
   // ConfiguracionPage.tsx / App.tsx).

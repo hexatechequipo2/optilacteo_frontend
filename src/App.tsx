@@ -3,6 +3,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { useAuth } from "./hooks/useAuth";
 import { getRoleLanding } from "./utils/roleLanding";
+import { ROLES } from "./constants/roles";
 
 import LoginPage from "./pages/Login/LoginPage";
 import ForgotPasswordPage from "./pages/Login/ForgotPasswordPage";
@@ -327,16 +328,18 @@ function App() {
                 }
               />
 
-              {/* SIN FUNCIONALIDADES (roles sin implementación en este sprint) */}
+              {/* HU-43: LOG DE AUDITORÍA (solo GERENTE — GET /audit-log tiene
+                @Roles(GERENTE) solo; Administrador recibe 403) */}
               <Route
                 path="/auditoria"
                 element={
-                  <ProtectedRoute allowedRoles={["Administrador"]}>
+                  <ProtectedRoute allowedRoles={[ROLES.GERENTE]}>
                     <AuditoriaPage />
                   </ProtectedRoute>
                 }
               />
 
+              {/* SIN FUNCIONALIDADES (roles sin implementación en este sprint) */}
               <Route
                 path="/sin-funcionalidades"
                 element={
