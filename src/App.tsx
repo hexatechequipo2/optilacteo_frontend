@@ -156,7 +156,9 @@ function App() {
               <Route
                 path="/proveedores"
                 element={
-                  <ProtectedRoute allowedRoles={["Gerente", "Administrador"]}>
+                  <ProtectedRoute
+                    allowedRoles={["Gerente", "Administrador", "Responsable de calidad"]}
+                  >
                     <ProveedoresPage />
                   </ProtectedRoute>
                 }

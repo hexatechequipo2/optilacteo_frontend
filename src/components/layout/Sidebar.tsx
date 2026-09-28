@@ -63,7 +63,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const puedeVerConfiguracion =
     esGerente || user?.rolNombre === "Responsable de calidad" || esResponsableProduccion;
   const puedeVerPlanes = esAdmin;
-  const puedeVerProveedores = esAdmin || esGerente;
+  // HU-64: Responsable de calidad entra en modo solo lectura, para ver el
+  // indicador de estabilidad por proveedor — GET /proveedores ya lo permite
+  // en el backend (proveedor.controller.ts), la gestión (alta/edición/baja)
+  // sigue exclusiva de Gerente/Administrador (ver puedeGestionarProveedores
+  // en ProveedoresPage.tsx).
+  const puedeVerConteoProveedores = esAdmin || esGerente;
+  const puedeVerProveedores =
+    puedeVerConteoProveedores || user?.rolNombre === "Responsable de calidad";
   // HU-36: mismo set de roles que @Roles en GET /tambos (tambo.controller.ts
   // del backend) — a propósito más amplio que puedeVerProveedores, porque
   // Operario de línea/Responsable de producción/Responsable de calidad
@@ -161,7 +168,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               : { data: [], meta: { total: 0 } },
             // Si planes/proveedores NO están paginados, devuelven array. Si lo están, ajusta a .meta.total
             puedeVerPlanes ? planesService.getAll().catch(() => []) : [],
-            puedeVerProveedores
+            // HU-64: Responsable de calidad ya puede VER la pantalla de
+            // Proveedores (ver puedeVerProveedores más abajo), pero a
+            // propósito no se suma acá al fetch del contador — este
+            // Promise.all corre en TODAS las páginas para TODOS los roles
+            // (vía Layout), y sumar una llamada real nueva a GET /proveedores
+            // para un rol tan transversal como Responsable de calidad
+            // rompe cualquier test de otra pantalla que no mockee esa ruta.
+            // El nav item de abajo simplemente no muestra contador para ese
+            // rol (mismo criterio que "Tambos", que tampoco lo tiene).
+            puedeVerConteoProveedores
               ? proveedoresService.getAll({ page: 1, limit: 1 }).catch(() => ({ data: [], meta: { total: 0 } }))
               : { data: [], meta: { total: 0 } },
             // GET /lotes todavía no habilita Operario de línea/Responsable de
@@ -195,7 +211,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     puedeVerEmpresas,
     puedeVerUsuarios,
     puedeVerPlanes,
-    puedeVerProveedores,
+    puedeVerConteoProveedores,
     puedeVerLotes,
     puedeVerSensores,
     puedeVerRevisionCalidad,
@@ -223,7 +239,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       ? [{ label: "Planes", icon: Package, count: counts.planes, path: "/planes" }]
       : []),
     ...(puedeVerProveedores
-      ? [{ label: "Proveedores", icon: Home, count: counts.proveedores, path: "/proveedores" }]
+      ? [
+          {
+            label: "Proveedores",
+            icon: Home,
+            ...(puedeVerConteoProveedores ? { count: counts.proveedores } : {}),
+            path: "/proveedores",
+          },
+        ]
       : []),
     ...(puedeVerTambos ? [{ label: "Tambos", icon: Droplets, path: "/tambos" }] : []),
     ...(puedeVerLotes
