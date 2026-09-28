@@ -278,10 +278,10 @@ export default function LotesPage() {
     return rol === "responsable de calidad" || rol === "responsable de producción";
   }, [user?.rolNombre]);
 
-  // HU-45 (Sprint 5, mock visual): "Reporte de trazabilidad de un lote
-  // específico" — el backlog lo asigna puntualmente a Responsable de
-  // calidad (documentación para inspecciones del CAA/SENASA), no al resto
-  // de los roles que también pueden abrir este mismo modal en modo lectura.
+  // HU-45: "Reporte de trazabilidad de un lote específico" (GET
+  // /lotes/:id/reporte-trazabilidad, @Roles RESPONSABLE_CALIDAD en el
+  // backend) — documentación para inspecciones del CAA/SENASA, no para el
+  // resto de los roles que también pueden abrir este modal en modo lectura.
   const puedeGenerarReporteTrazabilidad = useMemo(() => {
     const rol = (user?.rolNombre ?? "").trim().toLowerCase();
     return rol === "responsable de calidad";

@@ -114,6 +114,30 @@ export const loteService = {
     return data;
   },
 
+  // HU-45: PDF de trazabilidad armado y firmado (SHA-256) en el backend.
+  // Solo Responsable de calidad (@Roles del controller). Va por `api` y no
+  // por fetch para respetar el access_token en memoria y el refresh en 401.
+  descargarReporteTrazabilidad: async (loteId: number, codigoLote: string): Promise<void> => {
+    let data: Blob;
+    try {
+      ({ data } = await api.get<Blob>(`/lotes/${loteId}/reporte-trazabilidad`, {
+        responseType: "blob",
+      }));
+    } catch (err) {
+      throw await parsearErrorBlob(err);
+    }
+
+    // Se usa el código del lote (identificable en una inspección) y no el id interno del backend.
+    const url = window.URL.createObjectURL(data);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `reporte-trazabilidad-lote-${codigoLote}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
   // HU-34/HU-37: historial unificado de cambios de destino productivo
   // (asignación manual o resultado de responder una recomendación ML), ya
   // ordenado por el backend del más reciente al más viejo — el primer
@@ -138,6 +162,19 @@ export const loteService = {
     return data;
   },
 };
+
+// Con responseType "blob" el cuerpo de un error (403/404) también llega como
+// Blob: se lo convierte a JSON para que extraerMensajeError lea el `message`.
+async function parsearErrorBlob(err: unknown): Promise<unknown> {
+  if (axios.isAxiosError(err) && err.response?.data instanceof Blob) {
+    try {
+      err.response.data = JSON.parse(await err.response.data.text());
+    } catch {
+      // cuerpo no-JSON: queda el fallback de extraerMensajeError
+    }
+  }
+  return err;
+}
 
 export function extraerMensajeError(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err) && err.response?.data?.message) {

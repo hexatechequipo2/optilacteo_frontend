@@ -10,10 +10,7 @@ import { useConsumosLote } from "../../../hooks/useConsumosLote";
 import { useLotesProduccion } from "../../../hooks/useLotesProduccion";
 import { useRegistrarConsumo } from "../../../hooks/useRegistrarConsumo";
 import { useConfigParametros } from "../../../hooks/useConfigParametros";
-import { useTrazabilidadLote } from "../../../hooks/useTrazabilidadLote";
-import { useDestinoProductivoLote } from "../../../hooks/useDestinoProductivoLote";
-import { useEmpresaActual } from "../../../hooks/useEmpresaActual";
-import { generarReporteTrazabilidadPdf } from "../../../utils/generarReporteTrazabilidadPdf";
+import { useReporteTrazabilidad } from "../../../hooks/useReporteTrazabilidad";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -82,16 +79,14 @@ export function TrazabilidadLoteModal({
   const { lotesProduccion } = useLotesProduccion();
   const { configs } = useConfigParametros();
   const { registrar, isSubmitting, error: errorRegistro, resetError } = useRegistrarConsumo();
-  // HU-45: el reporte reutiliza el mismo historial real que ya usa
-  // HistorialTrazabilidadModal (GET /lotes/:id/trazabilidad) y el destino
-  // vigente — no hay nada mockeado en el contenido del PDF, solo en la
-  // "firma digital" (ver generarReporteTrazabilidadPdf.ts).
-  const { eventos, codigoLote, isLoading: isLoadingTrazabilidad } = useTrazabilidadLote(
-    puedeGenerarReporte ? loteId : null,
-  );
-  const { destinoVigente } = useDestinoProductivoLote(puedeGenerarReporte ? loteId : null);
-  const { empresa } = useEmpresaActual();
-  const [isGenerandoReporte, setIsGenerandoReporte] = useState(false);
+  // HU-45: el PDF (contenido + firma SHA-256) lo arma el backend en
+  // GET /lotes/:id/reporte-trazabilidad; acá solo se descarga.
+  const {
+    descargar: descargarReporte,
+    isGenerando: isGenerandoReporte,
+    error: errorReporte,
+    resetError: resetErrorReporte,
+  } = useReporteTrazabilidad();
 
   const [cantidad, setCantidad] = useState("");
   const [loteProduccionId, setLoteProduccionId] = useState("");
@@ -109,7 +104,8 @@ export function TrazabilidadLoteModal({
     setErrorCantidad("");
     setErrorParametros("");
     resetError();
-  }, [isOpen, loteId, resetError]);
+    resetErrorReporte();
+  }, [isOpen, loteId, resetError, resetErrorReporte]);
 
   if (!isOpen || !lote) return null;
 
@@ -193,26 +189,10 @@ export function TrazabilidadLoteModal({
     }
   };
 
-  // HU-45 (AC2/AC3): "un solo clic" — no hay paso intermedio de
-  // confirmación, el PDF se genera y descarga directo. isGenerandoReporte
-  // es solo para no permitir doble clic mientras isLoadingTrazabilidad
-  // todavía no trajo los eventos reales.
+  // HU-45 (AC2/AC3): "un solo clic" — sin paso intermedio de confirmación,
+  // el PDF se descarga directo.
   const handleGenerarReporte = () => {
-    setIsGenerandoReporte(true);
-    try {
-      generarReporteTrazabilidadPdf({
-        codigoLote: codigoLote ?? lote.codigo,
-        empresaNombre: empresa?.name ?? "OptiLácteo",
-        empresaCuit: empresa?.cuit,
-        proveedor: proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`,
-        tambo: tamboMap.get(lote.tamboId) ?? `Tambo #${lote.tamboId}`,
-        numeroRemito: lote.numeroRemito,
-        destinoVigente: destinoVigente?.destinoActualNombre ?? null,
-        eventos,
-      });
-    } finally {
-      setIsGenerandoReporte(false);
-    }
+    void descargarReporte(lote.id, lote.codigo);
   };
 
   return (
@@ -222,27 +202,33 @@ export function TrazabilidadLoteModal({
       description={lote.codigo}
       onClose={onClose}
       footer={
-        <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            Cerrar
-          </button>
-          {puedeGenerarReporte && (
-            <Button
-              type="button"
-              isLoading={isGenerandoReporte || isLoadingTrazabilidad}
-              disabled={isLoadingTrazabilidad}
-              onClick={handleGenerarReporte}
-              className="!w-auto items-center gap-1.5 px-6"
-              title="Genera y descarga el reporte de trazabilidad en PDF para presentar ante inspecciones"
-            >
-              <FileText className="h-4 w-4" />
-              Generar reporte
-            </Button>
+        <div className="flex flex-col gap-3">
+          {errorReporte && (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
+              {errorReporte}
+            </p>
           )}
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Cerrar
+            </button>
+            {puedeGenerarReporte && (
+              <Button
+                type="button"
+                disabled={isGenerandoReporte}
+                onClick={handleGenerarReporte}
+                className="!w-auto items-center gap-1.5 px-6"
+                title="Genera y descarga el reporte de trazabilidad en PDF para presentar ante inspecciones"
+              >
+                <FileText className="h-4 w-4" />
+                {isGenerandoReporte ? "Generando…" : "Generar reporte"}
+              </Button>
+            )}
+          </div>
         </div>
       }
     >
