@@ -19,6 +19,7 @@ import {
   History,
   Snowflake,
   Droplets,
+  HardDrive,
   ShieldCheck,
   X,
 } from "lucide-react";
@@ -56,6 +57,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   // confundir con AuditoriaModal.tsx de HU-63 (historial de un registro).
   const puedeVerAuditoria = esGerente;
   const puedeVerEmpresas = esAdmin;
+  // HU-71 (mock visual): gestión del hardware de sensores/actuadores
+  // relevado en planta, exclusivo de Administrador — no confundir con
+  // "Sensores" (Cpu), que es la operación diaria de otros roles.
+  const puedeVerDispositivos = esAdmin;
   // HU-23: Responsable de calidad entra en modo solo lectura (ver
   // ConfiguracionPage.tsx / App.tsx).
   // HU-61: Responsable de producción entra solo para la pestaña "Conexión
@@ -209,6 +214,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       : []),
     ...(puedeVerEmpresas
       ? [{ label: "Empresas", icon: Building2, count: counts.empresas, path: "/empresas" }]
+      : []),
+    ...(puedeVerDispositivos
+      ? [{ label: "Dispositivos", icon: HardDrive, path: "/dispositivos" }]
       : []),
     ...(puedeVerConfiguracion
       ? [{ label: "Configuración", icon: Settings, path: "/configuracion" }]
