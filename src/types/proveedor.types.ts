@@ -22,6 +22,36 @@ export interface Proveedor {
   // /proveedores — la restricción a Gerente/Administrador se aplica en el
   // frontend (ver puedeVerAuditoria).
   auditoria?: TrazabilidadEntidad;
+  // HU-64: solo viene en GET /proveedores/:id (el listado paginado no lo
+  // trae). El backend lo recalcula al crear un lote; el GET solo lee lo
+  // persistido.
+  estabilidad?: EstabilidadProveedor;
+}
+
+export type ClasificacionEstabilidad = "estable" | "moderada" | "inestable";
+
+export interface DetalleEstabilidad {
+  parametro: string;
+  materiaPrima: string;
+  n: number;
+  media: number;
+  desvio: number;
+  desvioNormalizado: number;
+  clasificacion: string;
+}
+
+// El backend manda null explícito (no omite el campo) en los opcionales que
+// no aplican al status — ej. status "ok" trae minimoLotes: null.
+export interface EstabilidadProveedor {
+  status: "ok" | "insufficient_data";
+  mensaje?: string | null;
+  clasificacion?: ClasificacionEstabilidad | null;
+  // 0..1, promedio de desvíos normalizados.
+  score?: number | null;
+  detalle?: DetalleEstabilidad[];
+  cantidadLotes: number;
+  minimoLotes?: number | null;
+  calculadoEn?: string | null;
 }
 
 export interface CreateProveedorDto {

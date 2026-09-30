@@ -29,6 +29,12 @@ export const proveedoresService = {
     return data;
   },
 
+  // HU-64: la ficha individual es la única respuesta que trae `estabilidad`.
+  getById: async (id: number): Promise<Proveedor> => {
+    const { data } = await api.get<Proveedor>(`/proveedores/${id}`);
+    return data;
+  },
+
   create: async (dto: CreateProveedorDto): Promise<Proveedor> => {
     const { data } = await api.post<Proveedor>("/proveedores", dto);
     return data;

@@ -18,10 +18,12 @@ import { useAuth } from "../../hooks/useAuth";
 import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
 import { ProveedorFormModal } from "./ProveedorFormModal";
 import { DesviosProveedorModal } from "./DesviosProveedorModal";
+import { useEstabilidadProveedores } from "../../hooks/useEstabilidadProveedores";
 import {
   ESTABILIDAD_META,
-  ORDEN_CONFIABILIDAD,
-  calcularEstabilidadMock,
+  compararEstabilidad,
+  estabilidadVista,
+  type EstabilidadVista,
 } from "./constants/estabilidadProveedor";
 import type { Proveedor, TipoProveedor } from "../../types/proveedor.types";
 
@@ -87,8 +89,16 @@ function capacidadLabel(p: Proveedor): string {
 }
 
 // HU-64: misma celda para la tabla (md+) y las cards (mobile).
-function CeldaEstabilidad({ proveedor }: { proveedor: Proveedor }) {
-  const estabilidad = calcularEstabilidadMock(proveedor);
+function CeldaEstabilidad({ estabilidad }: { estabilidad: EstabilidadVista }) {
+  if (estabilidad.estado === "cargando") {
+    return (
+      <span
+        role="status"
+        aria-label={ESTABILIDAD_META.cargando.label}
+        className="inline-block h-6 w-24 animate-pulse rounded-full bg-slate-100 dark:bg-slate-800"
+      />
+    );
+  }
   const meta = ESTABILIDAD_META[estabilidad.estado];
   return (
     <div className="flex items-center gap-2">
@@ -100,7 +110,8 @@ function CeldaEstabilidad({ proveedor }: { proveedor: Proveedor }) {
       )}
       {estabilidad.lotesFaltantes !== undefined && (
         <span className="text-xs text-slate-400 dark:text-slate-500">
-          faltan {estabilidad.lotesFaltantes}
+          faltan {estabilidad.lotesFaltantes}{" "}
+          {estabilidad.lotesFaltantes === 1 ? "lote" : "lotes"}
         </span>
       )}
     </div>
@@ -171,20 +182,29 @@ export default function ProveedoresPage() {
 
   const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
 
-  // HU-64: se recalcula cada vez que cambia la lista (ej. al cambiar de
-  // página) porque `calcularEstabilidadMock` depende solo del id de cada
-  // proveedor, no de estado propio de este componente.
+  // HU-64: GET /proveedores/:id por cada Tambo de la página visible (el
+  // listado no trae `estabilidad`). Cada fila carga/falla por su cuenta.
+  const filasEstabilidad = useEstabilidadProveedores(proveedores);
+
+  const estabilidadPorId = useMemo(
+    () =>
+      new Map(
+        proveedores.map((p) => [p.id, estabilidadVista(p, filasEstabilidad.get(p.id))]),
+      ),
+    [proveedores, filasEstabilidad],
+  );
+
+  // Orden dentro de la página actual, sin tocar la paginación real.
   const proveedoresOrdenados = useMemo(() => {
     if (!ordenEstabilidad) return proveedores;
-    const conRango = proveedores.map((p) => ({
-      proveedor: p,
-      rango: ORDEN_CONFIABILIDAD[calcularEstabilidadMock(p).estado],
-    }));
-    conRango.sort((a, b) =>
-      ordenEstabilidad === "asc" ? a.rango - b.rango : b.rango - a.rango,
+    return [...proveedores].sort((a, b) =>
+      compararEstabilidad(
+        estabilidadPorId.get(a.id)!,
+        estabilidadPorId.get(b.id)!,
+        ordenEstabilidad,
+      ),
     );
-    return conRango.map((c) => c.proveedor);
-  }, [proveedores, ordenEstabilidad]);
+  }, [proveedores, estabilidadPorId, ordenEstabilidad]);
 
   return (
     <Layout breadcrumb="Consola > Proveedores">
@@ -344,7 +364,7 @@ export default function ProveedoresPage() {
                       </td>
 
                       <td className="px-5 py-3">
-                        <CeldaEstabilidad proveedor={p} />
+                        <CeldaEstabilidad estabilidad={estabilidadPorId.get(p.id)!} />
                       </td>
 
                       <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
@@ -487,7 +507,7 @@ export default function ProveedoresPage() {
                     <div className="col-span-2">
                       <dt className="text-slate-400 dark:text-slate-500">Estabilidad</dt>
                       <dd className="mt-0.5">
-                        <CeldaEstabilidad proveedor={p} />
+                        <CeldaEstabilidad estabilidad={estabilidadPorId.get(p.id)!} />
                       </dd>
                     </div>
                     <div className="col-span-2 min-w-0">
