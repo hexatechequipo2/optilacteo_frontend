@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, ChevronLeft, ChevronRight, History, Pencil, TrendingUp } from "lucide-react";
+import {
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  History,
+  Pencil,
+  TrendingUp,
+} from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
+import { Badge } from "../../components/ui/Badge";
 import { AuditoriaModal } from "../../components/AuditoriaModal";
 import { useProveedores } from "../../hooks/useProveedores";
 import { useEmpresas } from "../../hooks/useEmpresas";
@@ -9,6 +18,11 @@ import { useAuth } from "../../hooks/useAuth";
 import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
 import { ProveedorFormModal } from "./ProveedorFormModal";
 import { DesviosProveedorModal } from "./DesviosProveedorModal";
+import {
+  ESTABILIDAD_META,
+  ORDEN_CONFIABILIDAD,
+  calcularEstabilidadMock,
+} from "./constants/estabilidadProveedor";
 import type { Proveedor, TipoProveedor } from "../../types/proveedor.types";
 
 type TabTipo = "Todos" | "Tambo" | "Transporte" | "Insumos" | "Laboratorio";
@@ -48,7 +62,16 @@ const ESTADO_DOT: Record<string, string> = {
   suspendida: "bg-slate-400",
 };
 
-const HEADERS = ["PROVEEDOR", "TIPO", "EMPRESA", "CAPACIDAD", "UBICACIÓN", "ESTADO", ""];
+const HEADERS = [
+  "PROVEEDOR",
+  "TIPO",
+  "EMPRESA",
+  "ESTABILIDAD",
+  "CAPACIDAD",
+  "UBICACIÓN",
+  "ESTADO",
+  "",
+];
 
 const SEARCH_DEBOUNCE_MS = 400;
 
@@ -63,10 +86,35 @@ function capacidadLabel(p: Proveedor): string {
   return String(p.capacidad);
 }
 
+// HU-64: misma celda para la tabla (md+) y las cards (mobile).
+function CeldaEstabilidad({ proveedor }: { proveedor: Proveedor }) {
+  const estabilidad = calcularEstabilidadMock(proveedor);
+  const meta = ESTABILIDAD_META[estabilidad.estado];
+  return (
+    <div className="flex items-center gap-2">
+      <Badge variant={meta.variant}>{meta.label}</Badge>
+      {estabilidad.desvioPorcentaje !== undefined && (
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          {estabilidad.desvioPorcentaje.toFixed(1)}%
+        </span>
+      )}
+      {estabilidad.lotesFaltantes !== undefined && (
+        <span className="text-xs text-slate-400 dark:text-slate-500">
+          faltan {estabilidad.lotesFaltantes}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function ProveedoresPage() {
   const [busqueda, setBusqueda] = useState("");
   const [debouncedBusqueda, setDebouncedBusqueda] = useState("");
   const [tabActivo, setTabActivo] = useState<TabTipo>("Todos");
+  // HU-64 (Pantalla 5): "permite ordenarlos y priorizar los más confiables"
+  // — orden por estabilidad dentro de la página actual (null = orden por
+  // defecto del backend, sin tocar la paginación real).
+  const [ordenEstabilidad, setOrdenEstabilidad] = useState<"asc" | "desc" | null>(null);
 
   // Debounce: solo dispara el fetch al backend 400ms después de que el
   // usuario deja de tipear, para no mandar un request por cada letra.
@@ -95,6 +143,12 @@ export default function ProveedoresPage() {
 
   const esGerente =
     (user?.rolNombre ?? "").trim().toLowerCase() === "gerente";
+  // HU-64: Responsable de calidad ve esta pantalla en modo solo lectura,
+  // para el indicador de estabilidad — POST/PATCH/DELETE /proveedores
+  // siguen siendo exclusivos de Gerente/Administrador en el backend
+  // (proveedor.controller.ts), así que acá ni se ofrecen esas acciones.
+  const puedeGestionarProveedores =
+    (user?.rolNombre ?? "").trim().toLowerCase() !== "responsable de calidad";
 
   const { empresas } = useEmpresas(esGerente);
 
@@ -117,6 +171,21 @@ export default function ProveedoresPage() {
 
   const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
 
+  // HU-64: se recalcula cada vez que cambia la lista (ej. al cambiar de
+  // página) porque `calcularEstabilidadMock` depende solo del id de cada
+  // proveedor, no de estado propio de este componente.
+  const proveedoresOrdenados = useMemo(() => {
+    if (!ordenEstabilidad) return proveedores;
+    const conRango = proveedores.map((p) => ({
+      proveedor: p,
+      rango: ORDEN_CONFIABILIDAD[calcularEstabilidadMock(p).estado],
+    }));
+    conRango.sort((a, b) =>
+      ordenEstabilidad === "asc" ? a.rango - b.rango : b.rango - a.rango,
+    );
+    return conRango.map((c) => c.proveedor);
+  }, [proveedores, ordenEstabilidad]);
+
   return (
     <Layout breadcrumb="Consola > Proveedores">
       {/* Header */}
@@ -129,13 +198,15 @@ export default function ProveedoresPage() {
             {meta.total} proveedores en la plataforma
           </p>
         </div>
-        <Button
-          type="button"
-          className="!w-auto px-6"
-          onClick={() => setIsModalOpen(true)}
-        >
-          + Nuevo proveedor
-        </Button>
+        {puedeGestionarProveedores && (
+          <Button
+            type="button"
+            className="!w-auto px-6"
+            onClick={() => setIsModalOpen(true)}
+          >
+            + Nuevo proveedor
+          </Button>
+        )}
       </div>
 
       {/* Filtros */}
@@ -204,18 +275,39 @@ export default function ProveedoresPage() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800">
-                  {HEADERS.map((h, i) => (
-                    <th
-                      key={`${h}-${i}`}
-                      className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  {HEADERS.map((h, i) =>
+                    h === "ESTABILIDAD" ? (
+                      <th
+                        key={`${h}-${i}`}
+                        className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOrdenEstabilidad((prev) =>
+                              prev === "asc" ? "desc" : prev === "desc" ? null : "asc",
+                            )
+                          }
+                          className="flex items-center gap-1 transition hover:text-slate-600 dark:hover:text-slate-300"
+                          title="Ordenar por estabilidad"
+                        >
+                          {h}
+                          <ChevronsUpDown className="h-3.5 w-3.5" />
+                        </button>
+                      </th>
+                    ) : (
+                      <th
+                        key={`${h}-${i}`}
+                        className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {proveedores.map((p) => {
+                {proveedoresOrdenados.map((p) => {
                   const nombreEmpresa =
                     empresaMap.get(p.empresaId) ?? `Empresa #${p.empresaId}`;
                   return (
@@ -251,6 +343,10 @@ export default function ProveedoresPage() {
                         </div>
                       </td>
 
+                      <td className="px-5 py-3">
+                        <CeldaEstabilidad proveedor={p} />
+                      </td>
+
                       <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                         {capacidadLabel(p)}
                       </td>
@@ -270,14 +366,16 @@ export default function ProveedoresPage() {
 
                       <td className="px-5 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setProveedorEnEdicion(p)}
-                            aria-label={`Editar ${p.razonSocial}`}
-                            className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
+                          {puedeGestionarProveedores && (
+                            <button
+                              type="button"
+                              onClick={() => setProveedorEnEdicion(p)}
+                              aria-label={`Editar ${p.razonSocial}`}
+                              className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => setProveedorDesvios(p)}
@@ -309,7 +407,7 @@ export default function ProveedoresPage() {
 
           {/* Cards (mobile) */}
           <div className="flex flex-col gap-3 md:hidden">
-            {proveedores.map((p) => {
+            {proveedoresOrdenados.map((p) => {
               const nombreEmpresa =
                 empresaMap.get(p.empresaId) ?? `Empresa #${p.empresaId}`;
               return (
@@ -330,14 +428,16 @@ export default function ProveedoresPage() {
                       </div>
                     </div>
                     <div className="flex flex-shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setProveedorEnEdicion(p)}
-                        aria-label={`Editar ${p.razonSocial}`}
-                        className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
+                      {puedeGestionarProveedores && (
+                        <button
+                          type="button"
+                          onClick={() => setProveedorEnEdicion(p)}
+                          aria-label={`Editar ${p.razonSocial}`}
+                          className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setProveedorDesvios(p)}
@@ -383,6 +483,12 @@ export default function ProveedoresPage() {
                     <div>
                       <dt className="text-slate-400 dark:text-slate-500">Capacidad</dt>
                       <dd className="text-slate-600 dark:text-slate-400">{capacidadLabel(p)}</dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-slate-400 dark:text-slate-500">Estabilidad</dt>
+                      <dd className="mt-0.5">
+                        <CeldaEstabilidad proveedor={p} />
+                      </dd>
                     </div>
                     <div className="col-span-2 min-w-0">
                       <dt className="text-slate-400 dark:text-slate-500">Ubicación</dt>
