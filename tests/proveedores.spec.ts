@@ -46,6 +46,32 @@ const EMPRESAS_MOCK = {
   meta: { page: 1, limit: 5, total: 1, totalPages: 1 },
 };
 
+// HU-64: GET /proveedores/:id trae el bloque `estabilidad` (el listado no).
+// Solo se pide para Tambo; el backend manda null explícito en los opcionales.
+const ESTABILIDAD_OK = {
+  status: "ok",
+  mensaje: null,
+  clasificacion: "estable",
+  score: 0.042,
+  detalle: [],
+  cantidadLotes: 8,
+  minimoLotes: null,
+  calculadoEn: "2026-09-20T12:00:00.000Z",
+};
+
+async function mockProveedorDetalle(
+  page: Page,
+  responder: (id: number) => { status: number; body?: unknown },
+) {
+  await page.route("**/proveedores/*", async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+    const id = Number(new URL(route.request().url()).pathname.split("/").pop());
+    const { status, body } = responder(id);
+    await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body ?? {}) });
+  });
+}
+
 async function mockProveedoresAndEmpresas(page: Page) {
   await page.route("**/proveedores*", async (route) => {
     const rt = route.request().resourceType();
@@ -56,6 +82,10 @@ async function mockProveedoresAndEmpresas(page: Page) {
       body: JSON.stringify(PROVEEDORES_MOCK),
     });
   });
+  await mockProveedorDetalle(page, (id) => ({
+    status: 200,
+    body: { ...PROVEEDORES_MOCK.data.find((p) => p.id === id), estabilidad: ESTABILIDAD_OK },
+  }));
   await page.route("**/empresa*", async (route) => {
     const rt = route.request().resourceType();
     if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
@@ -147,6 +177,55 @@ test.describe("ProveedoresPage", () => {
     await page.goto("/proveedores");
 
     await expect(page.getByText("No se encontraron proveedores")).toBeVisible();
+  });
+
+  test.describe("columna Estabilidad (HU-64)", () => {
+    test("Tambo con status ok muestra clasificación y % de desvío; Transporte 'No aplica' sin pedir detalle", async ({ page }) => {
+      await mockProveedoresAndEmpresas(page);
+      const idsPedidos: string[] = [];
+      page.on("request", (req) => {
+        const m = new URL(req.url()).pathname.match(/\/proveedores\/(\d+)$/);
+        if (m && req.method() === "GET") idsPedidos.push(m[1]);
+      });
+      await loginAsAdministrador(page);
+      await page.goto("/proveedores");
+
+      const filaTambo = page.getByRole("row", { name: /Tambo El Roble/ });
+      await expect(filaTambo.getByText("Estable")).toBeVisible();
+      await expect(filaTambo.getByText("4.2%")).toBeVisible();
+
+      const filaTransporte = page.getByRole("row", { name: /Transportes Rápido SA/ });
+      await expect(filaTransporte.getByText("No aplica")).toBeVisible();
+      expect(idsPedidos).toEqual(["1"]);
+    });
+
+    test("insufficient_data muestra 'Sin datos suficientes' y cuántos lotes faltan (default 5 si minimoLotes es null)", async ({ page }) => {
+      await mockProveedoresAndEmpresas(page);
+      await mockProveedorDetalle(page, () => ({
+        status: 200,
+        body: {
+          ...PROVEEDORES_MOCK.data[0],
+          estabilidad: { status: "insufficient_data", mensaje: "Sin datos suficientes", cantidadLotes: 2, minimoLotes: null },
+        },
+      }));
+      await loginAsAdministrador(page);
+      await page.goto("/proveedores");
+
+      const filaTambo = page.getByRole("row", { name: /Tambo El Roble/ });
+      await expect(filaTambo.getByText("Sin datos suficientes")).toBeVisible();
+      await expect(filaTambo.getByText("faltan 3 lotes")).toBeVisible();
+    });
+
+    test("si falla GET /proveedores/:id la fila muestra 'No disponible' y la tabla sigue", async ({ page }) => {
+      await mockProveedoresAndEmpresas(page);
+      await mockProveedorDetalle(page, () => ({ status: 500 }));
+      await loginAsAdministrador(page);
+      await page.goto("/proveedores");
+
+      const filaTambo = page.getByRole("row", { name: /Tambo El Roble/ });
+      await expect(filaTambo.getByText("No disponible")).toBeVisible();
+      await expect(page.getByRole("table").getByText("Transportes Rápido SA")).toBeVisible();
+    });
   });
 
   test("editar un proveedor y guardar llama a proveedoresService.update", async ({ page }) => {
