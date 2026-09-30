@@ -26,6 +26,7 @@ import AlertasPage from "./pages/Alertas/AlertasPage";
 import HistorialAlertasPage from "./pages/Alertas/HistorialAlertasPage";
 import IngresoCamaraPage from "./pages/IngresoCamara/IngresoCamaraPage";
 import AuditoriaPage from "./pages/Auditoria/AuditoriaPage";
+import DispositivosPage from "./pages/Dispositivos/DispositivosPage";
 import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidadesPage";
 
 import { InactivityMonitor } from "./components/layout/InactivityMonitor";
@@ -337,6 +338,18 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={[ROLES.GERENTE]}>
                     <AuditoriaPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* HU-71 (Sprint 5, mock visual): gestión del hardware de
+                sensores/actuadores relevado en planta, exclusivo de
+                Administrador. */}
+              <Route
+                path="/dispositivos"
+                element={
+                  <ProtectedRoute allowedRoles={[ROLES.ADMINISTRADOR]}>
+                    <DispositivosPage />
                   </ProtectedRoute>
                 }
               />
