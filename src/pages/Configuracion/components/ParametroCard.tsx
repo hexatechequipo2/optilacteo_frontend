@@ -1,51 +1,54 @@
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { History } from "lucide-react";
 import { RangoFisicoBadge } from "../../../components/RangoFisicoBadge";
 import { AuditoriaModal } from "../../../components/AuditoriaModal";
+import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { useAuth } from "../../../hooks/useAuth";
+import type { SaveConfigParams } from "../../../hooks/useConfigParametros";
 import { puedeVerAuditoria } from "../../../utils/auditoriaVisibility";
 import { extraerMensajeError } from "../../../services/configParametro.service";
-import type { ConfigParametro, Parametro, TipoMateriaPrima } from "../../../types/configParametro.types";
+import type { ConfigParametro, TipoMateriaPrima } from "../../../types/configParametro.types";
+import {
+  CAMPOS_UMBRAL,
+  LABEL_CAMPO_UMBRAL,
+  inputAUmbrales,
+  umbralesAInput,
+  umbralesIguales,
+  validarUmbrales,
+} from "../../../utils/umbralesConfig";
+import type { CampoUmbral, UmbralesInput } from "../../../utils/umbralesConfig";
 import type { ParametroVisible } from "../constants/parametrosCalidad";
-import { PARAMETROS_META } from "../constants/parametrosCalidad";
+import { PARAMETROS_META, TIPO_MATERIA_PRIMA_TABS } from "../constants/parametrosCalidad";
+import { ZonasSemaforoBar } from "./ZonasSemaforoBar";
 
 interface ParametroCardProps {
   parametro: ParametroVisible;
   tipoMateriaPrima: TipoMateriaPrima;
   config: ConfigParametro | undefined;
-  onSave: (params: {
-    id?: number;
-    parametro: Parametro;
-    tipoMateriaPrima: TipoMateriaPrima;
-    umbralMin: number;
-    umbralMax: number;
-  }) => Promise<ConfigParametro>;
+  onSave: (params: SaveConfigParams) => Promise<ConfigParametro>;
 }
 
-function validar(minStr: string, maxStr: string, rangoFisico: { min: number; max: number }): string | null {
-  if (minStr.trim() === "" || maxStr.trim() === "") return null; // incompleto: no valida ni guarda
-
-  const min = Number(minStr);
-  const max = Number(maxStr);
-
-  if (Number.isNaN(min) || Number.isNaN(max)) return "Mínimo y máximo deben ser numéricos";
-  if (min < rangoFisico.min || min > rangoFisico.max || max < rangoFisico.min || max > rangoFisico.max) {
-    return `Los valores deben estar entre ${rangoFisico.min} y ${rangoFisico.max}`;
-  }
-  if (min >= max) return "El mínimo debe ser menor al máximo";
-
-  return null;
-}
+const ES_ALERTA: Record<CampoUmbral, boolean> = {
+  umbralAlertaMin: true,
+  umbralMin: false,
+  umbralMax: false,
+  umbralAlertaMax: true,
+};
 
 export function ParametroCard({ parametro, tipoMateriaPrima, config, onSave }: ParametroCardProps) {
   const meta = PARAMETROS_META[parametro];
   const Icon = meta.icon;
   const { user } = useAuth();
+  const materiaPrimaLabel =
+    TIPO_MATERIA_PRIMA_TABS.find((t) => t.value === tipoMateriaPrima)?.label.toLowerCase() ?? tipoMateriaPrima;
 
-  const [minInput, setMinInput] = useState(config?.umbralMin?.toString() ?? "");
-  const [maxInput, setMaxInput] = useState(config?.umbralMax?.toString() ?? "");
+  const [input, setInput] = useState<UmbralesInput>(() => umbralesAInput(config));
+  const [tocados, setTocados] = useState<Set<CampoUmbral>>(new Set());
+  const [intentoGuardar, setIntentoGuardar] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const [mostrarAuditoria, setMostrarAuditoria] = useState(false);
 
   // HU-63: quién creó esta configuración de umbral y, si aplica, quién la
@@ -55,40 +58,65 @@ export function ParametroCard({ parametro, tipoMateriaPrima, config, onSave }: P
   // utils/auditoriaVisibility.ts).
   const puedeVerAuditoriaConfig = puedeVerAuditoria(user?.rolNombre);
 
-  // Al cambiar de tipo de materia prima (o llegar el fetch inicial) resincroniza
-  // los inputs con lo que hay guardado para esa combinación puntual.
+  const resetearAGuardado = (guardado: ConfigParametro | undefined) => {
+    setInput(umbralesAInput(guardado));
+    setTocados(new Set());
+    setIntentoGuardar(false);
+    setErrorServidor(null);
+  };
+
+  // Al cambiar de tipo de materia prima (o llegar el fetch inicial, o guardar)
+  // resincroniza los inputs con lo que hay guardado para esa combinación puntual.
   useEffect(() => {
-    setMinInput(config?.umbralMin?.toString() ?? "");
-    setMaxInput(config?.umbralMax?.toString() ?? "");
-    setError(null);
+    setInput(umbralesAInput(config));
+    setTocados(new Set());
+    setIntentoGuardar(false);
+    setErrorServidor(null);
   }, [config, tipoMateriaPrima]);
 
-  const handleBlur = async () => {
-    const clienteError = validar(minInput, maxInput, meta.rangoFisico);
-    if (clienteError) {
-      setError(clienteError);
-      return;
-    }
-    if (minInput.trim() === "" || maxInput.trim() === "") return;
+  const errores = validarUmbrales(input, meta.rangoFisico);
+  const esValido = Object.keys(errores).length === 0;
+  const umbrales = esValido ? inputAUmbrales(input) : undefined;
+  const sinCambios = config
+    ? umbrales !== undefined && umbralesIguales(umbrales, config)
+    : CAMPOS_UMBRAL.every((campo) => input[campo].trim() === "");
 
-    const umbralMin = Number(minInput);
-    const umbralMax = Number(maxInput);
-    const sinCambios = config && config.umbralMin === umbralMin && config.umbralMax === umbralMax;
-    if (sinCambios) return;
+  const handleChange = (campo: CampoUmbral, valor: string) => {
+    setInput((prev) => ({ ...prev, [campo]: valor }));
+    setErrorServidor(null);
+  };
 
-    setError(null);
+  const handleBlur = (campo: CampoUmbral) => {
+    setTocados((prev) => new Set(prev).add(campo));
+  };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setIntentoGuardar(true);
+    if (!esValido || sinCambios) return;
+    setConfirmando(true);
+  };
+
+  const handleConfirmar = async () => {
+    if (!umbrales) return;
     setIsSaving(true);
+    setErrorServidor(null);
     try {
-      await onSave({ id: config?.id, parametro, tipoMateriaPrima, umbralMin, umbralMax });
+      await onSave({ id: config?.id, parametro, tipoMateriaPrima, ...umbrales });
     } catch (err) {
-      setError(extraerMensajeError(err, "No se pudo guardar. Intentá nuevamente."));
+      setErrorServidor(extraerMensajeError(err, "No se pudo guardar. Intentá nuevamente."));
     } finally {
       setIsSaving(false);
+      setConfirmando(false);
     }
   };
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+    <form
+      noValidate
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"
+    >
       <div className="flex items-start justify-between">
         <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400">
           <Icon className="h-5 w-5" />
@@ -116,42 +144,80 @@ export function ParametroCard({ parametro, tipoMateriaPrima, config, onSave }: P
 
       <RangoFisicoBadge label={meta.label} min={meta.rangoFisico.min} max={meta.rangoFisico.max} />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Mínimo</label>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={minInput}
-            disabled={isSaving}
-            onChange={(e) => setMinInput(e.target.value)}
-            onBlur={handleBlur}
-            className={`w-full rounded-md border px-3 py-2 text-sm text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-white ${
-              error ? "border-red-500" : "border-slate-300 dark:border-slate-700"
-            }`}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Máximo</label>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={maxInput}
-            disabled={isSaving}
-            onChange={(e) => setMaxInput(e.target.value)}
-            onBlur={handleBlur}
-            className={`w-full rounded-md border px-3 py-2 text-sm text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-500 dark:bg-slate-800 dark:text-white ${
-              error ? "border-red-500" : "border-slate-300 dark:border-slate-700"
-            }`}
-          />
-        </div>
+      <div className="grid grid-cols-2 gap-3">
+        {CAMPOS_UMBRAL.map((campo) => {
+          const id = `umbral-${tipoMateriaPrima}-${parametro}-${campo}`;
+          const error = tocados.has(campo) || intentoGuardar ? errores[campo] : undefined;
+          return (
+            <div key={campo} className="flex flex-col gap-1">
+              <label htmlFor={id} className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                <span
+                  aria-hidden="true"
+                  className={`h-2 w-2 flex-shrink-0 rounded-full ${ES_ALERTA[campo] ? "bg-amber-400" : "bg-green-500"}`}
+                />
+                {LABEL_CAMPO_UMBRAL[campo]}
+              </label>
+              <input
+                id={id}
+                type="number"
+                inputMode="decimal"
+                step="any"
+                value={input[campo]}
+                disabled={isSaving}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? `${id}-error` : undefined}
+                onChange={(e) => handleChange(campo, e.target.value)}
+                onBlur={() => handleBlur(campo)}
+                className={`w-full min-w-0 rounded-md border px-3 py-2 text-sm text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:bg-slate-800 dark:text-white ${
+                  error ? "border-red-500" : "border-slate-300 dark:border-slate-700"
+                }`}
+              />
+              {error && (
+                <p id={`${id}-error`} className="text-xs text-red-600 dark:text-red-400">
+                  {error}
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {error ? (
-        <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
-      ) : isSaving ? (
-        <p className="text-xs text-slate-400 dark:text-slate-500">Guardando...</p>
-      ) : null}
+      <ZonasSemaforoBar umbrales={umbrales} rangoFisico={meta.rangoFisico} />
+
+      {errorServidor && (
+        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-500/15 dark:text-red-400">
+          {errorServidor}
+        </p>
+      )}
+
+      <div className="mt-auto flex flex-wrap items-center justify-end gap-2">
+        {config && !sinCambios && !isSaving && (
+          <button
+            type="button"
+            onClick={() => resetearAGuardado(config)}
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Descartar
+          </button>
+        )}
+        <button
+          type="submit"
+          disabled={isSaving || sinCambios}
+          className="rounded-lg bg-[#3d6fcf] px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-[#3460b5] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isSaving ? "Guardando..." : "Guardar"}
+        </button>
+      </div>
+
+      <ConfirmModal
+        isOpen={confirmando}
+        title={`¿Guardar umbrales de ${meta.label}?`}
+        description={`Este cambio afecta el semáforo de todos los lotes de ${materiaPrimaLabel}.`}
+        confirmLabel="Guardar"
+        isLoading={isSaving}
+        onConfirm={handleConfirmar}
+        onCancel={() => setConfirmando(false)}
+      />
 
       <AuditoriaModal
         isOpen={mostrarAuditoria}
@@ -159,6 +225,6 @@ export function ParametroCard({ parametro, tipoMateriaPrima, config, onSave }: P
         auditoria={config?.auditoria}
         onClose={() => setMostrarAuditoria(false)}
       />
-    </div>
+    </form>
   );
 }

@@ -208,6 +208,41 @@ test.describe("Sensores › Monitoreo en línea (HU-40)", () => {
     await expect(page.getByRole("group", { name: /: Sin lecturas$/ })).toHaveCount(7);
   });
 
+  test("muestra los umbrales aplicados según la materia prima del lote", async ({ page }) => {
+    await mockMonitoreoDeps(page);
+    const config = (parametro: string, tipoMateriaPrima: string, u: number[]) => ({
+      id: u[0] * 100, empresaId: 10, parametro, tipoMateriaPrima,
+      umbralAlertaMin: u[0], umbralMin: u[1], umbralMax: u[2], umbralAlertaMax: u[3],
+      createdAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z",
+    });
+    // LIFO: más prioridad que el catch-all.
+    await page.route("**/config-parametros*", async (route) => {
+      if (!esGetDeApi(route)) return route.continue();
+      await json(route, [
+        config("ph", "leche_cruda", [5.5, 6, 7.5, 8]),
+        config("ph", "crema_de_leche", [4, 4.5, 5, 6]),
+        // Sin bandas (backend sin el fix de HU-40): solo "Normal x–y".
+        { ...config("acidez", "leche_cruda", [0, 14, 18, 0]), umbralAlertaMin: null, umbralAlertaMax: undefined },
+      ]);
+    });
+    await loginAsOperario(page);
+
+    // LOTE_A es leche cruda: banda de leche cruda.
+    const ph = page.getByRole("group", { name: "pH: En límite" });
+    await expect(ph).toContainText("Normal 6–7.5 · alerta 5.5–8");
+    const acidez = page.getByRole("group", { name: "Acidez titulable: Fuera de rango" });
+    await expect(acidez).toContainText("Normal 14–18");
+    await expect(acidez).not.toContainText("alerta");
+    // Sin config para ese parámetro y materia prima: no se muestra la línea.
+    await expect(page.getByRole("group", { name: "Temperatura: En rango" })).not.toContainText("Normal");
+
+    // LOTE_B es crema de leche: cambia la banda aunque no tenga lecturas.
+    await page.getByRole("button", { name: /LOT-2026-102/ }).click();
+    await expect(page.getByRole("group", { name: "pH: Sin lecturas" })).toContainText(
+      "Normal 4.5–5 · alerta 4–6",
+    );
+  });
+
   test("no muestra EN VIVO si el socket no está conectado", async ({ page }) => {
     await mockMonitoreoDeps(page);
     await loginAsOperario(page);

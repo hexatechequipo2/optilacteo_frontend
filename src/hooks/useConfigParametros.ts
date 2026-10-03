@@ -4,14 +4,13 @@ import type {
   ConfigParametro,
   Parametro,
   TipoMateriaPrima,
+  UmbralesConfig,
 } from "../types/configParametro.types";
 
-interface SaveConfigParams {
+export interface SaveConfigParams extends UmbralesConfig {
   id?: number;
   parametro: Parametro;
   tipoMateriaPrima: TipoMateriaPrima;
-  umbralMin: number;
-  umbralMax: number;
 }
 
 interface UseConfigParametrosResult {
@@ -46,10 +45,11 @@ export function useConfigParametros(): UseConfigParametrosResult {
 
   // No hace refetch completo: reemplaza/agrega solo la config guardada,
   // así el resto de las tarjetas no parpadea con cada guardado individual.
-  const saveConfig = useCallback(async ({ id, parametro, tipoMateriaPrima, umbralMin, umbralMax }: SaveConfigParams) => {
+  // HU-40: POST y PUT mandan siempre los 4 umbrales (ver UpdateConfigParametroDto).
+  const saveConfig = useCallback(async ({ id, parametro, tipoMateriaPrima, ...umbrales }: SaveConfigParams) => {
     const saved = id
-      ? await configParametroService.update(id, { umbralMin, umbralMax })
-      : await configParametroService.create({ parametro, tipoMateriaPrima, umbralMin, umbralMax });
+      ? await configParametroService.update(id, umbrales)
+      : await configParametroService.create({ parametro, tipoMateriaPrima, ...umbrales });
 
     setConfigs((prev) => {
       const idx = prev.findIndex((c) => c.id === saved.id);

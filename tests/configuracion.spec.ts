@@ -10,8 +10,10 @@ const PH_CONFIG_LECHE = {
   empresaId: 10,
   parametro: "ph",
   tipoMateriaPrima: "leche_cruda",
+  umbralAlertaMin: 5.5,
   umbralMin: 6.0,
   umbralMax: 7.5,
+  umbralAlertaMax: 8.0,
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-01T00:00:00.000Z",
 };
@@ -110,13 +112,27 @@ test.describe("ConfiguracionPage", () => {
   });
 
   test.describe("UmbralesCalidadTab", () => {
-    test.beforeEach(async ({ page }) => {
-      await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "Umbrales de calidad" }).click();
-      await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
-    });
+    const pHCardDe = (page: Page) => page.locator("xpath=//h3[normalize-space()='pH']/..");
 
-    test("muestra los umbrales guardados de la empresa en los inputs", async ({ page }) => {
+    // HU-40: los 4 umbrales en el orden de la cadena del backend.
+    async function completarUmbrales(
+      page: Page,
+      valores: { alertaMin: string; min: string; max: string; alertaMax: string },
+    ) {
+      const card = pHCardDe(page);
+      await card.getByLabel("Alerta mín", { exact: true }).fill(valores.alertaMin);
+      await card.getByLabel("Mín", { exact: true }).fill(valores.min);
+      await card.getByLabel("Máx", { exact: true }).fill(valores.max);
+      await card.getByLabel("Alerta máx", { exact: true }).fill(valores.alertaMax);
+      await card.getByLabel("Alerta máx", { exact: true }).blur();
+    }
+
+    async function guardarYConfirmar(page: Page) {
+      await pHCardDe(page).getByRole("button", { name: "Guardar" }).click();
+      await page.getByRole("alertdialog").getByRole("button", { name: "Guardar" }).click();
+    }
+
+    async function abrirConConfigGuardada(page: Page) {
       // LIFO: devuelve una config guardada para pH leche cruda
       await page.route("**/config-parametros*", async (route) => {
         const rt = route.request().resourceType();
@@ -129,135 +145,165 @@ test.describe("ConfiguracionPage", () => {
         });
       });
       await page.goto("/configuracion");
+      await page.waitForLoadState("networkidle");
       await page.getByRole("button", { name: "Umbrales de calidad" }).click();
       await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
+    }
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await expect(pHCard.locator("input").nth(0)).toHaveValue("6");
-      await expect(pHCard.locator("input").nth(1)).toHaveValue("7.5");
+    test.beforeEach(async ({ page }) => {
+      await page.waitForLoadState("networkidle");
+      await page.getByRole("button", { name: "Umbrales de calidad" }).click();
+      await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
+    });
+
+    test("muestra los 4 umbrales guardados y las zonas del semáforo", async ({ page }) => {
+      await abrirConConfigGuardada(page);
+
+      const pHCard = pHCardDe(page);
+      await expect(pHCard.getByLabel("Alerta mín", { exact: true })).toHaveValue("5.5");
+      await expect(pHCard.getByLabel("Mín", { exact: true })).toHaveValue("6");
+      await expect(pHCard.getByLabel("Máx", { exact: true })).toHaveValue("7.5");
+      await expect(pHCard.getByLabel("Alerta máx", { exact: true })).toHaveValue("8");
+
+      await expect(pHCard.getByText("Normal: 6 a 7.5")).toBeVisible();
+      await expect(pHCard.getByText("En límite: 5.5 a 6 · 7.5 a 8")).toBeVisible();
+      await expect(pHCard.getByText("Fuera de rango: < 5.5 · > 8")).toBeVisible();
+      // Sin cambios no hay nada para guardar.
+      await expect(pHCard.getByRole("button", { name: "Guardar" })).toBeDisabled();
     });
 
     test("muestra error al ingresar un valor fuera del rango físico del parámetro", async ({ page }) => {
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await pHCard.locator("input").nth(0).fill("-1"); // pH negativo: fuera del rango físico 0–14
-      await pHCard.locator("input").nth(1).fill("7");
-      await pHCard.locator("input").nth(1).blur();
+      // pH negativo: fuera del rango físico 0–14
+      await completarUmbrales(page, { alertaMin: "-1", min: "6", max: "7", alertaMax: "8" });
 
-      await expect(
-        pHCard.getByText("Los valores deben estar entre 0 y 14"),
-      ).toBeVisible();
+      await expect(pHCardDe(page).getByText("Debe estar entre 0 y 14")).toBeVisible();
     });
 
     test("muestra error cuando el umbral mínimo es mayor o igual al máximo", async ({ page }) => {
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await pHCard.locator("input").nth(0).fill("8");
-      await pHCard.locator("input").nth(1).fill("6");
-      await pHCard.locator("input").nth(1).blur();
+      await completarUmbrales(page, { alertaMin: "5", min: "8", max: "6", alertaMax: "9" });
 
-      await expect(
-        pHCard.getByText("El mínimo debe ser menor al máximo"),
-      ).toBeVisible();
+      await expect(pHCardDe(page).getByText("Debe ser mayor al mínimo")).toBeVisible();
     });
 
-    test("guarda los umbrales válidos al completar los campos y salir del input", async ({ page }) => {
+    test("muestra error en las bandas de alerta que invaden el rango normal", async ({ page }) => {
+      await completarUmbrales(page, { alertaMin: "6.5", min: "6", max: "7.5", alertaMax: "7" });
+
+      const pHCard = pHCardDe(page);
+      await expect(pHCard.getByText("Debe ser menor o igual al mínimo")).toBeVisible();
+      await expect(pHCard.getByText("Debe ser mayor o igual al máximo")).toBeVisible();
+    });
+
+    test("con errores de validación no abre el aviso ni envía nada", async ({ page }) => {
+      let posted = false;
+      await page.route("**/config-parametros*", async (route) => {
+        if (route.request().method() === "POST") posted = true;
+        return route.fallback();
+      });
+
+      await completarUmbrales(page, { alertaMin: "5", min: "8", max: "6", alertaMax: "9" });
+      await pHCardDe(page).getByRole("button", { name: "Guardar" }).click();
+
+      await expect(page.getByRole("alertdialog")).not.toBeVisible();
+      expect(posted).toBe(false);
+    });
+
+    test("crea la config con los 4 umbrales tras confirmar el aviso (POST)", async ({ page }) => {
+      let postBody: unknown;
       await page.route("**/config-parametros*", async (route) => {
         const rt = route.request().resourceType();
         if (rt !== "fetch" && rt !== "xhr") return route.continue();
         if (route.request().method() !== "POST") return route.continue();
+        postBody = route.request().postDataJSON();
         await route.fulfill({
           status: 201,
           contentType: "application/json",
-          body: JSON.stringify({
-            id: 99, empresaId: 10, parametro: "ph", tipoMateriaPrima: "leche_cruda",
-            umbralMin: 6.0, umbralMax: 7.5,
-            createdAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z",
-          }),
+          body: JSON.stringify({ ...PH_CONFIG_LECHE, id: 99 }),
         });
       });
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await pHCard.locator("input").nth(0).fill("6");
-      await pHCard.locator("input").nth(1).fill("7.5");
-      await pHCard.locator("input").nth(1).blur();
+      await completarUmbrales(page, { alertaMin: "5.5", min: "6", max: "7.5", alertaMax: "8" });
+      await pHCardDe(page).getByRole("button", { name: "Guardar" }).click();
 
-      // El input se deshabilita mientras isSaving es true (ver
-      // ParametroCard.tsx) — esperar a que vuelva a habilitarse fuerza que
-      // saveConfig (configParametroService.create + setConfigs) termine de
-      // resolver, a diferencia de solo esperar el request de red.
-      await expect(pHCard.locator("input").nth(1)).toBeEnabled();
+      const aviso = page.getByRole("alertdialog");
+      await expect(aviso.getByText("afecta el semáforo de todos los lotes de leche cruda")).toBeVisible();
+      await aviso.getByRole("button", { name: "Guardar" }).click();
 
+      await expect(aviso).not.toBeVisible();
+      expect(postBody).toEqual({
+        parametro: "ph",
+        tipoMateriaPrima: "leche_cruda",
+        umbralAlertaMin: 5.5,
+        umbralMin: 6,
+        umbralMax: 7.5,
+        umbralAlertaMax: 8,
+      });
       await expect(
-        pHCard.getByText("No se pudo guardar. Intentá nuevamente."),
+        pHCardDe(page).getByText("No se pudo guardar. Intentá nuevamente."),
       ).not.toBeVisible();
     });
 
-    test("edita un umbral existente (configParametroService.update)", async ({ page }) => {
-      // A diferencia del test anterior, acá YA existe una config guardada
+    test("cancelar el aviso no envía nada", async ({ page }) => {
+      let posted = false;
+      await page.route("**/config-parametros*", async (route) => {
+        if (route.request().method() === "POST") posted = true;
+        return route.fallback();
+      });
+
+      await completarUmbrales(page, { alertaMin: "5.5", min: "6", max: "7.5", alertaMax: "8" });
+      await pHCardDe(page).getByRole("button", { name: "Guardar" }).click();
+      await page.getByRole("alertdialog").getByRole("button", { name: "Cancelar" }).click();
+
+      await expect(page.getByRole("alertdialog")).not.toBeVisible();
+      expect(posted).toBe(false);
+    });
+
+    test("edita una config existente mandando los 4 umbrales (PUT)", async ({ page }) => {
+      // A diferencia del test de creación, acá YA existe una config guardada
       // (con id) para pH/leche_cruda: saveConfig() toma la rama update()
       // (PUT), no create() (POST) — ver useConfigParametros.saveConfig.
-      await page.route("**/config-parametros*", async (route) => {
-        const rt = route.request().resourceType();
-        if (rt !== "fetch" && rt !== "xhr") return route.continue();
-        if (route.request().method() !== "GET") return route.continue();
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify([PH_CONFIG_LECHE]),
-        });
-      });
-      await page.goto("/configuracion");
-      await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "Umbrales de calidad" }).click();
-      await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
+      await abrirConConfigGuardada(page);
 
-      let updateUrl: string | undefined;
+      let putBody: unknown;
       await page.route("**/config-parametros/1", async (route) => {
         const rt = route.request().resourceType();
         if (rt !== "fetch" && rt !== "xhr") return route.continue();
         if (route.request().method() !== "PUT") return route.continue();
-        updateUrl = route.request().url();
+        putBody = route.request().postDataJSON();
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ ...PH_CONFIG_LECHE, umbralMax: 7.8 }),
+          body: JSON.stringify({ ...PH_CONFIG_LECHE, umbralAlertaMax: 8.5 }),
         });
       });
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await expect(pHCard.locator("input").nth(1)).toHaveValue("7.5");
-      await pHCard.locator("input").nth(1).fill("7.8");
-      await pHCard.locator("input").nth(1).blur();
+      const pHCard = pHCardDe(page);
+      await pHCard.getByLabel("Alerta máx", { exact: true }).fill("8.5");
+      await guardarYConfirmar(page);
 
-      await expect(pHCard.locator("input").nth(1)).toBeEnabled();
-      expect(updateUrl).toContain("/config-parametros/1");
+      await expect(page.getByRole("alertdialog")).not.toBeVisible();
+      expect(putBody).toEqual({
+        umbralAlertaMin: 5.5,
+        umbralMin: 6,
+        umbralMax: 7.5,
+        umbralAlertaMax: 8.5,
+      });
+      await expect(pHCard.getByLabel("Alerta máx", { exact: true })).toHaveValue("8.5");
     });
 
     test("los umbrales de distintos tipos de materia prima son independientes", async ({ page }) => {
-      // LIFO: solo hay config para leche cruda
-      await page.route("**/config-parametros*", async (route) => {
-        const rt = route.request().resourceType();
-        if (rt !== "fetch" && rt !== "xhr") return route.continue();
-        if (route.request().method() !== "GET") return route.continue();
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify([PH_CONFIG_LECHE]),
-        });
-      });
-      await page.goto("/configuracion");
-      await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "Umbrales de calidad" }).click();
-      await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
+      // Solo hay config para leche cruda
+      await abrirConConfigGuardada(page);
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
+      const pHCard = pHCardDe(page);
       // Leche cruda: inputs con valores guardados
-      await expect(pHCard.locator("input").nth(0)).toHaveValue("6");
-      await expect(pHCard.locator("input").nth(1)).toHaveValue("7.5");
+      await expect(pHCard.getByLabel("Mín", { exact: true })).toHaveValue("6");
+      await expect(pHCard.getByLabel("Alerta máx", { exact: true })).toHaveValue("8");
 
       // Cambiar a Crema de leche: inputs vacíos (sin config para ese tipo)
       await page.getByRole("button", { name: "Crema de leche" }).click();
-      await expect(pHCard.locator("input").nth(0)).toHaveValue("");
-      await expect(pHCard.locator("input").nth(1)).toHaveValue("");
+      for (const label of ["Alerta mín", "Mín", "Máx", "Alerta máx"]) {
+        await expect(pHCard.getByLabel(label, { exact: true })).toHaveValue("");
+      }
     });
 
     test("muestra error del servidor al fallar el guardado", async ({ page }) => {
@@ -268,17 +314,15 @@ test.describe("ConfiguracionPage", () => {
         await route.fulfill({ status: 500, body: "" });
       });
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await pHCard.locator("input").nth(0).fill("6");
-      await pHCard.locator("input").nth(1).fill("7.5");
-      await pHCard.locator("input").nth(1).blur();
+      await completarUmbrales(page, { alertaMin: "5.5", min: "6", max: "7.5", alertaMax: "8" });
+      await guardarYConfirmar(page);
 
       await expect(
-        pHCard.getByText("No se pudo guardar. Intentá nuevamente."),
+        pHCardDe(page).getByText("No se pudo guardar. Intentá nuevamente."),
       ).toBeVisible();
     });
 
-    test("muestra el mensaje del backend cuando el guardado falla con un mensaje explícito", async ({ page }) => {
+    test("muestra los mensajes del backend cuando el guardado falla con 400", async ({ page }) => {
       await page.route("**/config-parametros*", async (route) => {
         const rt = route.request().resourceType();
         if (rt !== "fetch" && rt !== "xhr") return route.continue();
@@ -286,19 +330,26 @@ test.describe("ConfiguracionPage", () => {
         await route.fulfill({
           status: 400,
           contentType: "application/json",
-          body: JSON.stringify({ message: "El umbral máximo supera el límite permitido para pH" }),
+          // Mismo formato que ConfigParametroService.validarUmbrales: string[].
+          body: JSON.stringify({
+            statusCode: 400,
+            error: "Bad Request",
+            message: [
+              "umbralAlertaMin debe ser <= umbralMin y umbralAlertaMax debe ser >= umbralMax",
+            ],
+          }),
         });
       });
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await pHCard.locator("input").nth(0).fill("6");
-      await pHCard.locator("input").nth(1).fill("7.5");
-      await pHCard.locator("input").nth(1).blur();
+      await completarUmbrales(page, { alertaMin: "5.5", min: "6", max: "7.5", alertaMax: "8" });
+      await guardarYConfirmar(page);
 
       // Con response.data.message presente, configParametroService.
       // extraerMensajeError() devuelve el mensaje real en vez del fallback.
       await expect(
-        pHCard.getByText("El umbral máximo supera el límite permitido para pH"),
+        pHCardDe(page).getByText(
+          "umbralAlertaMin debe ser <= umbralMin y umbralAlertaMax debe ser >= umbralMax",
+        ),
       ).toBeVisible();
     });
   });
