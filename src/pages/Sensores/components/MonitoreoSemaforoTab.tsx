@@ -20,6 +20,7 @@ import {
 import { Parametro, TipoMateriaPrima } from "../../../types/configParametro.types";
 import { EstadoSemaforo, type LoteEnProceso } from "../../../types/monitoreoSemaforo.types";
 import { useMonitoreoSemaforo } from "../../../hooks/useMonitoreoSemaforo";
+import { useConfigParametros } from "../../../hooks/useConfigParametros";
 import { useHistorialMedicionManual } from "../../../hooks/useHistorialMedicionManual";
 import { normalizarEstadoSemaforo } from "../../../utils/estadoSemaforo";
 import {
@@ -279,6 +280,9 @@ export function MonitoreoSemaforoTab() {
     isRealtimeConnected,
   } = useMonitoreoSemaforo();
   const ahora = useAhora();
+  // Solo como referencia para el operario: el estado de cada card lo sigue
+  // calculando el backend. Si la carga falla, la línea simplemente no se muestra.
+  const { configs } = useConfigParametros();
 
   const hayLecturas = Object.keys(lecturas).length > 0;
 
@@ -375,6 +379,9 @@ export function MonitoreoSemaforoTab() {
                 const meta = ESTADO_SEMAFORO_META[lectura?.estado ?? SIN_LECTURAS];
                 const EstadoIcon = meta.icon;
                 const unidad = UNIDAD_POR_PARAMETRO[parametro];
+                const config = configs.find(
+                  (c) => c.parametro === parametro && c.tipoMateriaPrima === loteSeleccionado.materiaPrima,
+                );
 
                 return (
                   <div
@@ -420,6 +427,16 @@ export function MonitoreoSemaforoTab() {
                           </p>
                         )}
                       </>
+                    )}
+
+                    {config && (
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        {`Normal ${config.umbralMin}–${config.umbralMax}`}
+                        {/* Defensivo: un backend sin el fix de HU-40 no devuelve las bandas. */}
+                        {config.umbralAlertaMin != null &&
+                          config.umbralAlertaMax != null &&
+                          ` · alerta ${config.umbralAlertaMin}–${config.umbralAlertaMax}`}
+                      </p>
                     )}
                   </div>
                 );
