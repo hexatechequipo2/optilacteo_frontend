@@ -5,7 +5,7 @@ import { Tabs } from "../../components/ui/Tabs";
 import { useAlertas } from "../../hooks/useAlertas";
 import { useLotes } from "../../hooks/useLotes";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
-import { useAuth } from "../../hooks/useAuth";
+import { usePermisos } from "../../hooks/usePermisos";
 import {
   NivelAlerta,
   TipoNotificacion,
@@ -30,12 +30,6 @@ import { AlertaAnomaliaCard } from "./components/AlertaAnomaliaCard";
 import { AlertaAnomaliaDetallePanel } from "./components/AlertaAnomaliaDetallePanel";
 import { ReglasActivasPanel } from "./components/ReglasActivasPanel";
 
-// HU-27: mismo rol que ya filtra toda la ruta /alertas (App.tsx) — se repite
-// acá como defensa en profundidad para el botón de cerrar, no porque haga
-// falta hoy (nadie más entra a esta pantalla), sino por si el día de mañana
-// se suma un rol de solo lectura (ej. Gerente) a la ruta.
-const ROL_QUE_PUEDE_CERRAR = "Responsable de producción";
-
 // HU-25 (Pantalla 1 "Monitoreo y Alertas", Figura 1 del doc de Sprint 3).
 // La generación/clasificación de alertas es 100% server-side (backend,
 // notificaciones.service.ts) — esta página solo consume GET /notificaciones
@@ -47,7 +41,10 @@ export default function AlertasPage() {
     useAlertas();
   const { lotes } = useLotes();
   const { empresa } = useEmpresaActual();
-  const { user } = useAuth();
+  const { puede } = usePermisos();
+  // HU-27: PATCH /notificaciones/:id/resolver y /:id/falso-positivo exigen
+  // monitoreo_alertas:editar; la ruta solo pide ver.
+  const puedeResolverAlertas = puede("monitoreo_alertas", "editar");
 
   const [tab, setTab] = useState<TabAlertas>("todas");
   const [loteId, setLoteId] = useState("todos");
@@ -281,13 +278,13 @@ export default function AlertasPage() {
         alerta={alertaSeleccionadaAnomalia}
         onClose={() => setAlertaSeleccionadaId(null)}
         onMarcarFalsoPositivo={marcarFalsoPositivo}
-        puedeMarcarFalsoPositivo={user?.rolNombre === ROL_QUE_PUEDE_CERRAR}
+        puedeMarcarFalsoPositivo={puedeResolverAlertas}
       />
       <AlertaDetallePanel
         alerta={alertaSeleccionadaUmbral}
         onClose={() => setAlertaSeleccionadaId(null)}
         onCerrar={cerrarAlerta}
-        puedeCerrar={user?.rolNombre === ROL_QUE_PUEDE_CERRAR}
+        puedeCerrar={puedeResolverAlertas}
       />
     </Layout>
   );

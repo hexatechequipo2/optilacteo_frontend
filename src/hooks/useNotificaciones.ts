@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createSocket } from "../services/socket";
 import { notificacionService } from "../services/notificacion.service";
 import type { Notificacion } from "../types/notificacion.types";
-import { useAuth } from "./useAuth";
-import { ROLES } from "../constants/roles";
+import { usePermisos } from "./usePermisos";
 import { RETENCION_AVISOS_MOCK } from "../constants/retencion";
 import { esAvisoRetencionMock, useAvisosRetencionMock } from "./useAvisosRetencionMock";
 
@@ -23,11 +22,12 @@ export function useNotificaciones(): UseNotificacionesResult {
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // HU-48 (AC4): avisos de retención mock, solo Gerente. Ver
-  // constants/retencion.ts para apagarlo cuando el backend los emita.
-  const { user } = useAuth();
+  // HU-48 (AC4): avisos de retención mock, para quien puede actuar sobre la
+  // política y los registros próximos a vencer (configuracion_empresa:editar).
+  // Ver constants/retencion.ts para apagarlo cuando el backend los emita.
+  const { puede, esSistema } = usePermisos();
   const avisosRetencion = useAvisosRetencionMock(
-    RETENCION_AVISOS_MOCK && user?.rolNombre === ROLES.GERENTE,
+    RETENCION_AVISOS_MOCK && !esSistema && puede("configuracion_empresa", "editar"),
   );
 
   useEffect(() => {

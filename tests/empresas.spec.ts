@@ -46,7 +46,7 @@ test.describe("EmpresasPage", () => {
     await expect(page.getByText("Acceso no autorizado")).toBeVisible();
     await expect(
       page.getByText(
-        "No tenés el rol permitido para ingresar a la Administración de OptiLácteo.",
+        "Tu rol no tiene permiso para ver esta sección.",
       ),
     ).toBeVisible();
   });

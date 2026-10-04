@@ -5,7 +5,7 @@ import { Button } from "../../components/ui/Button";
 import { Tabs } from "../../components/ui/Tabs";
 import { useDashboardProduccion } from "../../hooks/useDashboardProduccion";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
-import { useAuth } from "../../hooks/useAuth";
+import { usePermisos } from "../../hooks/usePermisos";
 import type { FiltroPeriodoDashboard } from "../../types/dashboardProduccion.types";
 import { MetricaCard } from "./components/MetricaCard";
 import { LotesProcesadosChart } from "./components/LotesProcesadosChart";
@@ -52,31 +52,22 @@ function segundosDesde(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
 }
 
-// HU-51: el backend habilita esta sección a Responsable de producción,
-// Gerente y Administrador (@Roles en PrediccionVolumenController) — acá
-// solo hace falta cubrir los dos primeros porque son los únicos roles que
-// llegan a esta pantalla (ver allowedRoles en App.tsx; Administrador no
-// tiene ruta a este dashboard).
-const ROLES_CON_PREDICCION_VOLUMEN = ["responsable de producción", "gerente"];
-
 // HU-38: pantalla de inicio del rol "Responsable de producción" ("jefe de
 // producción" en el backlog). AC1+AC3: métricas del día con tendencia. AC2:
 // auto-refresh sin recarga manual (useDashboardProduccion hace polling).
-// AC4: es la home de este rol (ver redirect en LoginPage.tsx y ruta en
-// App.tsx). AC de "sin datos": las métricas en 0 se muestran igual, sin
-// pantalla de error — solo se muestra error si la request en sí falla.
+// AC4: es la primera ruta de la landing por permisos (ver
+// utils/accesoRutas.ts). AC de "sin datos": las métricas en 0 se muestran
+// igual, sin pantalla de error — solo se muestra error si la request en sí
+// falla.
 export default function DashboardProduccionPage() {
   const { resumen, historico, isLoading, error, filtro, setFiltro, refetch } =
     useDashboardProduccion();
   const { empresa } = useEmpresaActual();
-  const { user } = useAuth();
+  const { puede } = usePermisos();
   const [, forceTick] = useState(0);
 
-  // Comparación normalizada, mismo criterio que el resto de los checks por
-  // rol en LotesPage.tsx.
-  const puedeVerPrediccionVolumen = ROLES_CON_PREDICCION_VOLUMEN.includes(
-    (user?.rolNombre ?? "").trim().toLowerCase(),
-  );
+  // HU-51: GET /prediccion-volumen y su export CSV exigen reportes_forecast:ver.
+  const puedeVerPrediccionVolumen = puede("reportes_forecast", "ver");
 
   // Recalcula el texto "actualizado hace Xs" cada segundo sin re-pedir datos.
   useEffect(() => {

@@ -9,12 +9,18 @@ import type { UsuarioType } from "../types/usuario.types";
 // tiene @Max(100) — pedir más tira 400 (bug ya visto una vez acá, ver
 // PR/commit de este fix). GET /user ya filtra por empresaId vía JWT (ver
 // comentario en sensor.service.ts).
-export function useUsuariosActivos() {
+// habilitado=false: no pide GET /user (sin gestion_usuarios:ver daría 403).
+export function useUsuariosActivos({ habilitado = true }: { habilitado?: boolean } = {}) {
   const [usuarios, setUsuarios] = useState<UsuarioType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!habilitado) {
+      setUsuarios([]);
+      setIsLoading(false);
+      return;
+    }
     let cancelado = false;
 
     (async () => {
@@ -35,7 +41,7 @@ export function useUsuariosActivos() {
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [habilitado]);
 
   return { usuarios, isLoading, error };
 }

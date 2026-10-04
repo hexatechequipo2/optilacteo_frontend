@@ -20,6 +20,8 @@ interface PoliticaRetencionFormProps {
   mensajeExito: string;
   onGuardar: (input: PoliticaRetencionInput) => Promise<void>;
   onEditar: () => void;
+  // Sin configuracion_empresa:editar (PATCH /retencion/politica).
+  soloLectura?: boolean;
 }
 
 // HU-48 AC1 + AC2: período (mín. 24 meses, con el motivo normativo inline) y
@@ -30,6 +32,7 @@ export function PoliticaRetencionForm({
   mensajeExito,
   onGuardar,
   onEditar,
+  soloLectura = false,
 }: PoliticaRetencionFormProps) {
   const [periodo, setPeriodo] = useState(String(politica.periodoMeses));
   const [accion, setAccion] = useState<AccionVencimiento>(politica.accionAlVencer);
@@ -85,7 +88,7 @@ export function PoliticaRetencionForm({
           min={RETENCION_MINIMA_MESES}
           step={1}
           value={periodo}
-          disabled={isGuardando}
+          disabled={isGuardando || soloLectura}
           onChange={(e) => {
             setPeriodo(e.target.value);
             editar();
@@ -125,7 +128,7 @@ export function PoliticaRetencionForm({
         <input
           type="checkbox"
           checked={avisoActivo}
-          disabled={isGuardando}
+          disabled={isGuardando || soloLectura}
           onChange={(e) => {
             setAvisoActivo(e.target.checked);
             editar();
@@ -153,12 +156,18 @@ export function PoliticaRetencionForm({
         </p>
       )}
 
-      <div>
-        <Button type="submit" isLoading={isGuardando} disabled={!!errorPeriodo || !hayCambios}>
-          <Check className="mr-2 h-4 w-4" />
-          Guardar política
-        </Button>
-      </div>
+      {soloLectura ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Solo lectura: tu rol no puede modificar la política de retención.
+        </p>
+      ) : (
+        <div>
+          <Button type="submit" isLoading={isGuardando} disabled={!!errorPeriodo || !hayCambios}>
+            <Check className="mr-2 h-4 w-4" />
+            Guardar política
+          </Button>
+        </div>
+      )}
     </form>
   );
 }

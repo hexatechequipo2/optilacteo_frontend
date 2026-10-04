@@ -1,7 +1,7 @@
 import { Activity, Droplet, Gauge, Grid2x2, Radar, Target, Thermometer, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSensoresRealtime } from "../../../hooks/useSensoresRealtime";
-import { useAuth } from "../../../hooks/useAuth";
+import { usePermisos } from "../../../hooks/usePermisos";
 import { ValorConUnidad } from "../../../components/ValorConUnidad";
 import { SensorEstadoBadge } from "../../../components/SensorEstadoBadge";
 import { Badge } from "../../../components/ui/Badge";
@@ -37,15 +37,10 @@ function formatearHace(timestamp: string | null | undefined, ahora: number): str
 
 export function EstadoDiagnosticoTab() {
   const { sensores, lecturas, isLoading, error, isRealtimeConnected } = useSensoresRealtime();
-  const { user } = useAuth();
+  const { puede } = usePermisos();
 
-  // HU-15: el fallback manual (POST /sensores/lecturas/manual, backend) es
-  // exclusivo de Operario de línea - mismo criterio de comparación normalizada
-  // que el resto de las pantallas (rolNombre puede variar en casing/espacios).
-  const puedeCargarManual = useMemo(
-    () => (user?.rolNombre ?? "").trim().toLowerCase() === "operario de línea",
-    [user?.rolNombre],
-  );
+  // HU-15: fallback manual por sensor (POST /sensores/lecturas/manual).
+  const puedeCargarManual = puede("monitoreo_alertas", "crear");
 
   // Un solo intervalo para todo el grid: recalcula los "hace X s" en vivo
   // sin depender de ninguna librería de fechas (el proyecto no tiene una).

@@ -48,13 +48,114 @@ const OPERARIO_USER: MockUser = {
   empresaId: 10,
 };
 
+// Landing = primera ruta de utils/accesoRutas.ts con permiso. Con la matriz
+// por defecto todos los roles de empresa tienen dashboard:ver.
 const LOGIN_DESTINATIONS: Record<MockUser["rolNombre"], string> = {
   Administrador: "/dashboard",
   Gerente: "/dashboard-produccion",
-  "Responsable de calidad": "/lotes",
+  "Responsable de calidad": "/dashboard-produccion",
   "Responsable de producción": "/dashboard-produccion",
-  "Operario de línea": "/sensores",
+  "Operario de línea": "/dashboard-produccion",
 };
+
+// Espejo de MATRIZ_PERMISOS_POR_DEFECTO (permisos-por-defecto.constant.ts
+// del back). R = ver, C = crear, U = editar, D = eliminar, E = exportar.
+const LECTURA_SISTEMA: Record<string, string> = {
+  dashboard: "RE",
+  recepcion: "RE",
+  destino_productivo_ia: "RE",
+  monitoreo_alertas: "RE",
+  sensores_iot: "RE",
+  trazabilidad: "RE",
+  reportes_forecast: "RE",
+  asistente_voz: "RE",
+};
+
+const MATRIZ_POR_DEFECTO: Record<Exclude<MockUser["rolNombre"], "Administrador">, Record<string, string>> = {
+  Gerente: {
+    ...LECTURA_SISTEMA,
+    recepcion: "RCUDE",
+    destino_productivo_ia: "RCE",
+    monitoreo_alertas: "RUE",
+    sensores_iot: "RCUDE",
+    trazabilidad: "RCUDE",
+    configuracion_empresa: "RCUD",
+    gestion_roles: "RCUD",
+    gestion_usuarios: "RCU",
+    auditoria: "RE",
+  },
+  "Operario de línea": {
+    ...LECTURA_SISTEMA,
+    monitoreo_alertas: "RCE",
+    sensores_iot: "RUE",
+  },
+  "Responsable de producción": {
+    ...LECTURA_SISTEMA,
+    destino_productivo_ia: "RCE",
+    monitoreo_alertas: "RUE",
+    sensores_iot: "RCUDE",
+    trazabilidad: "RCUE",
+    configuracion_empresa: "R",
+  },
+  "Responsable de calidad": {
+    ...LECTURA_SISTEMA,
+    recepcion: "RCE",
+    trazabilidad: "RCUE",
+    configuracion_empresa: "R",
+    gestion_usuarios: "R",
+  },
+};
+
+export function permisosPorDefecto(rolNombre: MockUser["rolNombre"]) {
+  if (rolNombre === "Administrador") {
+    return { esSistema: true, rolNombre, permisos: [] };
+  }
+  return {
+    esSistema: false,
+    rolNombre,
+    permisos: Object.entries(MATRIZ_POR_DEFECTO[rolNombre]).map(([modulo, f]) => ({
+      modulo,
+      canRead: f.includes("R"),
+      canCreate: f.includes("C"),
+      canUpdate: f.includes("U"),
+      canDelete: f.includes("D"),
+      canExport: f.includes("E"),
+    })),
+  };
+}
+
+// HU-72: PermisosProvider pide los permisos al login, al restaurar sesión y
+// en recargas silenciosas. Exportado para specs que arman el login a mano.
+export async function mockPermisos(page: Page, rolNombre: MockUser["rolNombre"]) {
+  await page.route("**/auth/me/permisos", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(permisosPorDefecto(rolNombre)),
+    }),
+  );
+}
+
+// HU-72: la matriz por defecto da ver en todos los módulos de sistema a
+// todos los roles de empresa; para probar el bloqueo de una ruta se le saca
+// el módulo al rol. Llamarlo después del login y antes del page.goto.
+export async function quitarPermisos(
+  page: Page,
+  rolNombre: Exclude<MockUser["rolNombre"], "Administrador">,
+  modulos: string[],
+) {
+  const base = permisosPorDefecto(rolNombre);
+  await page.route("**/auth/me/permisos", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...base,
+        permisos: base.permisos.filter((p) => !modulos.includes(p.modulo)),
+      }),
+    }),
+  );
+}
 
 /**
  * Interceptamos la llamada real de login (authService.login -> POST /login)
@@ -84,6 +185,8 @@ async function mockLoginEndpoint(page: Page, user: MockUser) {
   // caía en el catch-all genérico de cada spec (200 []), dejaba
   // isAuthenticated en false y ProtectedRoute redirigía a /login a mitad
   // de test.
+  await mockPermisos(page, user.rolNombre);
+
   await page.route("**/refresh", async (route) => {
     if (route.request().method() !== "POST") {
       return route.continue();

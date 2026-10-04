@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSkus } from "../../../hooks/useSkus";
+import { usePermisos } from "../../../hooks/usePermisos";
 import { Button } from "../../../components/ui/Button";
 import { NuevoSkuModal } from "./NuevoSkuModal";
 import { UnidadMedidaSku } from "../../../types/sku.types";
@@ -17,6 +18,9 @@ const UNIDAD_LABELS: Record<UnidadMedidaSku, string> = {
 export function SkusConfigTab() {
   const { skus, isLoading, error, createSku, isCreating, refetch } = useSkus();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // POST /skus exige trazabilidad:crear; GET, trazabilidad:ver.
+  const { puede } = usePermisos();
+  const puedeCrear = puede("trazabilidad", "crear");
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -29,9 +33,15 @@ export function SkusConfigTab() {
             Productos terminados disponibles para registrar ingreso a cámara
           </p>
         </div>
-        <Button type="button" className="!w-auto px-6" onClick={() => setIsModalOpen(true)}>
-          + Nuevo SKU
-        </Button>
+        {puedeCrear && (
+          <Button
+            type="button"
+            className="!w-auto px-6"
+            onClick={() => setIsModalOpen(true)}
+          >
+            + Nuevo SKU
+          </Button>
+        )}
       </div>
 
       {error && (
@@ -53,7 +63,8 @@ export function SkusConfigTab() {
         </p>
       ) : skus.length === 0 ? (
         <p className="px-5 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-          Todavía no diste de alta ningún SKU. Registrá el primero con el botón "+ Nuevo SKU".
+          Todavía no diste de alta ningún SKU. Registrá el primero con el botón
+          "+ Nuevo SKU".
         </p>
       ) : (
         <table className="w-full text-left">
@@ -82,12 +93,14 @@ export function SkusConfigTab() {
         </table>
       )}
 
-      <NuevoSkuModal
-        isOpen={isModalOpen}
-        isSubmitting={isCreating}
-        onClose={() => setIsModalOpen(false)}
-        onCreate={createSku}
-      />
+      {puedeCrear && (
+        <NuevoSkuModal
+          isOpen={isModalOpen}
+          isSubmitting={isCreating}
+          onClose={() => setIsModalOpen(false)}
+          onCreate={createSku}
+        />
+      )}
     </div>
   );
 }

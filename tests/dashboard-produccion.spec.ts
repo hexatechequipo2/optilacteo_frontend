@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsResponsableProduccion, loginAsResponsableCalidad } from "./fixtures/mockAuth.ts";
+import { loginAsResponsableProduccion, loginAsResponsableCalidad, quitarPermisos } from "./fixtures/mockAuth.ts";
 
 // ---------------------------------------------------------------------------
 // Datos de prueba
@@ -171,6 +171,7 @@ test.describe("DashboardProduccionPage", () => {
 test("DashboardProduccionPage - un Responsable de calidad ve acceso no autorizado", async ({ page }) => {
   await mockDashboardProduccionDeps(page);
   await loginAsResponsableCalidad(page);
+  await quitarPermisos(page, "Responsable de calidad", ["dashboard"]);
   await page.goto("/dashboard-produccion");
   await expect(page.getByText("Acceso no autorizado")).toBeVisible();
 });

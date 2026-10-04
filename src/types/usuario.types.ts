@@ -21,10 +21,11 @@ export interface CreateUsuarioDto {
   empresaId: number;
 }
 
+// Sin rolId a propósito: el cambio de rol va por PUT /roles/usuarios/:id
+// (gestion_roles:editar), que aplica las protecciones del back.
 export interface UpdateUsuarioDto {
   name?: string;
   email?: string;
-  rolId?: number;
   empresaId?: number;
 }
 

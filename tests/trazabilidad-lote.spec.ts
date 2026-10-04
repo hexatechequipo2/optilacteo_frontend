@@ -599,11 +599,13 @@ test.describe("TrazabilidadLoteModal (HU-68)", () => {
     await expect(dialog.getByText("Saldo insuficiente para este consumo")).toBeVisible();
   });
 
-  test("un Gerente ve el panel de trazabilidad en modo solo lectura, sin formulario de registrar consumo", async ({
+  // HU-72: con la matriz por defecto Gerente tiene trazabilidad:crear; el
+  // modo lectura es el de quien solo tiene ver (Operario).
+  test("un Operario ve el panel de trazabilidad en modo solo lectura, sin formulario de registrar consumo", async ({
     page,
   }) => {
     await mockTrazabilidadDeps(page);
-    await loginAsGerente(page);
+    await loginAsOperario(page);
     await page.goto("/lotes");
 
     await abrirModalPorTitulo(page, "LOT-2026-001", "Trazabilidad y consumo parcial");

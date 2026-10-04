@@ -24,6 +24,8 @@ interface RegistrosProximosVencerTablaProps {
   procesandoClave: string | null;
   onAplicarPolitica: (registro: RegistroRetencionEvaluado) => void;
   onDarDeBaja: (registro: RegistroRetencionEvaluado) => void;
+  // Sin configuracion_empresa:editar: la tabla queda de consulta.
+  soloLectura?: boolean;
 }
 
 // Debajo de este umbral los días restantes se resaltan en ámbar.
@@ -143,6 +145,7 @@ export function RegistrosProximosVencerTabla({
   procesandoClave,
   onAplicarPolitica,
   onDarDeBaja,
+  soloLectura = false,
 }: RegistrosProximosVencerTablaProps) {
   if (registros.length === 0) {
     return (
@@ -154,7 +157,9 @@ export function RegistrosProximosVencerTabla({
 
   const filas = registros.map((registro) => ({
     registro,
-    acciones: accionesDeFila(registro, politica, onAplicarPolitica, onDarDeBaja),
+    acciones: soloLectura
+      ? []
+      : accionesDeFila(registro, politica, onAplicarPolitica, onDarDeBaja),
     isLoading: procesandoClave === claveRegistro(registro),
   }));
 

@@ -2,6 +2,7 @@ import axios, { type InternalAxiosRequestConfig } from "axios";
 import { authService } from "./auth.service";
 import { getAccessToken, setAccessToken } from "./tokenStore";
 import { clearRefreshToken, getStoredRefreshToken, storeRefreshToken } from "./refreshTokenStorage";
+import { notificarPermisoDenegado } from "./permisoDenegado";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000",
@@ -70,6 +71,15 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config as RetriableRequestConfig | undefined;
+
+    // 403 del PermissionsGuard: la matriz pudo cambiar desde la última carga.
+    // Se excluye /auth/me/permisos para no entrar en un bucle.
+    if (
+      error.response?.status === 403 &&
+      !originalRequest?.url?.includes("/auth/me/permisos")
+    ) {
+      notificarPermisoDenegado();
+    }
 
     if (error.response?.status !== 401 || !originalRequest) {
       return Promise.reject(error);

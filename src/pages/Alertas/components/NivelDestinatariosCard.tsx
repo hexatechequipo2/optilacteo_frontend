@@ -18,6 +18,14 @@ interface NivelDestinatariosCardProps {
   onAgregarRol: (rol: RolType) => Promise<void>;
   onAgregarUsuario: (usuario: UsuarioType) => Promise<void>;
   onQuitarDestinatario: (id: number) => Promise<void>;
+  // POST /notificaciones/configuracion: configuracion_empresa:crear.
+  puedeAgregar: boolean;
+  // DELETE /notificaciones/configuracion/:id: configuracion_empresa:eliminar.
+  puedeQuitar: boolean;
+  // Los selectores se llenan con GET /roles (gestion_roles:ver) y GET /user
+  // (gestion_usuarios:ver).
+  puedeElegirRol: boolean;
+  puedeElegirUsuario: boolean;
 }
 
 // Qué selector inline está abierto, si alguno.
@@ -34,6 +42,10 @@ export function NivelDestinatariosCard({
   onAgregarRol,
   onAgregarUsuario,
   onQuitarDestinatario,
+  puedeAgregar,
+  puedeQuitar,
+  puedeElegirRol,
+  puedeElegirUsuario,
 }: NivelDestinatariosCardProps) {
   const [selectorAbierto, setSelectorAbierto] = useState<SelectorAbierto>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -83,17 +95,22 @@ export function NivelDestinatariosCard({
             className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 py-1.5 pl-3 pr-2 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-300"
           >
             {c.usuario ? (
-              <User className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" aria-hidden="true" />
+              <User
+                className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500"
+                aria-hidden="true"
+              />
             ) : null}
             {c.rol?.nombre ?? c.usuario?.name ?? "Destinatario"}
-            <button
-              type="button"
-              onClick={() => onQuitarDestinatario(c.id)}
-              aria-label={`Quitar ${c.rol?.nombre ?? c.usuario?.name ?? "destinatario"} de ${meta.label}`}
-              className="rounded-full p-0.5 text-slate-400 transition hover:bg-slate-200 hover:text-red-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-red-400"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            {puedeQuitar && (
+              <button
+                type="button"
+                onClick={() => onQuitarDestinatario(c.id)}
+                aria-label={`Quitar ${c.rol?.nombre ?? c.usuario?.name ?? "destinatario"} de ${meta.label}`}
+                className="rounded-full p-0.5 text-slate-400 transition hover:bg-slate-200 hover:text-red-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-red-400"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </span>
         ))}
 
@@ -115,7 +132,10 @@ export function NivelDestinatariosCard({
               }}
               options={[
                 { value: "", label: "Seleccioná un rol..." },
-                ...rolesDisponibles.map((r) => ({ value: String(r.id), label: r.nombre })),
+                ...rolesDisponibles.map((r) => ({
+                  value: String(r.id),
+                  label: r.nombre,
+                })),
               ]}
             />
           </div>
@@ -133,18 +153,26 @@ export function NivelDestinatariosCard({
               }}
               options={[
                 { value: "", label: "Seleccioná un usuario..." },
-                ...usuariosDisponibles.map((u) => ({ value: String(u.id), label: `${u.name} (${u.email})` })),
+                ...usuariosDisponibles.map((u) => ({
+                  value: String(u.id),
+                  label: `${u.name} (${u.email})`,
+                })),
               ]}
             />
           </div>
         )}
 
-        {selectorAbierto === null && (
+        {puedeAgregar && selectorAbierto === null && (
           <>
             <button
               type="button"
               onClick={() => setSelectorAbierto("rol")}
-              disabled={rolesDisponibles.length === 0}
+              disabled={!puedeElegirRol || rolesDisponibles.length === 0}
+              title={
+                puedeElegirRol
+                  ? undefined
+                  : "Requiere permiso para ver roles (gestión de roles)."
+              }
               className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-500 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-500 dark:hover:text-blue-400"
             >
               + Rol
@@ -152,7 +180,12 @@ export function NivelDestinatariosCard({
             <button
               type="button"
               onClick={() => setSelectorAbierto("usuario")}
-              disabled={usuariosDisponibles.length === 0}
+              disabled={!puedeElegirUsuario || usuariosDisponibles.length === 0}
+              title={
+                puedeElegirUsuario
+                  ? undefined
+                  : "Requiere permiso para ver usuarios (gestión de usuarios)."
+              }
               className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-500 transition hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-500 dark:hover:text-blue-400"
             >
               + Usuario
