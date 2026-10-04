@@ -7,19 +7,19 @@ import { ClasificacionLoteBadge } from "../../components/ClasificacionLoteBadge"
 import { AuditoriaModal } from "../../components/AuditoriaModal";
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
-import { useAuth } from "../../hooks/useAuth";
+import { usePermisos } from "../../hooks/usePermisos";
 import { recomendacionService } from "../../services/recomendacion.service";
 import type { RecomendacionDestinoItem } from "../../types/recomendacionDestino.types";
 import { Badge } from "../../components/ui/Badge";
 import { tieneNumeroRemito } from "../../utils/numeroRemito";
 import { proveedoresService } from "../../services/proveedores.service";
 import { tamboService } from "../../services/tambo.service";
-import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
 import { TIPO_MATERIA_PRIMA_TABS } from "../Configuracion/constants/parametrosCalidad";
 import { UBICACION_LABEL } from "../Sensores/constants/parametroSensor";
 import { DestinoLote, EstadoLote, UnidadRendimiento, type Lote } from "../../types/lote.types";
 import type { Proveedor } from "../../types/proveedor.types";
 import type { Tambo } from "../../types/tambo.types";
+import type { ModuloPermiso } from "../../types/permisos.types";
 import { LoteFormModal } from "./LoteFormModal";
 import { LoteMedicionesModal } from "./components/LoteMedicionesModal";
 import { TrazabilidadLoteModal } from "./components/TrazabilidadLoteModal";
@@ -94,8 +94,11 @@ export default function LotesPage() {
     finalizarLote,
     finalizandoId,
   } = useLotes();
-  const { user } = useAuth();
-  const { sensores } = useSensores();
+  const { puede } = usePermisos();
+  // Sin sensores_iot:ver no se puede saber qué lote tiene sensor: no se pide
+  // (evita el 403) y, si se carga una medición HU-20 sobre un lote con
+  // sensor, el back la rechaza con su propio mensaje.
+  const { sensores } = useSensores({}, { habilitado: puede("sensores_iot", "ver") });
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [tambos, setTambos] = useState<Tambo[]>([]);
   const [filtroUnidadRendimiento, setFiltroUnidadRendimiento] = useState("");
@@ -107,11 +110,14 @@ export default function LotesPage() {
     [],
   );
   useEffect(() => {
+    // GET /recomendaciones/todas exige trazabilidad:ver; sin eso daría un 403
+    // en cada visita (que además dispara la recarga de permisos).
+    if (!puede("trazabilidad", "ver")) return;
     recomendacionService
       .getTodas()
       .then(setRecomendacionesTodas)
       .catch(() => setRecomendacionesTodas([]));
-  }, []);
+  }, [puede]);
   // TODO(backend): esto es una aproximación, no el destino vigente real de
   // cada lote (para eso, ver useDestinoProductivoLote.ts — GET
   // /lotes/:id/destino-productivo/historial — que sí es preciso pero es
@@ -154,70 +160,27 @@ export default function LotesPage() {
   const [loteTrazabilidadId, setLoteTrazabilidadId] = useState<number | null>(null);
   const [loteHistorialId, setLoteHistorialId] = useState<number | null>(null);
 
-  // Solo Responsable de calidad puede registrar/editar lotes (POST y PATCH
-  // /lotes en el backend); Gerente/Administrador acceden a esta pantalla en
-  // modo lectura.
-  //
-  // HU-36 (trazabilidad de origen del lote) redacta el criterio como "Como
-  // operario de línea, quiero registrar el proveedor y tambo de origen...".
-  // Verificado con el usuario al implementar esta HU: ese texto quedó
-  // desactualizado por una decisión de producto anterior (HU-60, ver
-  // lote.controller.ts en el backend y el comentario de la ruta /lotes en
-  // App.tsx) que movió el alta de lotes de Operario de línea a Responsable
-  // de calidad — Operario de línea solo carga mediciones manuales sobre
-  // lotes ya existentes (HU-20), no da de alta el lote en sí. No es una
-  // inconsistencia introducida por HU-36; se hereda de HU-60 y ya está
-  // implementada igual en frontend y backend. Se deja anotado acá para que
-  // quede trazable en el código, no solo en la conversación.
-  const puedeCrearLote = user?.rolNombre === "Responsable de calidad";
-  const puedeEditarLote =
-    user?.rolNombre === "Responsable de calidad" ||
-    user?.rolNombre === "Responsable de producción";
+  // Cada flag usa el mismo módulo/acción que exige el endpoint en
+  // lote.controller.ts (varios módulos = OR, como el guard del back).
+  const LOTE: ModuloPermiso[] = ["recepcion", "trazabilidad"];
+  const puedeCrearLote = puede("recepcion", "crear"); // POST /lotes
+  const puedeEditarLote = puede(LOTE, "editar"); // PATCH /lotes/:id
+  // PATCH /lotes/:id/finalizar. Solo se ofrece mientras el lote no llegó a
+  // un estado terminal (se resuelve en la fila).
+  const puedeFinalizarLote = puede(LOTE, "editar");
 
-  // HU-63: quién creó el lote y, si aplica, quién lo modificó por última
-  // vez. El backend manda el bloque `auditoria` para cualquier rol que
-  // pueda leer /lotes (no lo gatea); la restricción a Gerente/Administrador
-  // se aplica acá (ver utils/auditoriaVisibility.ts).
-  const puedeVerAuditoriaLote = puedeVerAuditoria(user?.rolNombre);
+  // HU-63: el back manda `auditoria` en cualquier GET de lotes; se muestra
+  // a quien tiene el módulo de auditoría.
+  const puedeVerAuditoriaLote = puede("auditoria", "ver");
 
-  // HU-62: PATCH /lotes/:id/finalizar amplió el rol habilitado a
-  // Responsable de calidad y Responsable de Producción (antes exclusivo de
-  // calidad). Comparación normalizada, mismo criterio que el resto de los
-  // checks de este archivo. Solo tiene sentido ofrecerla mientras el lote
-  // no llegó todavía a un estado terminal (finalizado/rechazado, este
-  // último decidido por HU-22 vía revisión de calidad).
-  const puedeFinalizarLote = useMemo(() => {
-    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-    return rol === "responsable de calidad" || rol === "responsable de producción";
-  }, [user?.rolNombre]);
-
-  // HU-21: GET /lotes/:id/clasificaciones (backend, lote.controller.ts)
-  // permite Responsable de calidad, Gerente y Administrador — no es
-  // exclusivo de quien puede crear lotes. Comparación normalizada, mismo
-  // criterio que puedeVerComparacionHistorica.
-  const puedeVerClasificacion = useMemo(() => {
-    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-    return rol === "responsable de calidad" || rol === "gerente" || rol === "administrador";
-  }, [user?.rolNombre]);
-
-  // HU-24: comparación histórica — @Roles del backend (lote.controller.ts)
-  // permite Responsable de calidad, Gerente y Administrador (más amplio que
-  // HU-21). Comparación normalizada, mismo criterio que puedeVerHistorialManual.
-  const puedeVerComparacionHistorica = useMemo(() => {
-    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-    return rol === "responsable de calidad" || rol === "gerente" || rol === "administrador";
-  }, [user?.rolNombre]);
-
-  // Capacidad base (solo rol) de cargar una medición manual para un lote:
-  // exclusiva de Operario de línea tanto en HU-20 (POST
-  // /lotes/:id/mediciones-manuales, respaldo total sin sensor) como en HU-15
-  // (POST /sensores/lecturas/manual, fallback por sensor puntual). Cuál de
-  // los dos aplica se resuelve en el modal según loteTieneSensor - HU-20 se
-  // rechaza con 400 si el lote tiene cualquier sensor asociado.
-  const puedeCargarMedicionManualBase = useMemo(() => {
-    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-    return rol === "operario de línea";
-  }, [user?.rolNombre]);
+  // GET /lotes/:id/clasificaciones
+  const puedeVerClasificacion = puede(["monitoreo_alertas", "trazabilidad"], "ver");
+  // GET /lotes/:id/comparacion-historica
+  const puedeVerComparacionHistorica = puede("trazabilidad", "ver");
+  // HU-20 (POST /lotes/:id/mediciones-manuales) y HU-15 (POST
+  // /sensores/lecturas/manual) exigen monitoreo_alertas:crear; cuál aplica
+  // se resuelve en el modal según loteTieneSensor.
+  const puedeCargarMedicionManualBase = puede("monitoreo_alertas", "crear");
 
   // El backend bloquea HU-20 (POST /lotes/:id/mediciones-manuales) si el lote
   // tiene CUALQUIER sensor asociado, sin importar su estado (ver
@@ -231,70 +194,18 @@ export default function LotesPage() {
     [sensores],
   );
 
-  // GET /lotes/:id/mediciones-manuales (HU-20, backend): Operario de línea,
-  // Responsable de producción, Gerente y Administrador. Responsable de
-  // calidad no está habilitado ahí. Comparación normalizada (trim +
-  // lowercase), mismo criterio que puedeVerHistorial en SensoresPage.
-  // Solo aplica a lotes SIN sensor asociado (ver loteTieneSensor).
-  const puedeVerHistorialManual = useMemo(() => {
-    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-    return (
-      rol === "operario de línea" ||
-      rol === "responsable de producción" ||
-      rol === "gerente" ||
-      rol === "administrador"
-    );
-  }, [user?.rolNombre]);
-
-  // GET /sensores/lecturas/historial-mediciones (HU-19, backend):
-  // Responsable de producción, Gerente y Administrador - NO Operario de
-  // línea (a diferencia de puedeVerHistorialManual). Se usa para lotes CON
-  // sensor asociado (HU-15): ahí el historial real vive en sensor_lecturas,
-  // no en mediciones_manuales_lote.
-  const puedeVerHistorialLecturas = useMemo(() => {
-    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-    return rol === "responsable de producción" || rol === "gerente" || rol === "administrador";
-  }, [user?.rolNombre]);
-
-  // HU-68: GET /lotes/:id/consumos (backend) — Responsable de calidad,
-  // Responsable de producción, Gerente y Administrador. Mismo set de roles
-  // que GET /lotes/producciones, así que alcanza con esta única flag para
-  // decidir si se ofrece el ícono de trazabilidad.
-  const puedeVerTrazabilidad = useMemo(() => {
-    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-    return (
-      rol === "responsable de calidad" ||
-      rol === "responsable de producción" ||
-      rol === "gerente" ||
-      rol === "administrador"
-    );
-  }, [user?.rolNombre]);
-
-  // HU-68: POST /lotes/:id/consumos (backend) — solo Responsable de calidad
-  // y Responsable de producción pueden registrar un consumo parcial;
-  // Gerente/Administrador ven el panel de trazabilidad en modo lectura.
-  const puedeRegistrarConsumo = useMemo(() => {
-    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-    return rol === "responsable de calidad" || rol === "responsable de producción";
-  }, [user?.rolNombre]);
-
-  // HU-45: "Reporte de trazabilidad de un lote específico" (GET
-  // /lotes/:id/reporte-trazabilidad, @Roles RESPONSABLE_CALIDAD en el
-  // backend) — documentación para inspecciones del CAA/SENASA, no para el
-  // resto de los roles que también pueden abrir este modal en modo lectura.
-  const puedeGenerarReporteTrazabilidad = useMemo(() => {
-    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-    return rol === "responsable de calidad";
-  }, [user?.rolNombre]);
-
-  // HU-32: GET /lotes/:id/trazabilidad (backend) — Responsable de calidad,
-  // Gerente, Administrador. A diferencia de puedeVerTrazabilidad (que gatea
-  // el panel de consumo parcial de HU-68), este NO incluye a Responsable de
-  // producción — ver lote.controller.ts.
-  const puedeVerTrazabilidadCompleta = useMemo(() => {
-    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-    return rol === "responsable de calidad" || rol === "gerente" || rol === "administrador";
-  }, [user?.rolNombre]);
+  // GET /lotes/:id/mediciones-manuales (lotes sin sensor) y GET
+  // /sensores/lecturas/historial-mediciones (lotes con sensor): mismo permiso.
+  const puedeVerHistorialManual = puede(["monitoreo_alertas", "trazabilidad"], "ver");
+  const puedeVerHistorialLecturas = puedeVerHistorialManual;
+  // GET /lotes/:id/consumos y /lotes/producciones
+  const puedeVerTrazabilidad = puede("trazabilidad", "ver");
+  // POST /lotes/:id/consumos
+  const puedeRegistrarConsumo = puede("trazabilidad", "crear");
+  // GET /lotes/:id/reporte-trazabilidad: el back exige ver, no exportar.
+  const puedeGenerarReporteTrazabilidad = puede("trazabilidad", "ver");
+  // GET /lotes/:id/trazabilidad
+  const puedeVerTrazabilidadCompleta = puede("trazabilidad", "ver");
 
   // El ícono de la acción se ofrece si hay al menos una de las tres
   // capacidades (escribir, ver historial o ver clasificación automática);
@@ -323,11 +234,14 @@ export default function LotesPage() {
   };
 
   useEffect(() => {
+    // GET /proveedores exige recepcion:ver (un rol solo con trazabilidad
+    // ve la tabla sin razón social, sin 403).
+    if (!puede("recepcion", "ver")) return;
     proveedoresService
       .getAll({ page: 1, limit: PROVEEDORES_SELECT_LIMIT, estado: "activa" })
       .then((result) => setProveedores(result.data))
       .catch(() => setProveedores([]));
-  }, []);
+  }, [puede]);
 
   // HU-36: universo completo de tambos de la empresa (GET /tambos, ya
   // filtrado por activo:true del lado del backend) para resolver

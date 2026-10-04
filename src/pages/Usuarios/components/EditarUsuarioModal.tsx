@@ -5,7 +5,8 @@ import type {
   UpdateUsuarioDto,
   UsuarioType,
 } from "../../../types/usuario.types";
-import { UsuarioForm, type UsuarioFormValues } from "./UsuarioForm";
+import { RolNoAsignadoError, UsuarioForm, type UsuarioFormValues } from "./UsuarioForm";
+import { extraerMensajeError } from "../../../services/rol.service";
 
 interface EditarUsuarioModalProps {
   usuario: UsuarioType | null;
@@ -20,6 +21,9 @@ interface EditarUsuarioModalProps {
     payload: UpdateUsuarioDto,
     nuevoEstado: boolean,
   ) => Promise<void>;
+  // gestion_roles:editar (PUT /roles/usuarios/:usuarioId).
+  puedeCambiarRol: boolean;
+  onAsignarRol: (usuarioId: number, rolId: number) => Promise<void>;
 }
 
 export function EditarUsuarioModal({
@@ -30,6 +34,8 @@ export function EditarUsuarioModal({
   isSubmitting,
   onClose,
   onUpdate,
+  puedeCambiarRol,
+  onAsignarRol,
 }: EditarUsuarioModalProps) {
   if (!usuario) return null;
 
@@ -39,11 +45,19 @@ export function EditarUsuarioModal({
       {
         name: values.name,
         email: values.email,
-        rolId: values.rolId,
         empresaId: Number(values.empresaId),
       },
       values.isActive,
     );
+    // El rol va aparte: PUT /roles/usuarios/:id aplica las protecciones del
+    // back (autobloqueo, empresa sin gestor, rol de sistema).
+    if (puedeCambiarRol && values.rolId !== usuario.rolId) {
+      try {
+        await onAsignarRol(usuario.id, values.rolId);
+      } catch (err) {
+        throw new RolNoAsignadoError(extraerMensajeError(err, "Intentá nuevamente."));
+      }
+    }
     onClose();
   };
 
@@ -79,6 +93,7 @@ export function EditarUsuarioModal({
         roles={roles}
         empresas={empresas}
         empresaIdBloqueada={empresaIdBloqueada}
+        rolEditable={puedeCambiarRol}
         onSubmit={handleSubmit}
       />
     </Modal>

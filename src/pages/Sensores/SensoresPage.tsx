@@ -1,9 +1,8 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Layout } from "../../components/layout/Layout";
 import { Tabs } from "../../components/ui/Tabs";
-import { ROLES } from "../../constants/roles";
 import { useSensores } from "../../hooks/useSensores";
-import { useAuth } from "../../hooks/useAuth";
+import { usePermisos } from "../../hooks/usePermisos";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
 import type { SensorFilterQuery } from "../../types/sensor.types";
 import { RegistroSensoresTab } from "./components/RegistroSensoresTab";
@@ -44,61 +43,31 @@ export default function SensoresPage() {
     activarSensor,
     isTogglingEstado,
   } = useSensores(filtros);
-  const { user } = useAuth();
+  const { puede } = usePermisos();
   const { empresa } = useEmpresaActual();
-  const esOperarioDeLinea = user?.rolNombre === ROLES.OPERARIO_LINEA;
-  // HU-40: el Operario de línea entra directo al semáforo; el resto de los
-  // roles mantiene el default previo. El default se deriva en cada render
-  // (no se fija en el useState inicial) para que se corrija si `user` llega
-  // después del primer render; una vez que el usuario elige una pestaña a
+
+  // GET /dashboard/lote/:id/semaforo
+  const puedeVerSemaforo = puede(["dashboard", "monitoreo_alertas"], "ver");
+
+  // sensor.controller.ts: POST crear, PATCH /:id y /:id/activar editar,
+  // DELETE (dar de baja) eliminar. PATCH /sensores/lote/:loteId/asociar
+  // también es editar.
+  const puedeCrearSensor = puede("sensores_iot", "crear");
+  const puedeEditarSensor = puede("sensores_iot", "editar");
+  const puedeDarDeBajaSensor = puede("sensores_iot", "eliminar");
+  const puedeAsociar = puedeEditarSensor;
+
+  // HU-40: quien opera en planta (ve el semáforo pero no da de alta
+  // sensores) entra directo al semáforo; quien administra el inventario,
+  // a Registro. El default se deriva en cada render para que se corrija
+  // cuando llegan los permisos; una vez que el usuario elige una pestaña a
   // mano, esa elección manda.
   const [tabElegida, setTabElegida] = useState<TabSensores | null>(null);
-  const tabActiva: TabSensores = tabElegida ?? (esOperarioDeLinea ? "semaforo" : "registro");
+  const tabActiva: TabSensores =
+    tabElegida ?? (puedeVerSemaforo && !puedeCrearSensor ? "semaforo" : "registro");
 
-  // GET /dashboard/lote/:id/semaforo y GET /lotes/:id/mediciones-manuales
-  // (backend) no incluyen a Responsable de calidad en @Roles: la pestaña se
-  // muestra solo a los roles que el backend deja pasar.
-  const puedeVerSemaforo = useMemo(() => {
-    const rolesPermitidos: string[] = [
-      ROLES.OPERARIO_LINEA,
-      ROLES.RESPONSABLE_PRODUCCION,
-      ROLES.GERENTE,
-      ROLES.ADMINISTRADOR,
-    ];
-    return rolesPermitidos.includes(user?.rolNombre ?? "");
-  }, [user?.rolNombre]);
-
-  // POST/PATCH/DELETE /sensores (backend): exclusivo Responsable de
-  // producción y Responsable de calidad (ver @Roles en sensor.controller.ts).
-  // Gerente NO gestiona sensores pese a que HU-65 amplió su GET a todo el
-  // inventario (@Roles del GET incluye Gerente, líneas 47-48 del controller)
-  // — esa lectura no se traduce en permiso de alta/edición/baja, así que
-  // queda afuera acá para no ofrecer acciones que el backend va a rechazar
-  // con 403. PATCH /sensores/lote/:loteId/asociar: Operario de línea y
-  // Responsable de calidad, capacidad distinta (puedeAsociar más abajo).
-  const puedeGestionar = useMemo(
-    () =>
-      user?.rolNombre === "Responsable de producción" ||
-      user?.rolNombre === "Responsable de calidad",
-    [user?.rolNombre],
-  );
-  const puedeAsociar = useMemo(
-    () => user?.rolNombre === "Operario de línea" || user?.rolNombre === "Responsable de calidad",
-    [user?.rolNombre],
-  );
-
-  // GET /sensores/lecturas/historial-mediciones (HU-19, backend): @Roles
-  // solo permite Responsable de producción, Gerente y Administrador. Ni
-  // Responsable de calidad ni Operario de línea están habilitados ahí,
-  // aunque sí ven el resto de Sensores (ver lectura-sensor.controller.ts).
-  // Comparación normalizada (trim + lowercase) por posibles inconsistencias
-  // de casing/espacios en rolNombre, mismo criterio que ProveedoresPage.
-  const puedeVerHistorial = useMemo(() => {
-    const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-    return (
-      rol === "responsable de producción" || rol === "gerente" || rol === "administrador"
-    );
-  }, [user?.rolNombre]);
+  // GET /sensores/lecturas/historial-mediciones (HU-19)
+  const puedeVerHistorial = puede(["monitoreo_alertas", "trazabilidad"], "ver");
 
   const tabs = [
     ...(puedeVerSemaforo ? [TAB_SEMAFORO] : []),
@@ -140,7 +109,9 @@ export default function SensoresPage() {
           desactivarSensor={desactivarSensor}
           activarSensor={activarSensor}
           isTogglingEstado={isTogglingEstado}
-          puedeGestionar={puedeGestionar}
+          puedeCrear={puedeCrearSensor}
+          puedeEditar={puedeEditarSensor}
+          puedeDarDeBaja={puedeDarDeBajaSensor}
           puedeAsociar={puedeAsociar}
           filtros={filtros}
           onFiltrosChange={setFiltros}

@@ -8,6 +8,7 @@ import type { EmpresaType } from "../../../types/empresa.types";
 import type { UsuarioType } from "../../../types/usuario.types";
 import type { RolType } from "../../../types/rol.types";
 import axios from "axios";
+import { extraerMensajeError } from "../../../services/rol.service";
 
 export interface UsuarioFormValues {
   rolId: number;
@@ -16,6 +17,15 @@ export interface UsuarioFormValues {
   password: string;
   empresaId: string;
   isActive: boolean;
+}
+
+// Lo tira EditarUsuarioModal cuando PATCH /user/:id salió bien pero
+// PUT /roles/usuarios/:id no: el form lo muestra sin perder lo cargado.
+export class RolNoAsignadoError extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = "RolNoAsignadoError";
+  }
 }
 
 interface FormErrors {
@@ -31,8 +41,12 @@ interface UsuarioFormProps {
   usuario?: UsuarioType;
   empresas: EmpresaType[];
   roles: RolType[];
-  /** Cuando viene definido (caso Gerente), el selector de empresa se bloquea en este id. */
+  /** Cuando viene definido (usuario de empresa), el selector de empresa se bloquea en este id. */
   empresaIdBloqueada?: number;
+  // false: el rol se muestra como texto (edición sin gestion_roles:editar).
+  rolEditable: boolean;
+  // Se muestra en lugar de las opciones cuando no hay roles para elegir.
+  mensajeSinRoles?: string;
   onCancel?: () => void;
   onSubmit: (values: UsuarioFormValues) => Promise<void>;
 }
@@ -44,6 +58,7 @@ function validate(values: {
   empresaId: string;
   rolId: number;
   isEditing: boolean;
+  rolEditable: boolean;
 }): FormErrors {
   const errors: FormErrors = {};
 
@@ -68,7 +83,7 @@ function validate(values: {
     errors.empresaId = "Seleccioná una empresa";
   }
 
-  if (!values.rolId) {
+  if (values.rolEditable && !values.rolId) {
     errors.rolId = "Seleccioná un rol";
   }
 
@@ -81,6 +96,8 @@ export function UsuarioForm({
   empresas,
   roles,
   empresaIdBloqueada,
+  rolEditable,
+  mensajeSinRoles,
   onSubmit,
 }: UsuarioFormProps) {
   const isEditing = !!usuario;
@@ -89,7 +106,7 @@ export function UsuarioForm({
   const [email, setEmail] = useState(usuario?.email ?? "");
   const [password, setPassword] = useState("");
   const [rolId, setRolId] = useState<number>(usuario?.rolId ?? 0);
-  // Si es Gerente (empresaIdBloqueada definido), su empresa siempre
+  // Si es usuario de empresa (empresaIdBloqueada definido), su empresa siempre
   // prevalece por sobre la que tuviera cargada el usuario.
   const [empresaId, setEmpresaId] = useState(
     empresaIdBloqueada
@@ -106,13 +123,25 @@ export function UsuarioForm({
     event.preventDefault();
     setServerError("");
 
-    const validationErrors = validate({ name, email, password, empresaId, rolId, isEditing });
+    const validationErrors = validate({
+      name,
+      email,
+      password,
+      empresaId,
+      rolId,
+      isEditing,
+      rolEditable,
+    });
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
     try {
       await onSubmit({ name, email, password, rolId, empresaId, isActive });
     } catch (error) {
+      if (error instanceof RolNoAsignadoError) {
+        setServerError(`Se guardaron los datos, pero no el rol: ${error.message}`);
+        return;
+      }
       if (axios.isAxiosError(error)) {
         const data = error.response?.data;
 
@@ -137,7 +166,8 @@ export function UsuarioForm({
         }
       }
 
-      setServerError("No se pudo guardar el usuario. Intentá nuevamente.");
+      // 403/409 del back (permisos, protecciones de rol) llegan con mensaje.
+      setServerError(extraerMensajeError(error, "No se pudo guardar el usuario. Intentá nuevamente."));
     }
   };
 
@@ -192,7 +222,18 @@ export function UsuarioForm({
       <div className="flex flex-col gap-3">
         <SectionHeader>ROL</SectionHeader>
         <div className="flex flex-col gap-2">
-          {roles.map((rol) => (
+          {!rolEditable && (
+            <p className="text-sm text-slate-700 dark:text-slate-300">
+              {usuario?.rolNombre ?? "Sin rol"}
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                Tu rol no puede cambiar el rol de otros usuarios.
+              </span>
+            </p>
+          )}
+          {rolEditable && roles.length === 0 && mensajeSinRoles && (
+            <p className="text-sm text-slate-500 dark:text-slate-400">{mensajeSinRoles}</p>
+          )}
+          {rolEditable && roles.map((rol) => (
             <RadioCard
               key={rol.id}
               name="role-group"

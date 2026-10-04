@@ -6,8 +6,7 @@ import { Input } from "../../../components/ui/Input";
 import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { SensorEstadoBadge } from "../../../components/SensorEstadoBadge";
 import { AuditoriaModal } from "../../../components/AuditoriaModal";
-import { useAuth } from "../../../hooks/useAuth";
-import { puedeVerAuditoria } from "../../../utils/auditoriaVisibility";
+import { usePermisos } from "../../../hooks/usePermisos";
 import {
   EstadoSensor,
   TipoSensor,
@@ -71,7 +70,9 @@ interface RegistroSensoresTabProps {
   desactivarSensor: (id: number) => Promise<Sensor>;
   activarSensor: (id: number) => Promise<Sensor>;
   isTogglingEstado: boolean;
-  puedeGestionar: boolean;
+  puedeCrear: boolean;
+  puedeEditar: boolean;
+  puedeDarDeBaja: boolean;
   puedeAsociar: boolean;
   filtros: SensorFilterQuery;
   onFiltrosChange: (filtros: SensorFilterQuery) => void;
@@ -89,12 +90,14 @@ export function RegistroSensoresTab({
   desactivarSensor,
   activarSensor,
   isTogglingEstado,
-  puedeGestionar,
+  puedeCrear,
+  puedeEditar,
+  puedeDarDeBaja,
   puedeAsociar,
   filtros,
   onFiltrosChange,
 }: RegistroSensoresTabProps) {
-  const { user } = useAuth();
+  const { puede } = usePermisos();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSensor, setEditingSensor] = useState<Sensor | null>(null);
   const [sensorHistorial, setSensorHistorial] = useState<Sensor | null>(null);
@@ -106,11 +109,9 @@ export function RegistroSensoresTab({
   // backend si el sensor está asociado a un lote); reactivar no la necesita.
   const [sensorABajar, setSensorABajar] = useState<Sensor | null>(null);
 
-  // HU-63: quién creó el sensor y, si aplica, quién lo modificó por última
-  // vez. El backend manda el bloque `auditoria` para cualquier rol que
-  // pueda leer /sensores (no lo gatea); la restricción a
-  // Gerente/Administrador se aplica acá (ver utils/auditoriaVisibility.ts).
-  const puedeVerAuditoriaSensor = puedeVerAuditoria(user?.rolNombre);
+  // HU-63: el back manda `auditoria` en cualquier GET de sensores; se
+  // muestra a quien tiene el módulo de auditoría.
+  const puedeVerAuditoriaSensor = puede("auditoria", "ver");
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -232,7 +233,7 @@ export function RegistroSensoresTab({
             }
           />
         </div>
-        {puedeGestionar && (
+        {puedeCrear && (
           <Button type="button" className="!w-auto px-6" onClick={abrirAlta}>
             + Agregar sensor
           </Button>
@@ -275,7 +276,7 @@ export function RegistroSensoresTab({
             No hay sensores registrados
           </p>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {puedeGestionar
+            {puedeCrear
               ? 'Registrá el primer sensor con el botón "+ Agregar sensor".'
               : "Todavía no hay sensores registrados que coincidan con los filtros."}
           </p>
@@ -338,7 +339,7 @@ export function RegistroSensoresTab({
                         >
                           <Link2 className="h-4 w-4" />
                         </button>
-                        {puedeGestionar && (
+                        {puedeEditar && (
                           <button
                             type="button"
                             onClick={() => abrirEdicion(sensor)}
@@ -348,7 +349,8 @@ export function RegistroSensoresTab({
                             <Pencil className="h-4 w-4" />
                           </button>
                         )}
-                        {puedeGestionar && sensor.estado !== EstadoSensor.FALLA && (
+                        {(sensor.estado === EstadoSensor.ACTIVO ? puedeDarDeBaja : puedeEditar) &&
+                          sensor.estado !== EstadoSensor.FALLA && (
                           <button
                             type="button"
                             disabled={togglingId === sensor.id && isTogglingEstado}
@@ -410,7 +412,7 @@ export function RegistroSensoresTab({
                     >
                       <Link2 className="h-4 w-4" />
                     </button>
-                    {puedeGestionar && (
+                    {puedeEditar && (
                       <button
                         type="button"
                         onClick={() => abrirEdicion(sensor)}
@@ -420,7 +422,8 @@ export function RegistroSensoresTab({
                         <Pencil className="h-4 w-4" />
                       </button>
                     )}
-                    {puedeGestionar && sensor.estado !== EstadoSensor.FALLA && (
+                    {(sensor.estado === EstadoSensor.ACTIVO ? puedeDarDeBaja : puedeEditar) &&
+                          sensor.estado !== EstadoSensor.FALLA && (
                       <button
                         type="button"
                         disabled={togglingId === sensor.id && isTogglingEstado}
@@ -494,7 +497,7 @@ export function RegistroSensoresTab({
         </>
       )}
 
-      {puedeGestionar && (
+      {(puedeCrear || puedeEditar) && (
         <SensorFormModal
           isOpen={isModalOpen}
           isSubmitting={editingSensor ? isUpdating : isCreating}

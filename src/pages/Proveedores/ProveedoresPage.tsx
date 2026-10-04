@@ -14,8 +14,7 @@ import { Badge } from "../../components/ui/Badge";
 import { AuditoriaModal } from "../../components/AuditoriaModal";
 import { useProveedores } from "../../hooks/useProveedores";
 import { useEmpresas } from "../../hooks/useEmpresas";
-import { useAuth } from "../../hooks/useAuth";
-import { puedeVerAuditoria } from "../../utils/auditoriaVisibility";
+import { usePermisos } from "../../hooks/usePermisos";
 import { ProveedorFormModal } from "./ProveedorFormModal";
 import { DesviosProveedorModal } from "./DesviosProveedorModal";
 import { useEstabilidadProveedores } from "../../hooks/useEstabilidadProveedores";
@@ -150,24 +149,18 @@ export default function ProveedoresPage() {
     isUpdating,
   } = useProveedores({ tipo: tipoFiltro, search: debouncedBusqueda });
 
-  const { user } = useAuth();
+  const { puede, esSistema } = usePermisos();
+  // proveedor.controller.ts: POST exige recepcion:crear, PATCH (incluye el
+  // cambio de estado del form) recepcion:editar.
+  const puedeCrearProveedor = puede("recepcion", "crear");
+  const puedeEditarProveedor = puede("recepcion", "editar");
+  // Un usuario de empresa solo opera sobre la suya (/empresa/me); solo
+  // Administrador elige empresa desde el listado de plataforma.
+  const { empresas } = useEmpresas(!esSistema);
 
-  const esGerente =
-    (user?.rolNombre ?? "").trim().toLowerCase() === "gerente";
-  // HU-64: Responsable de calidad ve esta pantalla en modo solo lectura,
-  // para el indicador de estabilidad — POST/PATCH/DELETE /proveedores
-  // siguen siendo exclusivos de Gerente/Administrador en el backend
-  // (proveedor.controller.ts), así que acá ni se ofrecen esas acciones.
-  const puedeGestionarProveedores =
-    (user?.rolNombre ?? "").trim().toLowerCase() !== "responsable de calidad";
-
-  const { empresas } = useEmpresas(esGerente);
-
-  // HU-63: quién creó el proveedor y, si aplica, quién lo modificó por
-  // última vez. El backend manda el bloque `auditoria` para cualquier rol
-  // que pueda leer /proveedores (no lo gatea); la restricción a
-  // Gerente/Administrador se aplica acá (ver utils/auditoriaVisibility.ts).
-  const puedeVerAuditoriaProveedor = puedeVerAuditoria(user?.rolNombre);
+  // HU-63: el back manda `auditoria` en cualquier GET de proveedores; se
+  // muestra a quien tiene el módulo de auditoría.
+  const puedeVerAuditoriaProveedor = puede("auditoria", "ver");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [proveedorEnEdicion, setProveedorEnEdicion] = useState<Proveedor | null>(null);
@@ -180,7 +173,7 @@ export default function ProveedoresPage() {
     [empresas],
   );
 
-  const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
+  const empresaIdBloqueada = esSistema ? undefined : empresas[0]?.id;
 
   // HU-64: GET /proveedores/:id por cada Tambo de la página visible (el
   // listado no trae `estabilidad`). Cada fila carga/falla por su cuenta.
@@ -218,7 +211,7 @@ export default function ProveedoresPage() {
             {meta.total} proveedores en la plataforma
           </p>
         </div>
-        {puedeGestionarProveedores && (
+        {puedeCrearProveedor && (
           <Button
             type="button"
             className="!w-auto px-6"
@@ -386,7 +379,7 @@ export default function ProveedoresPage() {
 
                       <td className="px-5 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {puedeGestionarProveedores && (
+                          {puedeEditarProveedor && (
                             <button
                               type="button"
                               onClick={() => setProveedorEnEdicion(p)}
@@ -448,7 +441,7 @@ export default function ProveedoresPage() {
                       </div>
                     </div>
                     <div className="flex flex-shrink-0 items-center gap-2">
-                      {puedeGestionarProveedores && (
+                      {puedeEditarProveedor && (
                         <button
                           type="button"
                           onClick={() => setProveedorEnEdicion(p)}

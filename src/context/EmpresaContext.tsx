@@ -2,6 +2,7 @@ import { createContext, useCallback, useEffect, useState, type ReactNode } from 
 import { empresasService } from "../services/empresa.service";
 import type { EmpresaType } from "../types/empresa.types";
 import { useAuth } from "../hooks/useAuth";
+import { usePermisos } from "../hooks/usePermisos";
 
 interface EmpresaContextType {
   empresa: EmpresaType | null;
@@ -12,11 +13,13 @@ interface EmpresaContextType {
 
 export const EmpresaContext = createContext<EmpresaContextType | undefined>(undefined);
 
-// Un usuario Administrador no pertenece a ninguna empresa (tenant.empresaId
-// es null en el backend), así que /empresa/me devolvería 404 para ese rol.
+// Administrador (esSistema) no pertenece a ninguna empresa (tenant.empresaId
+// es null en el backend), así que /empresa/me devolvería 404. Se espera a
+// tener permisos para saberlo.
 export function EmpresaProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated } = useAuth();
-  const tienePropiaEmpresa = isAuthenticated && user?.rolNombre !== "Administrador";
+  const { permisos } = usePermisos();
+  const tienePropiaEmpresa = isAuthenticated && !!permisos && !permisos.esSistema;
 
   const [empresa, setEmpresa] = useState<EmpresaType | null>(null);
   const [isLoading, setIsLoading] = useState(tienePropiaEmpresa);

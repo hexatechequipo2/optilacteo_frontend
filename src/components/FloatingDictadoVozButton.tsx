@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Mic, X } from "lucide-react";
-import { useAuth } from "../hooks/useAuth";
+import { usePermisos } from "../hooks/usePermisos";
 import { useLoteContexto } from "../hooks/useLoteContexto";
 import { useLotes } from "../hooks/useLotes";
 import { useSensores } from "../hooks/useSensores";
@@ -13,14 +13,28 @@ import { DictadoVozFlow } from "../pages/MedicionManual/components/DictadoVozFlo
 // fricción del operario en planta — no depende de estar parado en
 // MedicionManualPage (ver el botón "Dictar valores" ahí, que sigue
 // existiendo como acceso alternativo al mismo flujo). Se monta una sola vez
-// en Layout, así que aparece en cualquier pantalla con Layout a la que el
-// rol Operario de línea tenga acceso, sin hardcodear rutas: mismo criterio
-// de gating por rol que ya usa Sidebar.tsx para decidir qué se muestra.
+// en Layout, así que aparece en cualquier pantalla con Layout, sin
+// hardcodear rutas.
+// El flujo necesita parsear el dictado (POST /lotes/:id/dictado/parsear,
+// asistente_voz:ver) y guardar la medición (monitoreo_alertas:crear). El
+// chequeo va en un envoltorio para que, sin permiso, ni se monten los
+// hooks: si no, cada pantalla pediría /lotes y /sensores de más.
 export function FloatingDictadoVozButton() {
-  const { user } = useAuth();
+  const { puede } = usePermisos();
+  if (!puede("asistente_voz", "ver") || !puede("monitoreo_alertas", "crear")) {
+    return null;
+  }
+  return <FloatingDictadoVozButtonBody />;
+}
+
+function FloatingDictadoVozButtonBody() {
+  const { puede } = usePermisos();
   const { loteEnContexto } = useLoteContexto();
   const { lotes, isLoading: isLoadingLotes } = useLotes();
-  const { sensores } = useSensores();
+  // Sin sensores_iot:ver no se puede saber qué lote tiene sensor: no se pide
+  // (evita el 403) y, si se carga una medición HU-20 sobre un lote con
+  // sensor, el back la rechaza con su propio mensaje.
+  const { sensores } = useSensores({}, { habilitado: puede("sensores_iot", "ver") });
 
   const [mostrarSelector, setMostrarSelector] = useState(false);
   const [flujoAbierto, setFlujoAbierto] = useState(false);
@@ -59,8 +73,6 @@ export function FloatingDictadoVozButton() {
     loteEnContexto && !lotesElegibles.some((l) => l.id === loteEnContexto.id)
       ? [loteEnContexto, ...lotesElegibles]
       : lotesElegibles;
-
-  if (user?.rolNombre !== "Operario de línea") return null;
 
   const handleAbrir = () => {
     if (loteEnContexto) {

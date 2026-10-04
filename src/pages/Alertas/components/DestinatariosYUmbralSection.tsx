@@ -4,6 +4,7 @@ import { useConfiguracionAlertas } from "../../../hooks/useConfiguracionAlertas"
 import { useConfiguracionAlertaDesconexion } from "../../../hooks/useConfiguracionAlertaDesconexion";
 import { useRoles } from "../../../hooks/useRoles";
 import { useUsuariosActivos } from "../../../hooks/useUsuariosActivos";
+import { usePermisos } from "../../../hooks/usePermisos";
 import { NivelAlerta } from "../../../types/notificacion.types";
 
 // Mismo orden de severidad que los tabs de AlertasPage (HU-25):
@@ -11,13 +12,9 @@ import { NivelAlerta } from "../../../types/notificacion.types";
 const NIVELES: NivelAlerta[] = [NivelAlerta.CRITICA, NivelAlerta.ADVERTENCIA, NivelAlerta.INFORMATIVA];
 
 // HU-26/HU-29/HU-31, extraído de DestinatariosAlertasPage.tsx: quién recibe
-// cada nivel de alerta + umbral de desconexión. Sigue siendo Admin/Gerente
-// only en el backend (GET/POST/DELETE /notificaciones/configuracion y
-// /notificaciones/configuracion-alerta-desconexion) — por eso vive en un
-// componente aparte que HU-30 monta condicionalmente: Responsable de
-// producción entra a la misma página por los horarios de silencio, pero no
-// debe disparar estos hooks (le devolverían 403), mismo criterio que
-// TABS_RESPONSABLE_CALIDAD en ConfiguracionPage.tsx.
+// cada nivel de alerta + umbral de desconexión (configuracion_empresa en el
+// back). Vive en un componente aparte que la página monta solo con
+// configuracion_empresa:ver, para no disparar estos hooks sin permiso.
 export function DestinatariosYUmbralSection() {
   const { configuraciones, isLoading, error, agregarRol, agregarUsuario, quitarDestinatario } =
     useConfiguracionAlertas();
@@ -27,12 +24,15 @@ export function DestinatariosYUmbralSection() {
     isSaving: isSavingDesconexion,
     actualizarUmbral,
   } = useConfiguracionAlertaDesconexion();
-  const { roles, isLoading: isLoadingRoles } = useRoles();
+  const { puede } = usePermisos();
+  const puedeElegirRol = puede("gestion_roles", "ver"); // GET /roles
+  const puedeElegirUsuario = puede("gestion_usuarios", "ver"); // GET /user
+  const { roles, isLoading: isLoadingRoles } = useRoles({ habilitado: puedeElegirRol });
   const {
     usuarios,
     isLoading: isLoadingUsuarios,
     error: errorUsuarios,
-  } = useUsuariosActivos();
+  } = useUsuariosActivos({ habilitado: puedeElegirUsuario });
 
   return (
     <>
@@ -46,6 +46,7 @@ export function DestinatariosYUmbralSection() {
           isLoading={isLoadingDesconexion}
           isSaving={isSavingDesconexion}
           onActualizar={actualizarUmbral}
+          puedeEditar={puede("configuracion_empresa", "editar")}
         />
       </div>
 
@@ -69,7 +70,7 @@ export function DestinatariosYUmbralSection() {
             const configuracionesDelNivel = configuraciones.filter((c) => c.nivelAlerta === nivel);
             const rolesAsignados = new Set(configuracionesDelNivel.map((c) => c.rolId));
             const usuariosAsignados = new Set(configuracionesDelNivel.map((c) => c.usuarioId));
-            const rolesDisponibles = roles.filter((r) => r.isActive && !rolesAsignados.has(r.id));
+            const rolesDisponibles = roles.filter((r) => !rolesAsignados.has(r.id));
             const usuariosDisponibles = usuarios.filter((u) => !usuariosAsignados.has(u.id));
 
             return (
@@ -82,6 +83,10 @@ export function DestinatariosYUmbralSection() {
                 onAgregarRol={(rol) => agregarRol(nivel, rol)}
                 onAgregarUsuario={(usuario) => agregarUsuario(nivel, usuario)}
                 onQuitarDestinatario={quitarDestinatario}
+                puedeAgregar={puede("configuracion_empresa", "crear")}
+                puedeQuitar={puede("configuracion_empresa", "eliminar")}
+                puedeElegirRol={puedeElegirRol}
+                puedeElegirUsuario={puedeElegirUsuario}
               />
             );
           })}

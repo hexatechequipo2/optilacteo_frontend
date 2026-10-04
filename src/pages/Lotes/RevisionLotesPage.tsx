@@ -4,6 +4,7 @@ import { Layout } from "../../components/layout/Layout";
 import { Badge } from "../../components/ui/Badge";
 import { Tabs } from "../../components/ui/Tabs";
 import { useAuth } from "../../hooks/useAuth";
+import { usePermisos } from "../../hooks/usePermisos";
 import { useHistorialDecisionesLotes } from "../../hooks/useHistorialDecisionesLotes";
 import { useLotesNoAptos } from "../../hooks/useLotesNoAptos";
 import { proveedoresService } from "../../services/proveedores.service";
@@ -44,8 +45,8 @@ const TAB_HISTORIAL: { value: TabRevision; label: string } = {
 
 // HU-22: bandeja dedicada de lotes No Apto (GET /lotes/no-aptos), separada
 // de LotesPage porque el backend ya expone ese filtro como endpoint propio
-// y porque solo Responsable de Calidad accede acá — mismo patrón de tabla
-// que LotesPage.tsx, sin reusar el componente porque las columnas y la
+// y porque la acción (aprobar/rechazar) tiene su propio permiso — mismo
+// patrón de tabla que LotesPage.tsx, sin reusar el componente porque las columnas y la
 // acción son distintas.
 export default function RevisionLotesPage() {
   const { lotes, isLoading, error, refetch } = useLotesNoAptos();
@@ -59,13 +60,22 @@ export default function RevisionLotesPage() {
   const [loteEnRevision, setLoteEnRevision] = useState<Lote | null>(null);
   const [tabActiva, setTabActiva] = useState<TabRevision>(TAB_PENDIENTES.value);
   const { user } = useAuth();
+  const { puede } = usePermisos();
+  // POST /lotes/:id/revision exige trazabilidad:crear; la ruta solo pide ver
+  // (GET /lotes/no-aptos), así que sin crear la bandeja queda de consulta y
+  // se oculta la columna de acciones entera.
+  const puedeRevisar = puede("trazabilidad", "crear");
+  const headersPendientes = puedeRevisar ? HEADERS_PENDIENTES : HEADERS_PENDIENTES.slice(0, -1);
 
   useEffect(() => {
+    // GET /proveedores exige recepcion:ver; sin eso la tabla muestra
+    // "Proveedor #id" en vez de dar 403.
+    if (!puede("recepcion", "ver")) return;
     proveedoresService
       .getAll({ page: 1, limit: PROVEEDORES_SELECT_LIMIT, estado: "activa" })
       .then((result) => setProveedores(result.data))
       .catch(() => setProveedores([]));
-  }, []);
+  }, [puede]);
 
   const proveedorMap = new Map(proveedores.map((p) => [p.id, p.razonSocial]));
 
@@ -124,7 +134,7 @@ export default function RevisionLotesPage() {
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-slate-800">
-                      {HEADERS_PENDIENTES.map((h) => (
+                      {headersPendientes.map((h) => (
                         <th
                           key={h}
                           className="px-5 py-3 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500"
@@ -149,18 +159,20 @@ export default function RevisionLotesPage() {
                         <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                           {new Date(lote.fechaIngreso).toLocaleDateString("es-AR")}
                         </td>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setLoteEnRevision(lote)}
-                              className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                              title="Aprobar o rechazar lote"
-                            >
-                              <ClipboardCheck className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
+                        {puedeRevisar && (
+                          <td className="px-5 py-3">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setLoteEnRevision(lote)}
+                                className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                                title="Aprobar o rechazar lote"
+                              >
+                                <ClipboardCheck className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -183,14 +195,16 @@ export default function RevisionLotesPage() {
                           {proveedorMap.get(lote.proveedorId) ?? `Proveedor #${lote.proveedorId}`}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setLoteEnRevision(lote)}
-                        className="flex-shrink-0 rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                        title="Aprobar o rechazar lote"
-                      >
-                        <ClipboardCheck className="h-4 w-4" />
-                      </button>
+                      {puedeRevisar && (
+                        <button
+                          type="button"
+                          onClick={() => setLoteEnRevision(lote)}
+                          className="flex-shrink-0 rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                          title="Aprobar o rechazar lote"
+                        >
+                          <ClipboardCheck className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
 
                     <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">

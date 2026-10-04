@@ -4,6 +4,7 @@ import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
 import { useEmpresaActual } from "../../../hooks/useEmpresaActual";
 import { usePlcConfig } from "../../../hooks/usePlcConfig";
+import { usePermisos } from "../../../hooks/usePermisos";
 import { plcConfigService } from "../../../services/plcConfig.service";
 import { extraerMensajeError } from "../../../services/configParametro.service";
 
@@ -40,7 +41,16 @@ function formatearFecha(fecha: Date): string {
 // profundidad aunque alguien pegue directo a la API.
 export function PlcGatewayConfigTab() {
   const { empresa } = useEmpresaActual();
-  const { config, isLoading: isLoadingConfig, error: loadError, updateConfig } = usePlcConfig();
+  const {
+    config,
+    isLoading: isLoadingConfig,
+    error: loadError,
+    updateConfig,
+  } = usePlcConfig();
+  // PUT /plc-config y POST /plc-config/test-connection exigen
+  // sensores_iot:crear (así lo decora el back); GET, sensores_iot:ver.
+  const { puede } = usePermisos();
+  const puedeEditar = puede("sensores_iot", "crear");
 
   const [urlInput, setUrlInput] = useState("");
   const [urlError, setUrlError] = useState("");
@@ -80,12 +90,19 @@ export function PlcGatewayConfigTab() {
     setTestMensaje("");
 
     try {
-      const resultado = await plcConfigService.testConnection({ url: urlInput.trim() });
+      const resultado = await plcConfigService.testConnection({
+        url: urlInput.trim(),
+      });
       setEstadoTest(resultado.ok ? "exito" : "error");
       setTestMensaje(resultado.mensaje);
     } catch (err) {
       setEstadoTest("error");
-      setTestMensaje(extraerMensajeError(err, "No se pudo probar la conexión. Intentá nuevamente."));
+      setTestMensaje(
+        extraerMensajeError(
+          err,
+          "No se pudo probar la conexión. Intentá nuevamente.",
+        ),
+      );
     }
   };
 
@@ -100,9 +117,16 @@ export function PlcGatewayConfigTab() {
     try {
       await updateConfig({ url: urlInput.trim() });
       setUltimoCambio(new Date());
-      setSuccessMessage("La configuración de conexión PLC se guardó correctamente.");
+      setSuccessMessage(
+        "La configuración de conexión PLC se guardó correctamente.",
+      );
     } catch (err) {
-      setSaveError(extraerMensajeError(err, "No se pudo guardar la configuración. Intentá nuevamente."));
+      setSaveError(
+        extraerMensajeError(
+          err,
+          "No se pudo guardar la configuración. Intentá nuevamente.",
+        ),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -120,7 +144,8 @@ export function PlcGatewayConfigTab() {
     );
   }
 
-  const guardarDeshabilitado = !!validarUrl(urlInput) || estadoTest !== "exito" || isSaving;
+  const guardarDeshabilitado =
+    !!validarUrl(urlInput) || estadoTest !== "exito" || isSaving;
 
   return (
     <div className="flex flex-col gap-6">
@@ -134,14 +159,14 @@ export function PlcGatewayConfigTab() {
           </span>
         </div>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Definí la URL del endpoint de tu PLC/gateway industrial para que la plataforma pueda leer
-          los sensores conectados, sin depender del equipo de desarrollo para dar de alta o modificar
-          esa conexión.
+          Definí la URL del endpoint de tu PLC/gateway industrial para que la
+          plataforma pueda leer los sensores conectados, sin depender del equipo
+          de desarrollo para dar de alta o modificar esa conexión.
         </p>
         {config && !config.requierePlc && (
           <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-            Hoy {empresa?.name ?? "tu empresa"} no tiene sensores digitales/analógicos que dependan de
-            esta conexión.
+            Hoy {empresa?.name ?? "tu empresa"} no tiene sensores
+            digitales/analógicos que dependan de esta conexión.
           </p>
         )}
       </div>
@@ -152,41 +177,45 @@ export function PlcGatewayConfigTab() {
           label="URL del endpoint *"
           placeholder="https://plc.miempresa.local:8080"
           value={urlInput}
-          disabled={isSaving}
+          disabled={isSaving || !puedeEditar}
           onChange={(e) => handleUrlChange(e.target.value)}
           error={urlError}
         />
 
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={handleProbarConexion}
-            disabled={estadoTest === "probando" || isSaving}
-            className="flex items-center gap-2 rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            {estadoTest === "probando" && <Loader2 className="h-4 w-4 animate-spin" />}
-            Probar conexión
-          </button>
+        {puedeEditar && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleProbarConexion}
+              disabled={estadoTest === "probando" || isSaving}
+              className="flex items-center gap-2 rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {estadoTest === "probando" && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              Probar conexión
+            </button>
 
-          {estadoTest === "probando" && (
-            <span className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Probando...
-            </span>
-          )}
-          {estadoTest === "exito" && (
-            <span className="flex items-center gap-1.5 text-sm text-green-700 dark:text-green-400">
-              <CheckCircle2 className="h-4 w-4" />
-              {testMensaje || "Conexión exitosa"}
-            </span>
-          )}
-          {estadoTest === "error" && (
-            <span className="flex items-center gap-1.5 text-sm text-red-700 dark:text-red-400">
-              <XCircle className="h-4 w-4" />
-              {testMensaje || "Sin respuesta del PLC"}
-            </span>
-          )}
-        </div>
+            {estadoTest === "probando" && (
+              <span className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Probando...
+              </span>
+            )}
+            {estadoTest === "exito" && (
+              <span className="flex items-center gap-1.5 text-sm text-green-700 dark:text-green-400">
+                <CheckCircle2 className="h-4 w-4" />
+                {testMensaje || "Conexión exitosa"}
+              </span>
+            )}
+            {estadoTest === "error" && (
+              <span className="flex items-center gap-1.5 text-sm text-red-700 dark:text-red-400">
+                <XCircle className="h-4 w-4" />
+                {testMensaje || "Sin respuesta del PLC"}
+              </span>
+            )}
+          </div>
+        )}
 
         {saveError && (
           <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
@@ -199,13 +228,25 @@ export function PlcGatewayConfigTab() {
           </p>
         )}
 
-        <Button type="button" className="w-fit" isLoading={isSaving} disabled={guardarDeshabilitado} onClick={handleGuardar}>
-          Guardar cambios
-        </Button>
+        {puedeEditar ? (
+          <Button
+            type="button"
+            className="w-fit"
+            isLoading={isSaving}
+            disabled={guardarDeshabilitado}
+            onClick={handleGuardar}
+          >
+            Guardar cambios
+          </Button>
+        ) : (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Solo lectura: tu rol no puede modificar la conexión con el PLC.
+          </p>
+        )}
 
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Esta configuración aplica solo a {empresa?.name ?? "tu empresa"} — no afecta a otras
-          empresas de la plataforma.
+          Esta configuración aplica solo a {empresa?.name ?? "tu empresa"} — no
+          afecta a otras empresas de la plataforma.
         </p>
 
         <p className="text-xs text-slate-400 dark:text-slate-500">

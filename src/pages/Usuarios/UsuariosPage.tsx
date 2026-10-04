@@ -7,11 +7,11 @@ import { useUsuarios, TODAS_LAS_EMPRESAS } from "../../hooks/useUsuarios";
 import { useEmpresas } from "../../hooks/useEmpresas";
 import { useRoles } from "../../hooks/useRoles";
 import { useAuth } from "../../hooks/useAuth";
+import { usePermisos } from "../../hooks/usePermisos";
 import type { UsuarioType } from "../../types/usuario.types";
 import { UsuariosTable } from "./components/UsuariosTable";
 import { NuevoUsuarioModal } from "./components/NuevoUsuarioModal";
 import { EditarUsuarioModal } from "./components/EditarUsuarioModal";
-import { MatrizPermisos } from "./components/MatrizPermisos";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function UsuariosPage() {
@@ -31,45 +31,57 @@ export default function UsuariosPage() {
     updateUsuario,
     isUpdating,
     unlockUsuario,
+    refetch: refetchUsuarios,
   } = useUsuarios();
 
   const { user } = useAuth();
-  
-  // Lógica de roles corregida
-  const rolActual = (user?.rolNombre ?? "").trim().toLowerCase();
-  const esAdministrador = rolActual === "administrador";
-  const esGerente = rolActual === "gerente";
+  const { puede, esSistema } = usePermisos();
 
-  const { empresas } = useEmpresas(esGerente);
-  const { roles, updatePermiso } = useRoles();
+  const { empresas } = useEmpresas(!esSistema);
+  const puedeVerRoles = puede("gestion_roles", "ver"); // GET /roles
+  const { roles, asignarRol } = useRoles({ habilitado: puedeVerRoles });
+  const puedeCrearUsuario = puede("gestion_usuarios", "crear"); // POST /user
+  // PATCH /user/:id, /activar, /desactivar, /desbloquear
+  const puedeEditarUsuario = puede("gestion_usuarios", "editar");
+  const puedeCambiarRol = puede("gestion_roles", "editar"); // PUT /roles/usuarios/:id
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [usuarioEnEdicion, setUsuarioEnEdicion] = useState<UsuarioType | null>(null);
 
-  // Asegurar que el filtro sea el correcto para no administradores
+  // Solo Administrador filtra por empresa; un usuario de empresa ve la suya.
   useEffect(() => {
-    if (!esAdministrador && empresaFiltro !== TODAS_LAS_EMPRESAS) {
+    if (!esSistema && empresaFiltro !== TODAS_LAS_EMPRESAS) {
       setEmpresaFiltro(TODAS_LAS_EMPRESAS);
     }
-  }, [esAdministrador, empresaFiltro, setEmpresaFiltro]);
+  }, [esSistema, empresaFiltro, setEmpresaFiltro]);
 
-  const empresaIdBloqueada = esGerente ? empresas[0]?.id : undefined;
+  const empresaIdBloqueada = esSistema ? undefined : empresas[0]?.id;
 
-  // Filtramos roles en el frontend para el modal (seguridad visual)
-  const rolesAsignables = esGerente
-    ? roles.filter((rol) => rol.nombre.trim().toLowerCase() !== "administrador")
-    : roles;
+  // El back rechaza que un rol que no es de sistema asigne uno de sistema.
+  const rolesAsignables = esSistema ? roles : roles.filter((rol) => !rol.esSistema);
 
-  // Un Gerente puede editar/desactivar/desbloquear usuarios de roles de
-  // empleados, pero no una cuenta Administrador de su misma empresa —
-  // mismo criterio que esRolBloqueado en MatrizPermisos.tsx.
+  // POST /user exige rolId y la lista sale de GET /roles.
+  // TODO(backend): GET /roles todavía no acepta empresaId para el rol de
+  // sistema (RolController.emp() rechaza empresaId null), así que
+  // Administrador no tiene roles para elegir al crear usuarios.
+  const mensajeSinRoles = esSistema
+    ? "Todavía no se pueden listar los roles de una empresa desde la cuenta de plataforma."
+    : !puedeVerRoles
+      ? "Para crear usuarios necesitás permiso para ver roles."
+      : undefined;
+
+  // Un usuario de empresa no puede editar/desactivar/desbloquear una cuenta
+  // con rol de sistema (Administrador).
   // TODO(backend): esto es solo un cierre de UI. El gap real está en
   // user.service.ts — update()/deactivate()/activate()/unlock() no validan
-  // el rol del usuario objetivo (solo guardAsignacionDeRol() bloquea que un
-  // Gerente ASIGNE el rol Administrador vía dto.rolId), así que hoy un
-  // Gerente puede editar/desactivar/desbloquear una cuenta Administrador de
-  // su empresa por API directa aunque el botón esté deshabilitado acá.
+  // el rol del usuario objetivo, así que por API directa se puede igual.
   const esUsuarioBloqueado = (usuario: UsuarioType) =>
-    esGerente && (usuario.rolNombre ?? "").trim().toLowerCase() === "administrador";
+    !esSistema && !!roles.find((rol) => rol.id === usuario.rolId)?.esSistema;
+
+  // PUT /roles/usuarios/:id y después refresca la tabla (rolNombre).
+  const asignarRolYRefrescar = async (usuarioId: number, rolId: number) => {
+    await asignarRol(usuarioId, rolId);
+    await refetchUsuarios();
+  };
 
   const empresaOptions = [
     { value: TODAS_LAS_EMPRESAS, label: "Todas las empresas" },
@@ -89,13 +101,15 @@ export default function UsuariosPage() {
           </p>
         </div>
         
-        <Button
-          type="button"
-          className="!w-auto px-6" 
-          onClick={() => setIsCreateModalOpen(true)}
-        >
-          + Nuevo usuario
-        </Button>
+        {puedeCrearUsuario && (
+          <Button
+            type="button"
+            className="!w-auto px-6"
+            onClick={() => setIsCreateModalOpen(true)}
+          >
+            + Nuevo usuario
+          </Button>
+        )}
       </div>
 
       <div className="mb-6 flex flex-wrap gap-4">
@@ -109,8 +123,8 @@ export default function UsuariosPage() {
           />
         </div>
         
-        {/* Solo renderizamos el select si es administrador */}
-        {esAdministrador && (
+        {/* Solo Administrador (plataforma) filtra por empresa */}
+        {esSistema && (
           <div className="w-52 flex-shrink-0">
             <Select
               id="usuarios-empresa-filtro"
@@ -141,6 +155,7 @@ export default function UsuariosPage() {
             onEdit={(usuario: UsuarioType) => setUsuarioEnEdicion(usuario)}
             onUnlock={unlockUsuario}
             esUsuarioBloqueado={esUsuarioBloqueado}
+            puedeEditar={puedeEditarUsuario}
           />
           
           <div className="mt-6 flex items-center justify-end border-t border-slate-200 pt-4 dark:border-slate-800">
@@ -173,13 +188,12 @@ export default function UsuariosPage() {
         </>
       )}
 
-      <MatrizPermisos roles={roles} onTogglePermiso={updatePermiso} />
-
       <NuevoUsuarioModal
         isOpen={isCreateModalOpen}
         empresas={empresas}
         roles={rolesAsignables}
         empresaIdBloqueada={empresaIdBloqueada}
+        mensajeSinRoles={mensajeSinRoles}
         isSubmitting={isCreating}
         onClose={() => setIsCreateModalOpen(false)}
         onCreate={createUsuario}
@@ -193,6 +207,8 @@ export default function UsuariosPage() {
         isSubmitting={isUpdating}
         onClose={() => setUsuarioEnEdicion(null)}
         onUpdate={updateUsuario}
+        puedeCambiarRol={puedeCambiarRol}
+        onAsignarRol={asignarRolYRefrescar}
       />
     </Layout>
   );

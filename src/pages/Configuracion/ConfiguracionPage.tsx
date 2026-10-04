@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Layout } from "../../components/layout/Layout";
 import { Tabs } from "../../components/ui/Tabs";
-import { useAuth } from "../../hooks/useAuth";
+import { usePermisos } from "../../hooks/usePermisos";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
-import { ROLES } from "../../constants/roles";
+import type { ModuloPermiso } from "../../types/permisos.types";
 import { LogoIdentidadTab } from "./components/LogoIdentidadTab";
 import { UmbralesCalidadTab } from "./components/UmbralesCalidadTab";
 import { ComparacionHistoricaConfigTab } from "./components/ComparacionHistoricaConfigTab";
@@ -23,62 +23,33 @@ type TabConfiguracion =
   | "horarios-silencio"
   | "retencion-datos";
 
-// HU-67 (AC 2): tab de catálogo de SKUs, solo para Gerente. POST /skus en el
-// backend está restringido a ADMINISTRADOR/GERENTE (ver sku.controller.ts),
-// pero Administrador no tiene acceso a esta ruta /configuracion en el
-// frontend hoy (allowedRoles en App.tsx no lo incluye) — gap preexistente,
-// no introducido ni resuelto por esta HU.
-const TABS_GERENTE: { value: TabConfiguracion; label: string }[] = [
-  { value: "umbrales", label: "Umbrales de calidad" },
-  { value: "logo-identidad", label: "Logo e identidad" },
-  { value: "comparacion-historica", label: "Comparación histórica" },
-  { value: "plc-gateway", label: "Conexión PLC/Gateway" },
-  { value: "skus", label: "Catálogo de SKUs" },
-  { value: "destinos-productivos", label: "Destinos productivos" },
-  { value: "horarios-silencio", label: "Horarios de silencio" },
-  // HU-48: solo Gerente (ver/editar). No se suma a ningún otro array de roles.
-  { value: "retencion-datos", label: "Retención de datos" },
-];
-
-// HU-23: a diferencia de Umbrales/Logo (Gerente-only, ver allowedRoles en
-// App.tsx), Responsable de calidad tiene acceso de solo lectura a esta
-// pestaña puntual (GET /config-parametros/comparacion-historica habilita
-// ambos roles en el backend). No le mostramos las otras pestañas para no
-// pegarle a endpoints que le devuelven 403.
-const TABS_RESPONSABLE_CALIDAD: { value: TabConfiguracion; label: string }[] = [
-  { value: "comparacion-historica", label: "Comparación histórica" },
-];
-
-// HU-61: conectado al backend real (ver plcConfig.service.ts), exclusiva de
-// Responsable de producción además de Gerente. No comparte ninguna otra
-// pestaña de acá: Operario de línea y Responsable de calidad no llegan a ver
-// esta tab.
-const TABS_RESPONSABLE_PRODUCCION: { value: TabConfiguracion; label: string }[] = [
-  { value: "plc-gateway", label: "Conexión PLC/Gateway" },
-  // HU-34: Responsable de producción es quien asigna el destino productivo
-  // en los lotes, pero la administración del catálogo (alta/edición/baja)
-  // queda restringida a Gerente — acá solo lo consulta en modo lectura.
-  { value: "destinos-productivos", label: "Destinos productivos" },
-  // HU-30: a diferencia de destinos productivos, acá la HU pide
-  // explícitamente que Responsable de producción pueda configurar (no solo
-  // leer) sus propios horarios de silencio — sin distinción de
-  // "puedeAdministrar" como en DestinosProductivosConfigTab.
-  { value: "horarios-silencio", label: "Horarios de silencio" },
+// Cada pestaña se muestra con `ver` del módulo de sus endpoints; qué se
+// puede editar adentro lo decide cada pestaña con usePermisos.
+const TABS: { value: TabConfiguracion; label: string; modulo: ModuloPermiso }[] = [
+  { value: "logo-identidad", label: "Logo e identidad", modulo: "configuracion_empresa" },
+  { value: "umbrales", label: "Umbrales de calidad", modulo: "configuracion_empresa" },
+  {
+    value: "comparacion-historica",
+    label: "Comparación histórica",
+    modulo: "configuracion_empresa",
+  },
+  { value: "plc-gateway", label: "Conexión PLC/Gateway", modulo: "sensores_iot" },
+  { value: "skus", label: "Catálogo de SKUs", modulo: "trazabilidad" },
+  {
+    value: "destinos-productivos",
+    label: "Destinos productivos",
+    modulo: "destino_productivo_ia",
+  },
+  { value: "horarios-silencio", label: "Horarios de silencio", modulo: "monitoreo_alertas" },
+  { value: "retencion-datos", label: "Retención de datos", modulo: "configuracion_empresa" },
 ];
 
 export default function ConfiguracionPage() {
-  const { user } = useAuth();
+  const { puede } = usePermisos();
   const { empresa } = useEmpresaActual();
-  const esGerente = user?.rolNombre === ROLES.GERENTE;
-  const esResponsableProduccion = user?.rolNombre === ROLES.RESPONSABLE_PRODUCCION;
-  const tabs = esGerente
-    ? TABS_GERENTE
-    : esResponsableProduccion
-      ? TABS_RESPONSABLE_PRODUCCION
-      : TABS_RESPONSABLE_CALIDAD;
-  const [tabActiva, setTabActiva] = useState<TabConfiguracion>(
-    esGerente ? "logo-identidad" : esResponsableProduccion ? "plc-gateway" : "comparacion-historica",
-  );
+  const tabs = TABS.filter((t) => puede(t.modulo, "ver"));
+  const [tabElegida, setTabElegida] = useState<TabConfiguracion | null>(null);
+  const tabActiva = tabElegida ?? tabs[0]?.value;
 
   return (
     <Layout breadcrumb="Consola > Configuración">
@@ -92,7 +63,7 @@ export default function ConfiguracionPage() {
       </div>
 
       <div className="mb-6">
-        <Tabs tabs={tabs} value={tabActiva} onChange={setTabActiva} />
+        <Tabs tabs={tabs} value={tabActiva} onChange={setTabElegida} />
       </div>
 
       {tabActiva === "logo-identidad" && <LogoIdentidadTab />}
@@ -101,10 +72,10 @@ export default function ConfiguracionPage() {
       {tabActiva === "plc-gateway" && <PlcGatewayConfigTab />}
       {tabActiva === "skus" && <SkusConfigTab />}
       {tabActiva === "destinos-productivos" && (
-        <DestinosProductivosConfigTab puedeAdministrar={esGerente} />
+        <DestinosProductivosConfigTab puedeAdministrar={puede("destino_productivo_ia", "crear")} />
       )}
       {tabActiva === "horarios-silencio" && <HorariosSilencioConfigTab />}
-      {tabActiva === "retencion-datos" && esGerente && <RetencionDatosTab />}
+      {tabActiva === "retencion-datos" && <RetencionDatosTab />}
     </Layout>
   );
 }

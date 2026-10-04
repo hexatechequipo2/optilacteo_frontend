@@ -8,14 +8,25 @@ interface NuevoUsuarioModalProps {
   isOpen: boolean;
   empresas: EmpresaType[];
   roles: RolType[];
-  /** Cuando viene definido (caso Gerente), el selector de empresa se bloquea en este id. */
+  /** Cuando viene definido (usuario de empresa), el selector de empresa se bloquea en este id. */
   empresaIdBloqueada?: number;
+  // Explica por qué no hay roles para elegir (POST /user exige rolId).
+  mensajeSinRoles?: string;
   isSubmitting: boolean;
   onClose: () => void;
   onCreate: (payload: CreateUsuarioDto) => Promise<void>;
 }
 
-export function NuevoUsuarioModal({ isOpen, empresas, roles, empresaIdBloqueada, isSubmitting, onClose, onCreate }: NuevoUsuarioModalProps) {
+export function NuevoUsuarioModal({
+  isOpen,
+  empresas,
+  roles,
+  empresaIdBloqueada,
+  mensajeSinRoles,
+  isSubmitting,
+  onClose,
+  onCreate,
+}: NuevoUsuarioModalProps) {
   
   const handleSubmit = async (values: UsuarioFormValues) => {
     await onCreate({
@@ -59,6 +70,8 @@ export function NuevoUsuarioModal({ isOpen, empresas, roles, empresaIdBloqueada,
         empresas={empresas}
         roles={roles}
         empresaIdBloqueada={empresaIdBloqueada}
+        rolEditable
+        mensajeSinRoles={mensajeSinRoles}
         onCancel={onClose}
         onSubmit={handleSubmit}
       />

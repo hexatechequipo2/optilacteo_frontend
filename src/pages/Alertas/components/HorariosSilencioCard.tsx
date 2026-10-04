@@ -1,3 +1,4 @@
+import { usePermisos } from "../../../hooks/usePermisos";
 import { useState } from "react";
 import { Moon, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "../../../components/ui/Badge";
@@ -38,9 +39,15 @@ export function HorariosSilencioCard() {
     isUpdating,
     eliminandoId,
   } = useConfiguracionSilencioAlerta();
+  // POST/PATCH/DELETE /notificaciones/horarios-silencio exigen
+  // monitoreo_alertas:editar; GET, monitoreo_alertas:ver.
+  const { puede } = usePermisos();
+  const puedeEditar = puede("monitoreo_alertas", "editar");
   const [modalAbierto, setModalAbierto] = useState(false);
-  const [horarioEditando, setHorarioEditando] = useState<ConfiguracionSilencioAlerta | null>(null);
-  const [horarioABorrar, setHorarioABorrar] = useState<ConfiguracionSilencioAlerta | null>(null);
+  const [horarioEditando, setHorarioEditando] =
+    useState<ConfiguracionSilencioAlerta | null>(null);
+  const [horarioABorrar, setHorarioABorrar] =
+    useState<ConfiguracionSilencioAlerta | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const abrirAlta = () => {
@@ -63,7 +70,12 @@ export function HorariosSilencioCard() {
       await eliminar(horarioABorrar.id);
       setHorarioABorrar(null);
     } catch (err) {
-      setDeleteError(extraerMensajeError(err, "No se pudo eliminar el horario. Intentá nuevamente."));
+      setDeleteError(
+        extraerMensajeError(
+          err,
+          "No se pudo eliminar el horario. Intentá nuevamente.",
+        ),
+      );
     }
   };
 
@@ -76,18 +88,21 @@ export function HorariosSilencioCard() {
             Horarios de silencio
           </h2>
         </div>
-        <button
-          type="button"
-          onClick={abrirAlta}
-          className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-500 transition hover:border-blue-400 hover:text-blue-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-500 dark:hover:text-blue-400"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Nuevo horario
-        </button>
+        {puedeEditar && (
+          <button
+            type="button"
+            onClick={abrirAlta}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-500 transition hover:border-blue-400 hover:text-blue-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-500 dark:hover:text-blue-400"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo horario
+          </button>
+        )}
       </div>
       <p className="text-sm text-slate-500 dark:text-slate-400">
-        En estos horarios, las alertas informativas no se notifican en tiempo real (se siguen
-        registrando en el historial). Las alertas de advertencia y críticas nunca se silencian.
+        En estos horarios, las alertas informativas no se notifican en tiempo
+        real (se siguen registrando en el historial). Las alertas de advertencia
+        y críticas nunca se silencian.
       </p>
 
       {error && (
@@ -97,7 +112,9 @@ export function HorariosSilencioCard() {
       )}
 
       {isLoading ? (
-        <p className="text-sm text-slate-400 dark:text-slate-500">Cargando...</p>
+        <p className="text-sm text-slate-400 dark:text-slate-500">
+          Cargando...
+        </p>
       ) : horarios.length === 0 ? (
         <p className="text-sm text-slate-400 dark:text-slate-500">
           Todavía no hay horarios de silencio configurados.
@@ -120,27 +137,29 @@ export function HorariosSilencioCard() {
                   {formatDias(horario.diasSemana)}
                 </span>
               </div>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => abrirEdicion(horario)}
-                  className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                  title="Editar horario"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeleteError(null);
-                    setHorarioABorrar(horario);
-                  }}
-                  className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 hover:text-red-600 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-red-400"
-                  title="Eliminar horario"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+              {puedeEditar && (
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => abrirEdicion(horario)}
+                    className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                    title="Editar horario"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setHorarioABorrar(horario);
+                    }}
+                    className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 hover:text-red-600 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-red-400"
+                    title="Eliminar horario"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

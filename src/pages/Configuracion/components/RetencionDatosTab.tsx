@@ -3,6 +3,7 @@ import { Archive, Clock, ShieldCheck, TriangleAlert, type LucideIcon } from "luc
 import { Badge } from "../../../components/ui/Badge";
 import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { useRetencion, type RegistroRetencionEvaluado } from "../../../hooks/useRetencion";
+import { usePermisos } from "../../../hooks/usePermisos";
 import { extraerMensajeError } from "../../../services/retencion.service";
 import { NivelAlerta } from "../../../types/notificacion.types";
 import { EntidadRetenible, type PoliticaRetencionInput } from "../../../types/retencion.types";
@@ -49,6 +50,10 @@ export function RetencionDatosTab() {
     darDeBaja,
     procesandoClave,
   } = useRetencion();
+  // PATCH /retencion/politica (y las acciones por registro) exigen
+  // configuracion_empresa:editar; GET, configuracion_empresa:ver.
+  const { puede } = usePermisos();
+  const puedeEditar = puede("configuracion_empresa", "editar");
 
   const [mensajeExito, setMensajeExito] = useState("");
   const [errorAccion, setErrorAccion] = useState("");
@@ -116,6 +121,7 @@ export function RetencionDatosTab() {
             mensajeExito={mensajeExito}
             onGuardar={handleGuardar}
             onEditar={() => setMensajeExito("")}
+            soloLectura={!puedeEditar}
           />
         </div>
 
@@ -211,6 +217,7 @@ export function RetencionDatosTab() {
           procesandoClave={procesandoClave}
           onAplicarPolitica={(registro) => void ejecutar(() => aplicarAccionPolitica(registro))}
           onDarDeBaja={setRegistroABajar}
+          soloLectura={!puedeEditar}
         />
       </section>
 

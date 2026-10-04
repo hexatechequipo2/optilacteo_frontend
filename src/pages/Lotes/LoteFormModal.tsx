@@ -12,11 +12,10 @@ import {
 } from "../../services/sensor.service";
 import { useConfigParametros } from "../../hooks/useConfigParametros";
 import { useTambosPorProveedor } from "../../hooks/useTambos";
-import { useAuth } from "../../hooks/useAuth";
+import { usePermisos } from "../../hooks/usePermisos";
 import { RecomendacionDestinoCard } from "./components/RecomendacionDestinoCard";
 import { useCatalogoDestinosProductivos } from "../../hooks/useCatalogoDestinosProductivos";
 import { useDestinoProductivoLote } from "../../hooks/useDestinoProductivoLote";
-import { ROLES } from "../../constants/roles";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -44,19 +43,6 @@ const UBICACION_OPTIONS = [
     value: u,
     label: UBICACION_LABEL[u],
   })),
-];
-
-// HU-34: mismos roles que @Roles en lote.controller.ts para
-// PATCH /lotes/:id/destino-productivo. Si se abre este modal a un rol fuera
-// de esta lista, el selector queda deshabilitado en vez de dejar que el
-// PATCH le devuelva 403 sin explicación (ver puedeAsignarDestinoProductivo
-// más abajo). Hoy puedeEditarLote en LotesPage.tsx ya limita a Responsable
-// de calidad y Responsable de producción, ambos incluidos acá.
-const ROLES_CON_PERMISO_DESTINO_PRODUCTIVO: string[] = [
-  ROLES.RESPONSABLE_PRODUCCION,
-  ROLES.RESPONSABLE_CALIDAD,
-  ROLES.GERENTE,
-  ROLES.ADMINISTRADOR,
 ];
 
 const DESTINO_LABEL: Record<DestinoLote, string> = {
@@ -314,10 +300,10 @@ export function LoteFormModal({
   // HU-34: "procesado" = ya no admite cambios de destino productivo.
   const loteEstaProcesado =
     !!lote && (lote.estado === EstadoLote.FINALIZADO || lote.estado === EstadoLote.RECHAZADO);
-  const { user } = useAuth();
-  const puedeAsignarDestinoProductivo = ROLES_CON_PERMISO_DESTINO_PRODUCTIVO.includes(
-    user?.rolNombre ?? "",
-  );
+  // HU-34: PATCH /lotes/:id/destino-productivo exige trazabilidad:editar. Sin
+  // eso el selector queda deshabilitado en vez de dejar que el PATCH dé 403.
+  const { puede } = usePermisos();
+  const puedeAsignarDestinoProductivo = puede("trazabilidad", "editar");
   const { configs } = useConfigParametros();
   // HU-34/HU-37: el destino vigente puede venir de una asignación manual
   // (este modal) o de haber aceptado/rechazado una recomendación ML

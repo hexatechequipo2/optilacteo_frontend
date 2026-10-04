@@ -2,8 +2,8 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { useAuth } from "./hooks/useAuth";
-import { getRoleLanding } from "./utils/roleLanding";
-import { ROLES } from "./constants/roles";
+import { usePermisos } from "./hooks/usePermisos";
+import { getLanding } from "./utils/accesoRutas";
 
 import LoginPage from "./pages/Login/LoginPage";
 import ForgotPasswordPage from "./pages/Login/ForgotPasswordPage";
@@ -12,6 +12,7 @@ import ResetPasswordPage from "./pages/Login/ResetPasswordPage";
 import DashboardPage from "./pages/Dashboard/DashboardPage";
 import DashboardProduccionPage from "./pages/DashboardProduccion/DashboardProduccionPage";
 import UsuariosPage from "./pages/Usuarios/UsuariosPage";
+import RolesPage from "./pages/Roles/RolesPage";
 import EmpresasPage from "./pages/Empresas/EmpresasPage";
 import ConfiguracionPage from "./pages/Configuracion/ConfiguracionPage";
 import PlanesPage from "./pages/Planes/PlanesPage";
@@ -31,15 +32,16 @@ import SinFuncionalidadesPage from "./pages/SinFuncionalidades/SinFuncionalidade
 
 import { InactivityMonitor } from "./components/layout/InactivityMonitor";
 import { EmpresaProvider } from "./context/EmpresaContext";
+import { PermisosProvider } from "./context/PermisosContext";
 import { LoteContextoProvider } from "./context/LoteContextoContext";
 
-// La raíz "/" no puede asumir un destino fijo: cada rol tiene su propia
-// landing (ver getRoleLanding), y un usuario no-Administrador que entra por
-// acá (bookmark, refresh) terminaba en /dashboard -> "Acceso no autorizado".
+// La raíz "/" no puede asumir un destino fijo: la landing es la primera ruta
+// a la que el usuario puede entrar según sus permisos (ver getLanding).
 function RoleBasedRedirect() {
-  const { isAuthenticated, isInitializing, user } = useAuth();
+  const { isAuthenticated, isInitializing } = useAuth();
+  const permisos = usePermisos();
 
-  if (isInitializing) {
+  if (isInitializing || (isAuthenticated && permisos.isLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-slate-500">Cargando...</p>
@@ -51,325 +53,205 @@ function RoleBasedRedirect() {
     return <Navigate to="/login" replace />;
   }
 
-  return <Navigate to={getRoleLanding(user?.rolNombre)} replace />;
+  return <Navigate to={getLanding(permisos)} replace />;
 }
 
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <EmpresaProvider>
-          {/* HU-55: contexto de "lote en pantalla" que consume el botón
-              flotante de dictado por voz (FloatingDictadoVozButton, montado
-              en Layout) para saber si puede arrancar directo o necesita
-              mostrar su propio selector. Va por encima de <Routes> para que
-              cualquier pantalla lo pueda registrar sin acoplarse entre sí. */}
-          <LoteContextoProvider>
-            <InactivityMonitor />
-            <Routes>
-              {/* AUTH */}
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route
-                path="/auth/reset-password"
-                element={<ResetPasswordPage />}
-              />
+        <PermisosProvider>
+          <EmpresaProvider>
+            {/* HU-55: contexto de "lote en pantalla" que consume el botón
+                flotante de dictado por voz (FloatingDictadoVozButton, montado
+                en Layout) para saber si puede arrancar directo o necesita
+                mostrar su propio selector. Va por encima de <Routes> para que
+                cualquier pantalla lo pueda registrar sin acoplarse entre sí. */}
+            <LoteContextoProvider>
+              <InactivityMonitor />
+              <Routes>
+                {/* AUTH */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route
+                  path="/auth/reset-password"
+                  element={<ResetPasswordPage />}
+                />
 
-              {/* DASHBOARD (solo ADMINISTRADOR) */}
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute allowedRoles={["Administrador"]}>
-                    <DashboardPage />
-                  </ProtectedRoute>
-                }
-              />
+                {/* Acceso por permisos de módulo (GET /auth/me/permisos), no por
+                  nombre de rol: la regla de cada ruta vive en utils/accesoRutas.ts
+                  y lo que cada usuario puede hacer adentro, en usePermisos. */}
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute ruta="/dashboard">
+                      <DashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/dashboard-produccion"
+                  element={
+                    <ProtectedRoute ruta="/dashboard-produccion">
+                      <DashboardProduccionPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/empresas"
+                  element={
+                    <ProtectedRoute ruta="/empresas">
+                      <EmpresasPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/configuracion"
+                  element={
+                    <ProtectedRoute ruta="/configuracion">
+                      <ConfiguracionPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/usuarios"
+                  element={
+                    <ProtectedRoute ruta="/usuarios">
+                      <UsuariosPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/roles"
+                  element={
+                    <ProtectedRoute ruta="/roles">
+                      <RolesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/planes"
+                  element={
+                    <ProtectedRoute ruta="/planes">
+                      <PlanesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/proveedores"
+                  element={
+                    <ProtectedRoute ruta="/proveedores">
+                      <ProveedoresPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/tambos"
+                  element={
+                    <ProtectedRoute ruta="/tambos">
+                      <TambosPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/lotes"
+                  element={
+                    <ProtectedRoute ruta="/lotes">
+                      <LotesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/lotes/revision"
+                  element={
+                    <ProtectedRoute ruta="/lotes/revision">
+                      <RevisionLotesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/mediciones-manuales"
+                  element={
+                    <ProtectedRoute ruta="/mediciones-manuales">
+                      <MedicionManualPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/sensores"
+                  element={
+                    <ProtectedRoute ruta="/sensores">
+                      <SensoresPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/ingreso-camara"
+                  element={
+                    <ProtectedRoute ruta="/ingreso-camara">
+                      <IngresoCamaraPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/alertas/destinatarios"
+                  element={
+                    <ProtectedRoute ruta="/alertas/destinatarios">
+                      <DestinatariosAlertasPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/alertas"
+                  element={
+                    <ProtectedRoute ruta="/alertas">
+                      <AlertasPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/alertas/historial"
+                  element={
+                    <ProtectedRoute ruta="/alertas/historial">
+                      <HistorialAlertasPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/auditoria"
+                  element={
+                    <ProtectedRoute ruta="/auditoria">
+                      <AuditoriaPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/dispositivos"
+                  element={
+                    <ProtectedRoute ruta="/dispositivos">
+                      <DispositivosPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* DASHBOARD PRODUCCIÓN (HU-38: pantalla de inicio del rol
-                Responsable de producción — "jefe de producción" en el
-                backlog). Distinto del /dashboard de arriba, que es el
-                resumen de plataforma exclusivo de Administrador. Gerente
-                también puede consultarlo (no es su landing de login, pero le
-                queda accesible desde el Sidebar). */}
-              <Route
-                path="/dashboard-produccion"
-                element={
-                  <ProtectedRoute
-                    allowedRoles={["Responsable de producción", "Gerente"]}
-                  >
-                    <DashboardProduccionPage />
-                  </ProtectedRoute>
-                }
-              />
+                {/* SIN FUNCIONALIDADES (roles sin implementación en este sprint) */}
+                <Route
+                  path="/sin-funcionalidades"
+                  element={
+                    <ProtectedRoute>
+                      <SinFuncionalidadesPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* EMPRESAS (solo ADMINISTRADOR) */}
-              <Route
-                path="/empresas"
-                element={
-                  <ProtectedRoute allowedRoles={["Administrador"]}>
-                    <EmpresasPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* CONFIGURACIÓN (HU-09 Umbrales + HU-12 Logo e identidad: solo
-                GERENTE. HU-23 Comparación histórica: GERENTE edita,
-                RESPONSABLE DE CALIDAD solo consulta. HU-61 Conexión
-                PLC/Gateway: GERENTE y RESPONSABLE DE PRODUCCIÓN — el gating
-                de qué pestaña ve cada rol vive en ConfiguracionPage.tsx) */}
-              <Route
-                path="/configuracion"
-                element={
-                  <ProtectedRoute
-                    allowedRoles={[
-                      "Gerente",
-                      "Responsable de calidad",
-                      "Responsable de producción",
-                    ]}
-                  >
-                    <ConfiguracionPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* USUARIOS (ADMIN + GERENTE) */}
-              <Route
-                path="/usuarios"
-                element={
-                  <ProtectedRoute allowedRoles={["Administrador", "Gerente"]}>
-                    <UsuariosPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* PLANES (solo ADMINISTRADOR) */}
-              <Route
-                path="/planes"
-                element={
-                  <ProtectedRoute allowedRoles={["Administrador"]}>
-                    <PlanesPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* PROVEEDORES (ADMINISTRADOR Y GERENTE) */}
-              <Route
-                path="/proveedores"
-                element={
-                  <ProtectedRoute
-                    allowedRoles={["Gerente", "Administrador", "Responsable de calidad"]}
-                  >
-                    <ProveedoresPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* TAMBOS (HU-36: tambo de origen del lote, entidad propia bajo un
-                proveedor). GET /tambos en el backend (tambo.controller.ts)
-                habilita los 5 roles; el gating fino de qué puede hacer cada
-                uno (alta, edición, baja/reactivación) vive dentro de
-                TambosPage.tsx, no acá: POST es exclusivo de Operario de
-                línea/Gerente, PATCH/activar/baja son exclusivos de
-                Gerente/Administrador — a propósito distinto del gate de
-                /proveedores (solo Gerente/Administrador), porque acá
-                Operario de línea sí necesita poder entrar a cargar un tambo
-                nuevo sin tener acceso a la gestión de proveedores. */}
-              <Route
-                path="/tambos"
-                element={
-                  <ProtectedRoute
-                    allowedRoles={[
-                      "Responsable de calidad",
-                      "Gerente",
-                      "Administrador",
-                      "Operario de línea",
-                      "Responsable de producción",
-                    ]}
-                  >
-                    <TambosPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* LOTES (HU-60: Responsable de calidad + Gerente/Administrador como supervisión;
-                HU-20 suma Operario de línea -carga manual- y Responsable de producción
-                -historial-.
-                TODO(backend): GET /lotes y GET /lotes/:id en lote.controller.ts todavía
-                solo tienen @Roles(RESPONSABLE_CALIDAD, GERENTE, ADMINISTRADOR) — hasta que
-                se sume OPERARIO_LINEA/RESPONSABLE_PRODUCCION ahí, a esos dos roles la
-                pantalla les va a quedar vacía/con error 403 (probado con curl, no es bug
-                de frontend). El allowedRoles de acá ya está listo para cuando se resuelva. */}
-              <Route
-                path="/lotes"
-                element={
-                  <ProtectedRoute
-                    allowedRoles={[
-                      "Responsable de calidad",
-                      "Gerente",
-                      "Administrador",
-                      "Operario de línea",
-                      "Responsable de producción",
-                    ]}
-                  >
-                    <LotesPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* REVISIÓN DE CALIDAD (HU-22: aprobación/rechazo manual de lotes No
-                Apto). Solo Responsable de Calidad — mismo rol único que
-                @Roles(RESPONSABLE_CALIDAD) en GET /lotes/no-aptos,
-                POST /lotes/:id/revision en lote.controller.ts. */}
-              <Route
-                path="/lotes/revision"
-                element={
-                  <ProtectedRoute allowedRoles={["Responsable de calidad"]}>
-                    <RevisionLotesPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* MEDICIÓN MANUAL (HU-20): vista standalone, exclusiva de Operario de
-                línea. Distinta del modal de mediciones manuales dentro de /lotes
-                (Responsable de calidad/Gerente/Administrador/Responsable de
-                producción siguen usando ese, ver LotesPage.tsx) — Operario de
-                línea no tiene acceso a la gestión de lotes en sí, solo a cargar/
-                consultar mediciones manuales de los lotes activos sin sensor. */}
-              <Route
-                path="/mediciones-manuales"
-                element={
-                  <ProtectedRoute allowedRoles={["Operario de línea"]}>
-                    <MedicionManualPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* SENSORES: alta/edición (HU-17) para Responsable de producción/calidad,
-                asociación a lote (HU-33) para Operario de línea/Responsable de calidad,
-                Gerente/Administrador acceden en modo lectura (ver sensor.controller.ts) */}
-              <Route
-                path="/sensores"
-                element={
-                  <ProtectedRoute
-                    allowedRoles={[
-                      "Responsable de producción",
-                      "Responsable de calidad",
-                      "Operario de línea",
-                      "Gerente",
-                      "Administrador",
-                    ]}
-                  >
-                    <SensoresPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* INGRESO A CÁMARA (HU-67: conectado a GET/POST /ingresos-camara
-                y al catálogo real de SKU vía GET /skus) — Responsable de
-                producción es quien registra el ingreso de producto
-                terminado a cámara (único rol habilitado por el backend para
-                POST /ingresos-camara). */}
-              <Route
-                path="/ingreso-camara"
-                element={
-                  <ProtectedRoute allowedRoles={["Responsable de producción"]}>
-                    <IngresoCamaraPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* ALERTAS — Destinatarios (HU-29) + horarios de silencio
-                (HU-30): Administrador y Gerente configuran quién recibe
-                cada nivel de alerta (AC1/AC2/AC4) y el umbral de
-                desconexión; Responsable de producción se suma acá solo
-                para horarios de silencio (@Roles en
-                NotificacionesController.listarHorariosSilencio incluye
-                RESPONSABLE_PRODUCCION) — el gating fino entre secciones
-                vive dentro de DestinatariosAlertasPage.tsx. */}
-              <Route
-                path="/alertas/destinatarios"
-                element={
-                  <ProtectedRoute
-                    allowedRoles={["Administrador", "Gerente", "Responsable de producción"]}
-                  >
-                    <DestinatariosAlertasPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* ALERTAS (HU-25): pantalla "Monitoreo y Alertas", exclusiva de
-                Responsable de producción — es quien reacciona a los desvíos
-                de calidad detectados sobre los parámetros de los lotes.
-                Backend real: extiende el módulo de notificaciones (HU-21)
-                con tipo "alerta_umbral" — GET/PATCH /notificaciones + WS
-                /notificaciones, evento "notificacion:nueva" (ver
-                hooks/useAlertas.ts). */}
-              <Route
-                path="/alertas"
-                element={
-                  <ProtectedRoute allowedRoles={["Responsable de producción"]}>
-                    <AlertasPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* ALERTAS — Historial (HU-28): consulta retrospectiva por lote/
-                nivel/período para análisis de patrones de desvío e informes
-                regulatorios, exclusiva de Responsable de calidad. A
-                diferencia de /alertas (HU-25, bandeja de trabajo en vivo de
-                Responsable de producción) no depende del WS de
-                notificaciones ni de un "no leída" — es de solo lectura sobre
-                el histórico. Todavía sin conexión al backend, ver
-                TODO(backend) en services/historialAlertas.service.ts. */}
-              <Route
-                path="/alertas/historial"
-                element={
-                  <ProtectedRoute allowedRoles={["Responsable de calidad"]}>
-                    <HistorialAlertasPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* HU-43: LOG DE AUDITORÍA (solo GERENTE — GET /audit-log tiene
-                @Roles(GERENTE) solo; Administrador recibe 403) */}
-              <Route
-                path="/auditoria"
-                element={
-                  <ProtectedRoute allowedRoles={[ROLES.GERENTE]}>
-                    <AuditoriaPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* HU-71 (Sprint 5, mock visual): gestión del hardware de
-                sensores/actuadores relevado en planta, exclusivo de
-                Administrador. */}
-              <Route
-                path="/dispositivos"
-                element={
-                  <ProtectedRoute allowedRoles={[ROLES.ADMINISTRADOR]}>
-                    <DispositivosPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* SIN FUNCIONALIDADES (roles sin implementación en este sprint) */}
-              <Route
-                path="/sin-funcionalidades"
-                element={
-                  <ProtectedRoute>
-                    <SinFuncionalidadesPage />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* DEFAULT */}
-              <Route path="/" element={<RoleBasedRedirect />} />
-              <Route path="*" element={<Navigate to="/login" replace />} />
-            </Routes>
-          </LoteContextoProvider>
-        </EmpresaProvider>
+                {/* DEFAULT */}
+                <Route path="/" element={<RoleBasedRedirect />} />
+                <Route path="*" element={<Navigate to="/login" replace />} />
+              </Routes>
+            </LoteContextoProvider>
+          </EmpresaProvider>
+        </PermisosProvider>
       </AuthProvider>
     </BrowserRouter>
   );
