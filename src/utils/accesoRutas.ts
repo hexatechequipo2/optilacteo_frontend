@@ -21,9 +21,8 @@ export const REGLAS_RUTAS = {
   "/planes": { modulos: ["plataforma"] },
   "/dispositivos": { modulos: ["plataforma"] },
   "/usuarios": { modulos: ["gestion_usuarios"], paraSistema: true },
-  // TODO(backend): sin paraSistema hasta que GET /roles acepte empresaId para
-  // el rol de sistema (hoy RolController.emp() rechaza empresaId null).
-  "/roles": { modulos: ["gestion_roles"] },
+  // Administrador elige la empresa adentro (?empresaId=).
+  "/roles": { modulos: ["gestion_roles"], paraSistema: true },
   "/proveedores": { modulos: ["recepcion"], paraSistema: true },
   "/tambos": { modulos: ["recepcion", "trazabilidad"] },
   "/lotes/revision": { modulos: ["trazabilidad"] },

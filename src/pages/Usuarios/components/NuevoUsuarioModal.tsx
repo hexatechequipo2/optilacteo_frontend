@@ -12,6 +12,7 @@ interface NuevoUsuarioModalProps {
   empresaIdBloqueada?: number;
   // Explica por qué no hay roles para elegir (POST /user exige rolId).
   mensajeSinRoles?: string;
+  onEmpresaChange?: (empresaId: number | undefined) => void;
   isSubmitting: boolean;
   onClose: () => void;
   onCreate: (payload: CreateUsuarioDto) => Promise<void>;
@@ -23,6 +24,7 @@ export function NuevoUsuarioModal({
   roles,
   empresaIdBloqueada,
   mensajeSinRoles,
+  onEmpresaChange,
   isSubmitting,
   onClose,
   onCreate,
@@ -72,6 +74,7 @@ export function NuevoUsuarioModal({
         empresaIdBloqueada={empresaIdBloqueada}
         rolEditable
         mensajeSinRoles={mensajeSinRoles}
+        onEmpresaChange={onEmpresaChange}
         onCancel={onClose}
         onSubmit={handleSubmit}
       />

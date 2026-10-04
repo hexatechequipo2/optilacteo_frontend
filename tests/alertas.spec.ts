@@ -2,6 +2,7 @@ import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
 import {
   loginAsResponsableProduccion,
   loginAsResponsableCalidad,
+  quitarPermisos,
 } from "./fixtures/mockAuth.ts";
 
 // ---------------------------------------------------------------------------
@@ -210,6 +211,7 @@ test.describe("AlertasPage", () => {
 test("AlertasPage - un Responsable de calidad ve acceso no autorizado", async ({ page }) => {
   await mockAlertasDeps(page);
   await loginAsResponsableCalidad(page);
+  await quitarPermisos(page, "Responsable de calidad", ["monitoreo_alertas"]);
   await page.goto("/alertas");
   await expect(page.getByText("Acceso no autorizado")).toBeVisible();
 });

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsResponsableCalidad, loginAsResponsableProduccion } from "./fixtures/mockAuth.ts";
+import { loginAsResponsableCalidad, loginAsResponsableProduccion, quitarPermisos } from "./fixtures/mockAuth.ts";
 
 const HISTORIAL_ABIERTA = {
   id: 1, tipo: "alerta_umbral",
@@ -148,6 +148,7 @@ test.describe("HistorialAlertasPage", () => {
 test("HistorialAlertasPage - un Responsable de producción ve acceso no autorizado", async ({ page }) => {
   await mockHistorialDeps(page, []);
   await loginAsResponsableProduccion(page);
+  await quitarPermisos(page, "Responsable de producción", ["monitoreo_alertas"]);
   await page.goto("/alertas/historial");
 
   await expect(page.getByText("Acceso no autorizado")).toBeVisible();

@@ -1,5 +1,5 @@
 import { test, expect } from "./fixtures/coverageFixtures.ts";
-import { loginAsAdministrador } from "./fixtures/mockAuth.ts";
+import { loginAsAdministrador, mockPermisos } from "./fixtures/mockAuth.ts";
 
 test.describe("LoginPage", () => {
   test("muestra errores de validación con campos vacíos", async ({ page }) => {
@@ -22,6 +22,7 @@ test.describe("LoginPage", () => {
   });
 
   test("login exitoso redirige a /dashboard", async ({ page }) => {
+    await mockPermisos(page, "Administrador");
     await page.route("**/login", async (route) => {
       if (route.request().method() !== "POST") return route.continue();
       await route.fulfill({

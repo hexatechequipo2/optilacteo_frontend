@@ -20,8 +20,9 @@ import { DictadoVozFlow } from "../pages/MedicionManual/components/DictadoVozFlo
 // chequeo va en un envoltorio para que, sin permiso, ni se monten los
 // hooks: si no, cada pantalla pediría /lotes y /sensores de más.
 export function FloatingDictadoVozButton() {
-  const { puede } = usePermisos();
-  if (!puede("asistente_voz", "ver") || !puede("monitoreo_alertas", "crear")) {
+  const { puede, esSistema } = usePermisos();
+  // Administrador no tiene empresa: no hay lotes sobre los que dictar.
+  if (esSistema || !puede("asistente_voz", "ver") || !puede("monitoreo_alertas", "crear")) {
     return null;
   }
   return <FloatingDictadoVozButtonBody />;

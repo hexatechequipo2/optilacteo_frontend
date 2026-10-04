@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Input } from "../../../components/ui/Input";
 import { Select } from "../../../components/ui/Select";
 import { Toggle } from "../../../components/ui/Toggle";
@@ -47,6 +47,8 @@ interface UsuarioFormProps {
   rolEditable: boolean;
   // Se muestra en lugar de las opciones cuando no hay roles para elegir.
   mensajeSinRoles?: string;
+  // Administrador: los roles dependen de la empresa elegida (?empresaId=).
+  onEmpresaChange?: (empresaId: number | undefined) => void;
   onCancel?: () => void;
   onSubmit: (values: UsuarioFormValues) => Promise<void>;
 }
@@ -98,6 +100,7 @@ export function UsuarioForm({
   empresaIdBloqueada,
   rolEditable,
   mensajeSinRoles,
+  onEmpresaChange,
   onSubmit,
 }: UsuarioFormProps) {
   const isEditing = !!usuario;
@@ -116,6 +119,12 @@ export function UsuarioForm({
         : "",
   );
   const [isActive, setIsActive] = useState(usuario?.isActive ?? true);
+
+  useEffect(() => {
+    onEmpresaChange?.(empresaId ? Number(empresaId) : undefined);
+    // Solo cuando cambia la empresa elegida, no en cada render del padre.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaId]);
   const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState("");
 
@@ -166,8 +175,15 @@ export function UsuarioForm({
         }
       }
 
-      // 403/409 del back (permisos, protecciones de rol) llegan con mensaje.
-      setServerError(extraerMensajeError(error, "No se pudo guardar el usuario. Intentá nuevamente."));
+      // 4xx del back (permisos, protecciones de rol) llegan con un mensaje
+      // para el usuario; un 5xx no, va el genérico.
+      const esErrorDeCliente =
+        axios.isAxiosError(error) && (error.response?.status ?? 500) < 500;
+      setServerError(
+        esErrorDeCliente
+          ? extraerMensajeError(error, "No se pudo guardar el usuario. Intentá nuevamente.")
+          : "No se pudo guardar el usuario. Intentá nuevamente.",
+      );
     }
   };
 
@@ -213,7 +229,11 @@ export function UsuarioForm({
           label="Organización *"
           options={empresaOptions}
           value={empresaId}
-          onChange={(e) => setEmpresaId(e.target.value)}
+          onChange={(e) => {
+            setEmpresaId(e.target.value);
+            // Los roles cambian con la empresa: la elección previa ya no vale.
+            setRolId(0);
+          }}
           error={errors.empresaId}
           disabled={!!empresaIdBloqueada}
         />

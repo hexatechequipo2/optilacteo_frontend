@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures/coverageFixtures.js";
 import type { Page } from "@playwright/test";
-import { loginAsGerente, loginAsResponsableProduccion } from "./fixtures/mockAuth.js";
+import { loginAsGerente, loginAsResponsableProduccion, quitarPermisos } from "./fixtures/mockAuth.js";
 
 // ---------------------------------------------------------------------------
 // Datos de prueba
@@ -395,6 +395,7 @@ test.describe("IngresoCamaraPage (HU-67)", () => {
   test("un Gerente no tiene acceso a Ingreso a cámara", async ({ page }) => {
     await mockIngresoCamaraDeps(page);
     await loginAsGerente(page);
+    await quitarPermisos(page, "Gerente", ["trazabilidad"]);
     await page.goto("/ingreso-camara");
 
     await expect(page.getByText("Acceso no autorizado")).toBeVisible();

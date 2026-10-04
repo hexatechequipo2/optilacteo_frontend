@@ -134,12 +134,15 @@ test.describe("DestinatariosAlertasPage", () => {
   });
 });
 
-test("DestinatariosAlertasPage - un RC ve acceso no autorizado", async ({ page }) => {
+// HU-72: Calidad tiene configuracion_empresa:ver (sin editar) en la matriz
+// por defecto, así que entra en solo lectura.
+test("DestinatariosAlertasPage - un RC ve los destinatarios en solo lectura", async ({ page }) => {
   await mockDestinatariosDeps(page, []);
   await loginAsResponsableCalidad(page);
   await page.goto("/alertas/destinatarios");
 
-  await expect(page.getByText("Acceso no autorizado")).toBeVisible();
+  await expect(page.getByText("Solo lectura: tu rol no puede modificar este umbral.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "+ Usuario" })).toHaveCount(0);
 });
 
 test("DestinatariosAlertasPage - agrega un usuario como destinatario de nivel crítico", async ({ page }) => {

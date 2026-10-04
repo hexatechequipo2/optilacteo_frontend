@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsGerente, loginAsResponsableCalidad } from "./fixtures/mockAuth.ts";
+import { loginAsGerente, loginAsResponsableCalidad, quitarPermisos } from "./fixtures/mockAuth.ts";
 
 // ---------------------------------------------------------------------------
 // Datos de prueba
@@ -739,6 +739,7 @@ test("ConfiguracionPage - un Responsable de calidad ve los inputs de Comparació
   await loginAsResponsableCalidad(page);
   await page.goto("/configuracion");
   await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Comparación histórica" }).click();
 
   await expect(page.locator("#comparacion-historica-desvio")).toHaveValue("10");
   await expect(page.locator("#comparacion-historica-desvio")).toBeDisabled();
@@ -746,9 +747,12 @@ test("ConfiguracionPage - un Responsable de calidad ve los inputs de Comparació
   await expect(page.getByRole("button", { name: "Guardar" })).not.toBeAttached();
 });
 
-test("ConfiguracionPage - un Responsable de calidad no ve la pestaña de Umbrales de calidad", async ({ page }) => {
+// HU-72: con la matriz por defecto Calidad tiene configuracion_empresa:ver,
+// así que ve Umbrales (en solo lectura); sin el módulo no la ve.
+test("ConfiguracionPage - un Responsable de calidad sin configuracion_empresa no ve la pestaña de Umbrales de calidad", async ({ page }) => {
   await mockConfiguracionDeps(page);
   await loginAsResponsableCalidad(page);
+  await quitarPermisos(page, "Responsable de calidad", ["configuracion_empresa"]);
   await page.goto("/configuracion");
   await page.waitForLoadState("networkidle");
 
@@ -757,5 +761,5 @@ test("ConfiguracionPage - un Responsable de calidad no ve la pestaña de Umbrale
   ).not.toBeVisible();
   await expect(
     page.getByRole("button", { name: "Comparación histórica" }),
-  ).toBeVisible();
+  ).not.toBeVisible();
 });

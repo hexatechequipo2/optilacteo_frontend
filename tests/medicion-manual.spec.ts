@@ -209,7 +209,7 @@ test.describe("MedicionManualPage", () => {
 
   test.describe("HistorialMedicionesManualesTab", () => {
     test.beforeEach(async ({ page }) => {
-      await page.getByRole("button", { name: "Historial" }).click();
+      await page.getByRole("button", { name: "Historial", exact: true }).click();
     });
 
     test("muestra estado vacío cuando no hay mediciones", async ({ page }) => {
@@ -235,7 +235,7 @@ test.describe("MedicionManualPage", () => {
         });
       });
       await page.goto("/mediciones-manuales");
-      await page.getByRole("button", { name: "Historial" }).click();
+      await page.getByRole("button", { name: "Historial", exact: true }).click();
       await expect(page.getByRole("row").filter({ hasText: "pH" })).toBeVisible();
       await expect(page.getByRole("row").filter({ hasText: "pH" }).getByText("Normal")).toBeVisible();
     });
@@ -257,7 +257,7 @@ test.describe("MedicionManualPage", () => {
         await route.fulfill({ status: 500, body: "" });
       });
       await page.goto("/mediciones-manuales");
-      await page.getByRole("button", { name: "Historial" }).click();
+      await page.getByRole("button", { name: "Historial", exact: true }).click();
       await expect(
         page.getByText("No se pudo cargar el historial de mediciones manuales."),
       ).toBeVisible();

@@ -1,6 +1,6 @@
 import type { Route } from "@playwright/test";
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsOperario, loginAsResponsableCalidad } from "./fixtures/mockAuth.ts";
+import { loginAsOperario, loginAsResponsableCalidad, quitarPermisos } from "./fixtures/mockAuth.ts";
 
 // HU-40: pestaña "Monitoreo en línea" (Sensores) conectada al backend.
 // La actualización en vivo por WebSocket no se cubre acá: socket.io arranca
@@ -135,6 +135,7 @@ test.describe("Sensores › Monitoreo en línea (HU-40)", () => {
   test("muestra las 7 cards en orden, con estado, hora real y 'Sin lecturas'", async ({ page }) => {
     await mockMonitoreoDeps(page);
     await loginAsOperario(page);
+    await page.goto("/sensores"); // HU-72: la landing ya no es /sensores
 
     const cards = page.getByRole("group", { name: CARD_NAME });
     await expect(cards).toHaveCount(7);
@@ -163,6 +164,7 @@ test.describe("Sensores › Monitoreo en línea (HU-40)", () => {
   test("hora de la lectura: hoy, otro día y aviso de lectura antigua", async ({ page }) => {
     await mockMonitoreoDeps(page);
     await loginAsOperario(page);
+    await page.goto("/sensores"); // HU-72: la landing ya no es /sensores
 
     // Hoy y reciente: hora sola, sin aviso.
     const temperatura = page.getByRole("group", { name: "Temperatura: En rango" });
@@ -188,6 +190,7 @@ test.describe("Sensores › Monitoreo en línea (HU-40)", () => {
   test("pide lotes en_proceso y muestra ubicación con fallback", async ({ page }) => {
     const { estadosPedidos } = await mockMonitoreoDeps(page);
     await loginAsOperario(page);
+    await page.goto("/sensores"); // HU-72: la landing ya no es /sensores
 
     await expect(page.getByRole("button", { name: /LOT-2026-101/ })).toContainText("Sector envasado");
     await expect(page.getByRole("button", { name: /LOT-2026-102/ })).toContainText("Sin ubicación");
@@ -197,6 +200,7 @@ test.describe("Sensores › Monitoreo en línea (HU-40)", () => {
   test("al cambiar de lote refetchea semáforo e historial de cargas manuales", async ({ page }) => {
     await mockMonitoreoDeps(page);
     await loginAsOperario(page);
+    await page.goto("/sensores"); // HU-72: la landing ya no es /sensores
 
     await expect(page.getByText("Historial de cargas manuales · LOT-2026-101")).toBeVisible();
     await expect(page.getByText("1 registro", { exact: true })).toBeVisible();
@@ -226,6 +230,7 @@ test.describe("Sensores › Monitoreo en línea (HU-40)", () => {
       ]);
     });
     await loginAsOperario(page);
+    await page.goto("/sensores"); // HU-72: la landing ya no es /sensores
 
     // LOTE_A es leche cruda: banda de leche cruda.
     const ph = page.getByRole("group", { name: "pH: En límite" });
@@ -246,6 +251,7 @@ test.describe("Sensores › Monitoreo en línea (HU-40)", () => {
   test("no muestra EN VIVO si el socket no está conectado", async ({ page }) => {
     await mockMonitoreoDeps(page);
     await loginAsOperario(page);
+    await page.goto("/sensores"); // HU-72: la landing ya no es /sensores
 
     await expect(page.getByRole("group", { name: "Temperatura: En rango" })).toBeVisible();
     await expect(page.getByText("EN VIVO")).toHaveCount(0);
@@ -254,6 +260,7 @@ test.describe("Sensores › Monitoreo en línea (HU-40)", () => {
   test("estado vacío sin lotes en proceso", async ({ page }) => {
     await mockMonitoreoDeps(page, { lotes: [] });
     await loginAsOperario(page);
+    await page.goto("/sensores"); // HU-72: la landing ya no es /sensores
 
     await expect(page.getByText("No hay lotes en proceso")).toBeVisible();
   });
@@ -261,6 +268,7 @@ test.describe("Sensores › Monitoreo en línea (HU-40)", () => {
   test("error al cargar lotes con reintentar", async ({ page }) => {
     const { control } = await mockMonitoreoDeps(page, { lotesFallan: true });
     await loginAsOperario(page);
+    await page.goto("/sensores"); // HU-72: la landing ya no es /sensores
 
     await expect(page.getByRole("alert")).toContainText("No se pudieron cargar los lotes en proceso.");
     control.lotesFallan = false;
@@ -268,9 +276,11 @@ test.describe("Sensores › Monitoreo en línea (HU-40)", () => {
     await expect(page.getByRole("group", { name: "Temperatura: En rango" })).toBeVisible();
   });
 
-  test("Responsable de calidad no ve la pestaña", async ({ page }) => {
+  // HU-72: el semáforo exige dashboard o monitoreo_alertas:ver.
+  test("Responsable de calidad sin dashboard ni monitoreo no ve la pestaña", async ({ page }) => {
     await mockMonitoreoDeps(page);
     await loginAsResponsableCalidad(page);
+    await quitarPermisos(page, "Responsable de calidad", ["dashboard", "monitoreo_alertas"]);
     await page.goto("/sensores");
 
     await expect(page.getByRole("button", { name: "Registro (alta / edición)" })).toBeVisible();

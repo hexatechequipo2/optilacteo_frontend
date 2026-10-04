@@ -22,13 +22,12 @@ export function useNotificaciones(): UseNotificacionesResult {
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // HU-48 (AC4): avisos de retención mock, para quien puede consultar los
-  // registros próximos a vencer (GET /retencion/proximos-a-vencer,
-  // configuracion_empresa:ver). Ver constants/retencion.ts para apagarlo
-  // cuando el backend los emita.
-  const { puede } = usePermisos();
+  // HU-48 (AC4): avisos de retención mock, para quien puede actuar sobre la
+  // política y los registros próximos a vencer (configuracion_empresa:editar).
+  // Ver constants/retencion.ts para apagarlo cuando el backend los emita.
+  const { puede, esSistema } = usePermisos();
   const avisosRetencion = useAvisosRetencionMock(
-    RETENCION_AVISOS_MOCK && puede("configuracion_empresa", "ver"),
+    RETENCION_AVISOS_MOCK && !esSistema && puede("configuracion_empresa", "editar"),
   );
 
   useEffect(() => {

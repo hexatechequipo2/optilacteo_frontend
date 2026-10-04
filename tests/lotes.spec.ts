@@ -5,6 +5,7 @@ import {
   loginAsAdministrador,
   loginAsOperario,
   loginAsResponsableProduccion,
+  quitarPermisos,
 } from "./fixtures/mockAuth.js";
 // ---------------------------------------------------------------------------
 // Datos de prueba
@@ -96,6 +97,24 @@ async function mockLotesDeps(page: Page) {
       });
     }
     return route.continue();
+  });
+  // HU-72: con la matriz por defecto Calidad también ve el historial de
+  // mediciones, que es la primera pestaña del modal: necesita respuesta paginada.
+  await page.route(/\/lotes\/\d+\/mediciones-manuales/, async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ data: [], total: 0, page: 1, limit: 20 }),
+    });
+  });
+  await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ data: [], total: 0, page: 1, limit: 20, rangoAmplio: false }),
+    });
   });
 
   // notificacionService: requiere formato paginado para no crashear el hook
@@ -942,7 +961,8 @@ test.describe("LotesPage › ClasificacionAutomaticaTab", () => {
 
     test("lote sin clasificación muestra 'Sin clasificar' y aviso de sin parámetros", async ({ page }) => {
     const row = page.getByRole("row").filter({ hasText: "LOT-2026-001" });
-    await row.getByTitle("Clasificación automática").click();
+    await row.getByTitle("Mediciones").click();
+    await page.getByRole("dialog").getByRole("button", { name: "Clasificación automática" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("PARÁMETROS UTILIZADOS")).toBeVisible();
     await expect(dialog.getByText("Sin clasificar")).toBeVisible();
@@ -963,7 +983,8 @@ test.describe("LotesPage › ClasificacionAutomaticaTab", () => {
       });
     });
     await page.reload();
-    await page.getByTitle("Clasificación automática").first().click();
+    await page.getByTitle("Mediciones").first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Clasificación automática" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("Apto")).toBeVisible();
     await expect(dialog.getByText(/pH: 6\.8/)).toBeVisible();
@@ -984,7 +1005,8 @@ test.describe("LotesPage › ClasificacionAutomaticaTab", () => {
       });
     });
     await page.reload();
-    await page.getByTitle("Clasificación automática").first().click();
+    await page.getByTitle("Mediciones").first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Clasificación automática" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("No apto")).toBeVisible();
     await expect(dialog.getByText(/pH: 2/)).toBeVisible();
@@ -1013,7 +1035,8 @@ test.describe("LotesPage › ClasificacionAutomaticaTab", () => {
       });
     });
     await page.reload();
-    await page.getByTitle("Clasificación automática").first().click();
+    await page.getByTitle("Mediciones").first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Clasificación automática" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText(/pH: 6\.8/)).toBeVisible();
     await expect(dialog.getByText("Dentro de umbral")).not.toBeVisible();
@@ -1055,19 +1078,19 @@ test.describe("LotesPage › ClasificacionAutomaticaTab", () => {
   });
 });
 
-test("LotesPage › un Operario de línea no ve el tab de Clasificación automática en el modal", async ({ page }) => {
+// HU-72: cargar mediciones (monitoreo_alertas:crear) implica ver, y ver
+// monitoreo alcanza para la clasificación, así que Operario ve los dos tabs.
+test("LotesPage › un Operario de línea ve los tabs de medición manual y Clasificación automática", async ({ page }) => {
   await mockLotesDeps(page);
   await loginAsOperario(page);
   await page.goto("/lotes");
 
-  // Operario puede abrir el modal (puedeCargarMedicionManualBase = true) pero
-  // puedeVerClasificacion = false → el tab no debe existir en la lista de tabs
   const row = page.getByRole("row").filter({ hasText: "LOT-2026-001" });
   await row.getByTitle("Mediciones").click();
 
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("button", { name: "Registrar medición manual" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Clasificación automática" })).not.toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Clasificación automática" })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
@@ -1096,7 +1119,8 @@ test.describe("LotesPage › ComparacionHistoricaTab", () => {
         }),
       });
     });
-    await page.getByTitle("Clasificación automática").first().click();
+    await page.getByTitle("Mediciones").first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Clasificación automática" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Comparación histórica" }).click();
     await expect(
@@ -1126,7 +1150,8 @@ test.describe("LotesPage › ComparacionHistoricaTab", () => {
         }),
       });
     });
-    await page.getByTitle("Clasificación automática").first().click();
+    await page.getByTitle("Mediciones").first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Clasificación automática" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Comparación histórica" }).click();
     await expect(dialog.getByText(/pH: 6\.8.*promedio histórico: 6\.7.*\+1\.49%/)).toBeVisible();
@@ -1155,7 +1180,8 @@ test.describe("LotesPage › ComparacionHistoricaTab", () => {
         }),
       });
     });
-    await page.getByTitle("Clasificación automática").first().click();
+    await page.getByTitle("Mediciones").first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Clasificación automática" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Comparación histórica" }).click();
     await expect(dialog.getByText(/pH: 4.*promedio histórico: 6\.7.*-40\.3%/)).toBeVisible();
@@ -1169,7 +1195,8 @@ test.describe("LotesPage › ComparacionHistoricaTab", () => {
         return route.continue();
       await route.fulfill({ status: 500, body: "" });
     });
-    await page.getByTitle("Clasificación automática").first().click();
+    await page.getByTitle("Mediciones").first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Clasificación automática" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Comparación histórica" }).click();
     await expect(dialog.getByText("No se pudo cargar la comparación histórica.")).toBeVisible();
@@ -1197,7 +1224,8 @@ test.describe("LotesPage › ComparacionHistoricaTab", () => {
         }),
       });
     });
-    await page.getByTitle("Clasificación automática").first().click();
+    await page.getByTitle("Mediciones").first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Clasificación automática" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Comparación histórica" }).click();
     await expect(
@@ -1207,7 +1235,9 @@ test.describe("LotesPage › ComparacionHistoricaTab", () => {
   });
 });
 
-test("LotesPage › un Responsable de Producción no ve el tab de Comparación histórica en el modal", async ({ page }) => {
+// HU-72: la comparación exige trazabilidad:ver; se le saca al rol para probar
+// que el tab no aparece.
+test("LotesPage › un Responsable de Producción sin trazabilidad no ve el tab de Comparación histórica en el modal", async ({ page }) => {
   await mockLotesDeps(page);
   // HistorialMedicionesManualesTab se renderiza al abrir el modal (primer tab para RP)
   // y llama a GET /lotes/:id/mediciones-manuales — necesita formato paginado
@@ -1221,6 +1251,7 @@ test("LotesPage › un Responsable de Producción no ve el tab de Comparación h
     });
   });
   await loginAsResponsableProduccion(page);
+  await quitarPermisos(page, "Responsable de producción", ["trazabilidad"]);
   await page.goto("/lotes");
   const row = page.getByRole("row").filter({ hasText: "LOT-2026-001" });
   await row.getByTitle("Mediciones").click();

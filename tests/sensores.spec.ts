@@ -3,6 +3,8 @@ import {
   loginAsResponsableProduccion,
   loginAsAdministrador,
   loginAsOperario,
+  loginAsResponsableCalidad,
+  quitarPermisos,
 } from "./fixtures/mockAuth.ts";
 
 // ---------------------------------------------------------------------------
@@ -553,7 +555,17 @@ test.describe("SensoresPage › EstadoDiagnosticoTab", () => {
 // SensoresPage › SensorLoteHistorialModal
 // ---------------------------------------------------------------------------
 
+async function abrirHistorialModalSinEsperar(page: Page) {
+  await page.getByRole("button", { name: "Registro (alta / edición)" }).click();
+  const row = page.getByRole("row").filter({ hasText: "Sensor pH Laboratorio" });
+  await row.waitFor();
+  await row.getByTitle("Asociación a lote / historial").click();
+}
+
 async function abrirHistorialModal(page: Page, sensorNombre = "Sensor pH Laboratorio") {
+  // HU-72: quien ve el semáforo y no da de alta sensores (Operario) arranca
+  // en esa pestaña; la tabla vive en Registro.
+  await page.getByRole("button", { name: "Registro (alta / edición)" }).click();
   const row = page.getByRole("row").filter({ hasText: sensorNombre });
   await row.waitFor();
   await row.getByTitle("Asociación a lote / historial").click();
@@ -596,6 +608,9 @@ test.describe("SensoresPage › SensorLoteHistorialModal", () => {
     });
 
     await loginAsOperario(page);
+    // HU-72: sin dashboard/monitoreo no hay semáforo y arranca en Registro
+    // (estos tests no mockean los endpoints del semáforo).
+    await quitarPermisos(page, "Operario de línea", ["dashboard", "monitoreo_alertas"]);
     await page.goto("/sensores");
     await abrirHistorialModal(page);
   });
@@ -700,6 +715,7 @@ test("SensoresPage - muestra el historial de asociaciones cuando hay registros",
   });
 
   await loginAsOperario(page);
+  await quitarPermisos(page, "Operario de línea", ["dashboard", "monitoreo_alertas"]);
   await page.goto("/sensores");
   await abrirHistorialModal(page);
 
@@ -906,11 +922,10 @@ test("SensoresPage - un usuario sin permiso de asociación no ve la sección de 
     });
   });
 
-  await loginAsResponsableProduccion(page);
+  // HU-72: asociar exige sensores_iot:editar; Calidad solo tiene ver.
+  await loginAsResponsableCalidad(page);
   await page.goto("/sensores");
-  const row = page.getByRole("row").filter({ hasText: "Sensor pH Laboratorio" });
-  await row.waitFor();
-  await row.getByTitle("Asociación a lote / historial").click();
+  await abrirHistorialModalSinEsperar(page);
   await expect(
     page.getByRole("heading", { name: "Asociación a lote — Sensor pH Laboratorio" }),
   ).toBeVisible();

@@ -124,6 +124,39 @@ export function permisosPorDefecto(rolNombre: MockUser["rolNombre"]) {
   };
 }
 
+// HU-72: PermisosProvider pide los permisos al login, al restaurar sesión y
+// en recargas silenciosas. Exportado para specs que arman el login a mano.
+export async function mockPermisos(page: Page, rolNombre: MockUser["rolNombre"]) {
+  await page.route("**/auth/me/permisos", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(permisosPorDefecto(rolNombre)),
+    }),
+  );
+}
+
+// HU-72: la matriz por defecto da ver en todos los módulos de sistema a
+// todos los roles de empresa; para probar el bloqueo de una ruta se le saca
+// el módulo al rol. Llamarlo después del login y antes del page.goto.
+export async function quitarPermisos(
+  page: Page,
+  rolNombre: Exclude<MockUser["rolNombre"], "Administrador">,
+  modulos: string[],
+) {
+  const base = permisosPorDefecto(rolNombre);
+  await page.route("**/auth/me/permisos", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...base,
+        permisos: base.permisos.filter((p) => !modulos.includes(p.modulo)),
+      }),
+    }),
+  );
+}
+
 /**
  * Interceptamos la llamada real de login (authService.login -> POST /login)
  * y devolvemos una respuesta fake. Usamos "**\/login" con chequeo de método
@@ -152,15 +185,7 @@ async function mockLoginEndpoint(page: Page, user: MockUser) {
   // caía en el catch-all genérico de cada spec (200 []), dejaba
   // isAuthenticated en false y ProtectedRoute redirigía a /login a mitad
   // de test.
-  // HU-72: PermisosProvider pide los permisos al login, al restaurar sesión
-  // y en recargas silenciosas.
-  await page.route("**/auth/me/permisos", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(permisosPorDefecto(user.rolNombre)),
-    }),
-  );
+  await mockPermisos(page, user.rolNombre);
 
   await page.route("**/refresh", async (route) => {
     if (route.request().method() !== "POST") {

@@ -4,7 +4,8 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Button } from "../../components/ui/Button";
 import { useUsuarios, TODAS_LAS_EMPRESAS } from "../../hooks/useUsuarios";
-import { useEmpresas } from "../../hooks/useEmpresas";
+import { useEmpresaActual } from "../../hooks/useEmpresaActual";
+import { useEmpresasOpciones } from "../../hooks/useEmpresasOpciones";
 import { useRoles } from "../../hooks/useRoles";
 import { useAuth } from "../../hooks/useAuth";
 import { usePermisos } from "../../hooks/usePermisos";
@@ -37,9 +38,19 @@ export default function UsuariosPage() {
   const { user } = useAuth();
   const { puede, esSistema } = usePermisos();
 
-  const { empresas } = useEmpresas(!esSistema);
+  // Administrador elige entre todas las empresas; un usuario de empresa
+  // opera solo sobre la suya.
+  const { empresa: miEmpresa } = useEmpresaActual();
+  const { empresas: empresasOpciones } = useEmpresasOpciones({ habilitado: esSistema });
+  const empresas = esSistema ? empresasOpciones : miEmpresa ? [miEmpresa] : [];
+  // Empresa elegida en el form abierto: para Administrador define qué roles
+  // se listan y sobre qué empresa se asigna (?empresaId=).
+  const [empresaFormId, setEmpresaFormId] = useState<number | undefined>(undefined);
   const puedeVerRoles = puede("gestion_roles", "ver"); // GET /roles
-  const { roles, asignarRol } = useRoles({ habilitado: puedeVerRoles });
+  const { roles, asignarRol } = useRoles({
+    habilitado: puedeVerRoles,
+    empresaId: empresaFormId,
+  });
   const puedeCrearUsuario = puede("gestion_usuarios", "crear"); // POST /user
   // PATCH /user/:id, /activar, /desactivar, /desbloquear
   const puedeEditarUsuario = puede("gestion_usuarios", "editar");
@@ -54,19 +65,17 @@ export default function UsuariosPage() {
     }
   }, [esSistema, empresaFiltro, setEmpresaFiltro]);
 
-  const empresaIdBloqueada = esSistema ? undefined : empresas[0]?.id;
+  const empresaIdBloqueada = esSistema ? undefined : miEmpresa?.id;
 
   // El back rechaza que un rol que no es de sistema asigne uno de sistema.
   const rolesAsignables = esSistema ? roles : roles.filter((rol) => !rol.esSistema);
 
-  // POST /user exige rolId y la lista sale de GET /roles.
-  // TODO(backend): GET /roles todavía no acepta empresaId para el rol de
-  // sistema (RolController.emp() rechaza empresaId null), así que
-  // Administrador no tiene roles para elegir al crear usuarios.
-  const mensajeSinRoles = esSistema
-    ? "Todavía no se pueden listar los roles de una empresa desde la cuenta de plataforma."
-    : !puedeVerRoles
-      ? "Para crear usuarios necesitás permiso para ver roles."
+  // POST /user exige rolId y la lista sale de GET /roles (de la empresa
+  // elegida, en el caso de Administrador).
+  const mensajeSinRoles = !puedeVerRoles
+    ? "Para crear usuarios necesitás permiso para ver roles."
+    : esSistema && empresaFormId === undefined
+      ? "Elegí una empresa para ver sus roles."
       : undefined;
 
   // Un usuario de empresa no puede editar/desactivar/desbloquear una cuenta
@@ -194,6 +203,7 @@ export default function UsuariosPage() {
         roles={rolesAsignables}
         empresaIdBloqueada={empresaIdBloqueada}
         mensajeSinRoles={mensajeSinRoles}
+        onEmpresaChange={setEmpresaFormId}
         isSubmitting={isCreating}
         onClose={() => setIsCreateModalOpen(false)}
         onCreate={createUsuario}
@@ -209,6 +219,7 @@ export default function UsuariosPage() {
         onUpdate={updateUsuario}
         puedeCambiarRol={puedeCambiarRol}
         onAsignarRol={asignarRolYRefrescar}
+        onEmpresaChange={setEmpresaFormId}
       />
     </Layout>
   );

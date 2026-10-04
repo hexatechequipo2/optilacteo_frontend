@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { Layout } from "../../components/layout/Layout";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
+import { Select } from "../../components/ui/Select";
 import { useAuth } from "../../hooks/useAuth";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
+import { useEmpresasOpciones } from "../../hooks/useEmpresasOpciones";
 import { usePermisos } from "../../hooks/usePermisos";
 import { useRoles } from "../../hooks/useRoles";
 import type { ModuloPermiso } from "../../types/permisos.types";
@@ -13,11 +15,19 @@ import { RolEditor } from "./components/RolEditor";
 // HU-72: roles de la empresa y su matriz de permisos por módulo y acción.
 // La ruta exige gestion_roles:ver; crear/editar/eliminar se gatean con la
 // acción correspondiente y las protecciones vuelven del back como 409.
+// Administrador (sin empresa) elige primero sobre qué empresa opera.
 export default function RolesPage() {
   const { user } = useAuth();
-  const { empresa } = useEmpresaActual();
-  const { puede } = usePermisos();
-  const { roles, isLoading, error, crearRol, actualizarRol, eliminarRol } = useRoles();
+  const { empresa: miEmpresa } = useEmpresaActual();
+  const { puede, esSistema } = usePermisos();
+  const { empresas: empresasOpciones } = useEmpresasOpciones({ habilitado: esSistema });
+  const [empresaElegidaId, setEmpresaElegidaId] = useState<number | undefined>(undefined);
+  const empresa = esSistema
+    ? empresasOpciones.find((e) => e.id === empresaElegidaId)
+    : miEmpresa;
+  const { roles, isLoading, error, crearRol, actualizarRol, eliminarRol } = useRoles({
+    empresaId: empresaElegidaId,
+  });
 
   const puedeCrear = puede("gestion_roles", "crear");
   const puedeEditar = puede("gestion_roles", "editar");
@@ -71,7 +81,24 @@ export default function RolesPage() {
             Qué puede ver y hacer cada rol de {empresa?.name ?? "tu empresa"}, por módulo y acción
           </p>
         </div>
-        {puedeCrear && (
+        {esSistema && (
+          <div className="w-64">
+            <Select
+              id="roles-empresa"
+              aria-label="Empresa"
+              value={empresaElegidaId === undefined ? "" : String(empresaElegidaId)}
+              onChange={(e) => {
+                setEmpresaElegidaId(e.target.value ? Number(e.target.value) : undefined);
+                setSeleccion(null);
+              }}
+              options={[
+                { value: "", label: "Elegí una empresa" },
+                ...empresasOpciones.map((e) => ({ value: String(e.id), label: e.name })),
+              ]}
+            />
+          </div>
+        )}
+        {puedeCrear && (!esSistema || empresaElegidaId !== undefined) && (
           <Button type="button" className="!w-auto px-6" onClick={() => setSeleccion("nuevo")}>
             + Nuevo rol
           </Button>
@@ -84,7 +111,11 @@ export default function RolesPage() {
         </p>
       )}
 
-      {isLoading ? (
+      {esSistema && empresaElegidaId === undefined ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Elegí una empresa para ver y editar sus roles.
+        </p>
+      ) : isLoading ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">Cargando roles...</p>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
@@ -127,7 +158,7 @@ export default function RolesPage() {
               modulosContratados={modulosContratados}
               puedeGuardar={enAlta ? puedeCrear : puedeEditar}
               puedeEliminar={puedeEliminar}
-              esRolPropio={!enAlta && rolSeleccionado?.id === user?.rolId}
+              esRolPropio={!esSistema && !enAlta && rolSeleccionado?.id === user?.rolId}
               onGuardar={guardar}
               onEliminar={eliminar}
             />

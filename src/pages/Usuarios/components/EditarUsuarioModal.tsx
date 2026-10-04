@@ -24,6 +24,8 @@ interface EditarUsuarioModalProps {
   // gestion_roles:editar (PUT /roles/usuarios/:usuarioId).
   puedeCambiarRol: boolean;
   onAsignarRol: (usuarioId: number, rolId: number) => Promise<void>;
+  // Administrador: carga los roles de la empresa del usuario.
+  onEmpresaChange?: (empresaId: number | undefined) => void;
 }
 
 export function EditarUsuarioModal({
@@ -36,6 +38,7 @@ export function EditarUsuarioModal({
   onUpdate,
   puedeCambiarRol,
   onAsignarRol,
+  onEmpresaChange,
 }: EditarUsuarioModalProps) {
   if (!usuario) return null;
 
@@ -92,8 +95,10 @@ export function EditarUsuarioModal({
         usuario={usuario}
         roles={roles}
         empresas={empresas}
-        empresaIdBloqueada={empresaIdBloqueada}
+        // PATCH /user/:id no mueve al usuario de empresa: queda fija en la suya.
+        empresaIdBloqueada={empresaIdBloqueada ?? usuario.empresa?.id}
         rolEditable={puedeCambiarRol}
+        onEmpresaChange={onEmpresaChange}
         onSubmit={handleSubmit}
       />
     </Modal>
