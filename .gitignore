@@ -42,3 +42,4 @@ coverage/
 *.code-workspace
 
 CLAUDE.md 
+/dist-coverage/
