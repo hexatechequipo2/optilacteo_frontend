@@ -647,3 +647,53 @@ test.describe("TrazabilidadLoteModal (HU-68)", () => {
     ).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// HU-45 — Reporte de trazabilidad en PDF
+// ---------------------------------------------------------------------------
+
+test.describe("TrazabilidadLoteModal › Generar reporte PDF (HU-45)", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockTrazabilidadDeps(page);
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+  });
+
+  test("descarga el PDF del reporte al hacer clic en Generar reporte", async ({ page }) => {
+    await page.route(/\/lotes\/\d+\/reporte-trazabilidad/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        body: "%PDF-1.4 fake",
+      });
+    });
+
+    await abrirModalPorTitulo(page, "LOT-2026-001", "Trazabilidad y consumo parcial");
+
+    const descarga = page.waitForEvent("download");
+    await page.getByRole("dialog").getByRole("button", { name: "Generar reporte" }).click();
+    const archivo = await descarga;
+    expect(archivo.suggestedFilename()).toBe("reporte-trazabilidad-lote-LOT-2026-001.pdf");
+  });
+
+  test("muestra error cuando el backend falla al generar el reporte", async ({ page }) => {
+    await page.route(/\/lotes\/\d+\/reporte-trazabilidad/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Error interno" }),
+      });
+    });
+
+    await abrirModalPorTitulo(page, "LOT-2026-001", "Trazabilidad y consumo parcial");
+    await page.getByRole("dialog").getByRole("button", { name: "Generar reporte" }).click();
+
+    await expect(
+      page.getByRole("dialog").getByText("Error interno"),
+    ).toBeVisible();
+  });
+});
