@@ -732,6 +732,225 @@ test.describe("DestinosProductivosConfigTab", () => {
 });
 });
 
+  // HU-48: política y registros en localStorage (retencion.service.ts, mock
+  // funcional — ver el TODO(backend) ahí). Cada test que necesita registros
+  // propios arma fechas relativas a "hoy" con fechaHaceMeses, nunca fechas
+  // fijas: sumarMeses/diasRestantes (utils/retencion.ts) dependen de la
+  // fecha real de ejecución.
+  test.describe("RetencionDatosTab", () => {
+    const STORAGE_POLITICA = "optilacteo:retencion:politica";
+    const STORAGE_REGISTROS = "optilacteo:retencion:registros";
+
+    test.beforeEach(async ({ page }) => {
+      await page.evaluate(
+        ([k1, k2]) => {
+          localStorage.removeItem(k1);
+          localStorage.removeItem(k2);
+        },
+        [STORAGE_POLITICA, STORAGE_REGISTROS],
+      );
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await page.getByRole("button", { name: "Retención de datos" }).click();
+    });
+
+    // Mediodía para no cruzar el borde de huso horario; diasAjuste mueve el
+    // resultado unos días para quedar vencido (negativo) o por vencer
+    // (positivo) respecto del piso normativo de 24 meses.
+    function fechaHaceMeses(page: Page, meses: number, diasAjuste = 0) {
+      return page.evaluate(
+        ([meses, diasAjuste]) => {
+          const d = new Date();
+          d.setHours(12, 0, 0, 0);
+          d.setMonth(d.getMonth() - meses);
+          d.setDate(d.getDate() + diasAjuste);
+          return d.toISOString();
+        },
+        [meses, diasAjuste],
+      );
+    }
+
+    async function sembrarRegistros(page: Page, registros: unknown[]) {
+      await page.evaluate(
+        ([key, registros]) => localStorage.setItem(key as string, JSON.stringify(registros)),
+        [STORAGE_REGISTROS, registros],
+      );
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await page.getByRole("button", { name: "Retención de datos" }).click();
+    }
+
+    test("muestra la política vigente con el mínimo normativo de 24 meses", async ({ page }) => {
+      await expect(page.locator("#retencion-periodo")).toHaveValue("24");
+      await expect(page.getByText("Mínimo 24 meses (SENASA / CAA).")).toBeVisible();
+      await expect(
+        page.getByText(/resoluciones del SENASA y la normativa del CAA el mínimo es de 24/),
+      ).toBeVisible();
+    });
+
+    test("rechaza un período menor a 24 meses y deja el botón de guardar deshabilitado", async ({
+      page,
+    }) => {
+      await page.locator("#retencion-periodo").fill("12");
+      await expect(
+        page.getByText(/No se puede configurar un período menor a 24 meses/),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Guardar política" })).toBeDisabled();
+    });
+
+    test("guardar una política válida actualiza el período y muestra el mensaje de éxito", async ({
+      page,
+    }) => {
+      await page.locator("#retencion-periodo").fill("30");
+      await page.getByRole("button", { name: "Guardar política" }).click();
+
+      await expect(page.getByText("La política de retención se guardó correctamente.")).toBeVisible();
+      await expect(page.locator("#retencion-periodo")).toHaveValue("30");
+    });
+
+    test("muestra los contadores y solo lista los registros no protegidos", async ({ page }) => {
+      await sembrarRegistros(page, [
+        {
+          id: 1,
+          entidad: "lote",
+          referencia: "Lote L-9001",
+          fechaCreacion: await fechaHaceMeses(page, 24, -10),
+          estado: "activo",
+        }, // vencido hace 10 días
+        {
+          id: 2,
+          entidad: "medicion",
+          referencia: "Medición #9002",
+          fechaCreacion: await fechaHaceMeses(page, 24, 30),
+          estado: "activo",
+        }, // vence en 30 días
+        {
+          id: 3,
+          entidad: "lote",
+          referencia: "Lote L-9003",
+          fechaCreacion: await fechaHaceMeses(page, 1),
+          estado: "activo",
+        }, // protegido, recién creado
+      ]);
+
+      // La tabla (xl:block) y las cards (xl:hidden) coexisten en el DOM —
+      // se escopea a la tabla para no chocar con "strict mode".
+      const tabla = page.getByRole("table");
+      await expect(tabla.getByText("Lote L-9001")).toBeVisible();
+      await expect(tabla.getByText("Medición #9002")).toBeVisible();
+      // Protegido: no aparece en la tabla de próximos a vencer.
+      await expect(tabla.getByText("Lote L-9003")).not.toBeVisible();
+
+      const contadorValor = (label: string) =>
+        page.locator("p", { hasText: label }).locator("xpath=preceding-sibling::p[1]");
+      await expect(contadorValor("Protegidos")).toHaveText("1");
+      await expect(contadorValor("Próximos a vencer")).toHaveText("1");
+    });
+
+    test("un registro vencido se archiva y después ofrece dar de baja lógica", async ({ page }) => {
+      await sembrarRegistros(page, [
+        {
+          id: 1,
+          entidad: "lote",
+          referencia: "Lote L-9001",
+          fechaCreacion: await fechaHaceMeses(page, 24, -10),
+          estado: "activo",
+        },
+      ]);
+
+      const fila = page.locator("tr").filter({ hasText: "Lote L-9001" });
+      await fila.getByRole("button", { name: "Archivar" }).click();
+
+      await expect(fila.getByText("Archivado")).toBeVisible();
+      await expect(fila.getByRole("button", { name: "Archivar" })).not.toBeVisible();
+      await expect(fila.getByRole("button", { name: "Dar de baja (lógica)" })).toBeEnabled();
+    });
+
+    test("dar de baja lógica pide confirmación y deja el registro en 'Baja lógica'", async ({
+      page,
+    }) => {
+      await sembrarRegistros(page, [
+        {
+          id: 1,
+          entidad: "lote",
+          referencia: "Lote L-9001",
+          fechaCreacion: await fechaHaceMeses(page, 24, -10),
+          estado: "archivado",
+        },
+      ]);
+
+      const fila = page.locator("tr").filter({ hasText: "Lote L-9001" });
+      await fila.getByRole("button", { name: "Dar de baja (lógica)" }).click();
+
+      const dialog = page.getByRole("alertdialog");
+      await expect(dialog.getByText("¿Dar de baja lógica este registro?")).toBeVisible();
+      await expect(dialog.getByText("Lote L-9001 queda inactivo", { exact: false })).toBeVisible();
+      await dialog.getByRole("button", { name: "Dar de baja" }).click();
+
+      await expect(dialog).not.toBeVisible();
+      await expect(fila.getByText("Baja lógica")).toBeVisible();
+    });
+
+    test("un registro con menos de 24 meses de antigüedad no ofrece ninguna acción", async ({
+      page,
+    }) => {
+      await sembrarRegistros(page, [
+        {
+          id: 1,
+          entidad: "medicion",
+          referencia: "Medición #9002",
+          fechaCreacion: await fechaHaceMeses(page, 24, 30),
+          estado: "activo",
+        },
+      ]);
+
+      const fila = page.locator("tr").filter({ hasText: "Medición #9002" });
+      const boton = fila.getByRole("button", { name: "Archivar" });
+      await expect(boton).toBeDisabled();
+      await expect(
+        page.getByText(/tiene menos de 24 meses de antigüedad/).first(),
+      ).toBeVisible();
+    });
+
+    test("un registro ya dado de baja lógica no ofrece ninguna acción", async ({ page }) => {
+      await sembrarRegistros(page, [
+        {
+          id: 1,
+          entidad: "lote",
+          referencia: "Lote L-9004",
+          fechaCreacion: await fechaHaceMeses(page, 25),
+          estado: "baja_logica",
+        },
+      ]);
+
+      const fila = page.locator("tr").filter({ hasText: "Lote L-9004" });
+      await expect(fila.getByText("Baja lógica")).toBeVisible();
+      await expect(fila.getByText("Sin acciones")).toBeVisible();
+    });
+  });
+
+});
+
+test("ConfiguracionPage - un Responsable de calidad ve la pestaña de Retención de datos en modo solo lectura", async ({
+  page,
+}) => {
+  await mockConfiguracionDeps(page);
+  await loginAsResponsableCalidad(page);
+  // localStorage no es accesible antes de la primera navegación real
+  // (SecurityError en about:blank) — se limpia recién acá, después del login.
+  await page.evaluate(() => {
+    localStorage.removeItem("optilacteo:retencion:politica");
+    localStorage.removeItem("optilacteo:retencion:registros");
+  });
+  await page.goto("/configuracion");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Retención de datos" }).click();
+
+  await expect(page.locator("#retencion-periodo")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Guardar política" })).not.toBeAttached();
+  await expect(
+    page.getByText("Solo lectura: tu rol no puede modificar la política de retención."),
+  ).toBeVisible();
 });
 
 test("ConfiguracionPage - un Responsable de calidad ve los inputs de Comparación histórica deshabilitados", async ({ page }) => {
