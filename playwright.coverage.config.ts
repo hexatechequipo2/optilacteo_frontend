@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import type { CoverageOptions } from "./tests/fixtures/coverageFixtures.ts";
+import { TEST_API_URL } from "./tests/fixtures/backendDeTest.ts";
 
 // Puerto propio, distinto del 5173 de dev/suite normal: así nunca se reusa
 // un vite sin instrumentar, y --strictPort hace fallar la corrida si está
@@ -43,6 +44,8 @@ export default defineConfig<CoverageOptions>({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: false,
     timeout: 120_000,
+    // Ver tests/fixtures/backendDeTest.ts. Pisa el VITE_API_URL del .env.
+    env: { VITE_API_URL: TEST_API_URL },
   },
 
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

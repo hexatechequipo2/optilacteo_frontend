@@ -1,8 +1,10 @@
+/// <reference lib="dom" />
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import { fileURLToPath } from "url";
-import { test as baseTest, type Page } from "@playwright/test";
+import { TEST_API_URL } from "./backendDeTest.ts";
+import { test as baseTest, type BrowserContext, type Page } from "@playwright/test";
 
 /**
  * Basado en el approach de mxschmitt/playwright-test-coverage: en vez de
@@ -46,10 +48,19 @@ async function readPageCoverage(page: Page): Promise<string | null> {
 
 export type CoverageOptions = { collectCoverage: boolean };
 
+// Lo que ningún page.route atiende (o un spec deja pasar con
+// route.fallback()) se corta acá como "backend apagado", sin esperar a que
+// el sistema operativo rechace la conexión. Ver backendDeTest.ts.
+async function aislarDelBackend(context: BrowserContext) {
+  await context.route(`${TEST_API_URL}/**`, (route) => route.abort("connectionrefused"));
+  await context.routeWebSocket(new RegExp(`^${TEST_API_URL.replace(/^http/, "ws")}/`), (ws) => ws.close());
+}
+
 export const test = baseTest.extend<CoverageOptions>({
   collectCoverage: [false, { option: true }],
 
   context: async ({ context, collectCoverage, baseURL }, use, testInfo) => {
+    await aislarDelBackend(context);
     if (!collectCoverage) {
       await use(context);
       return;

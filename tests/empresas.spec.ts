@@ -17,7 +17,7 @@ async function mockEmpresasGet(page: Page) {
   await page.route("**/empresa*", async (route) => {
     const rt = route.request().resourceType();
     if (rt !== "fetch" && rt !== "xhr") return route.continue();
-    if (route.request().method() !== "GET") return route.continue();
+    if (route.request().method() !== "GET") return route.fallback();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -119,7 +119,7 @@ test.describe("EmpresasPage", () => {
     await page.goto("/empresas");
 
     await page.route("**/empresa", async (route) => {
-      if (route.request().method() !== "POST") return route.continue();
+      if (route.request().method() !== "POST") return route.fallback();
       const body = route.request().postDataJSON();
       await route.fulfill({
         status: 201,
@@ -188,7 +188,7 @@ test.describe("EmpresasPage", () => {
         postCount++;
       }
 
-      await route.continue();
+      await route.fallback();
     });
 
     await page.getByRole("button", { name: "Crear empresa" }).click();
@@ -249,7 +249,7 @@ test.describe("EmpresasPage", () => {
 
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       requestBody = route.request().postDataJSON();
@@ -291,7 +291,7 @@ test.describe("EmpresasPage", () => {
 
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       requestBody = route.request().postDataJSON();
@@ -320,7 +320,7 @@ test.describe("EmpresasPage", () => {
   test("muestra el mensaje del backend ante error 409", async ({ page }) => {
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       await route.fulfill({
@@ -349,7 +349,7 @@ test.describe("EmpresasPage", () => {
   test("muestra el mensaje del backend ante error 400", async ({ page }) => {
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       await route.fulfill({
@@ -372,7 +372,7 @@ test.describe("EmpresasPage", () => {
   test("muestra error genérico ante un error inesperado", async ({ page }) => {
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       await route.fulfill({
@@ -435,7 +435,7 @@ test.describe("EmpresasPage", () => {
   }) => {
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       await route.fulfill({
@@ -467,6 +467,9 @@ test.describe("EmpresasPage", () => {
   await expect(
     page.getByText("Editar empresa", { exact: true }),
   ).toBeVisible();
+  // El modal monta con el formulario vacío y lo completa en un useEffect:
+  // editar antes de eso deja que el efecto pise lo que escribió el test.
+  await expect(page.getByLabel("Nombre *")).toHaveValue(empresa);
 }
 
   test.describe("EditarEmpresaModal", () => {
@@ -555,7 +558,7 @@ test.describe("EmpresasPage", () => {
           updateCount++;
         }
 
-        await route.continue();
+        await route.fallback();
       });
 
       await page.getByLabel("Nombre *").fill("");
@@ -611,7 +614,7 @@ test.describe("EmpresasPage", () => {
           route.request().method() !== "PATCH" &&
           route.request().method() !== "PUT"
         ) {
-          return route.continue();
+          return route.fallback();
         }
 
         requestBody = route.request().postDataJSON();
@@ -671,7 +674,7 @@ test.describe("EmpresasPage", () => {
           route.request().method() !== "PATCH" &&
           route.request().method() !== "PUT"
         ) {
-          return route.continue();
+          return route.fallback();
         }
 
         requestBody = route.request().postDataJSON();
@@ -725,7 +728,7 @@ test.describe("EmpresasPage", () => {
           route.request().method() !== "PATCH" &&
           route.request().method() !== "PUT"
         ) {
-          return route.continue();
+          return route.fallback();
         }
 
         await route.fulfill({
@@ -760,7 +763,7 @@ test.describe("EmpresasPage", () => {
           route.request().method() !== "PATCH" &&
           route.request().method() !== "PUT"
         ) {
-          return route.continue();
+          return route.fallback();
         }
 
         await route.fulfill({
@@ -789,7 +792,7 @@ test.describe("EmpresasPage", () => {
           route.request().method() !== "PATCH" &&
           route.request().method() !== "PUT"
         ) {
-          return route.continue();
+          return route.fallback();
         }
 
         await route.fulfill({
