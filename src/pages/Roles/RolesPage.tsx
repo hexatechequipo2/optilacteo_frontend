@@ -38,6 +38,9 @@ export default function RolesPage() {
   const rolSeleccionado: RolType | null =
     seleccion === "nuevo" ? null : (roles.find((r) => r.id === seleccion) ?? roles[0] ?? null);
   const enAlta = seleccion === "nuevo";
+  // Al crear, el editor se remonta con la key del rol nuevo: el aviso de
+  // éxito tiene que llegarle desde acá.
+  const [recienCreadoId, setRecienCreadoId] = useState<number | null>(null);
 
   // El back solo deja otorgar módulos de sistema contratados por la empresa.
   const modulosContratados = useMemo(
@@ -49,6 +52,7 @@ export default function RolesPage() {
   const guardar = async (dto: GuardarRolDto) => {
     if (enAlta) {
       const creado = await crearRol(dto);
+      setRecienCreadoId(creado.id);
       setSeleccion(creado.id);
     } else if (rolSeleccionado) {
       await actualizarRol(rolSeleccionado.id, dto);
@@ -90,6 +94,7 @@ export default function RolesPage() {
               onChange={(e) => {
                 setEmpresaElegidaId(e.target.value ? Number(e.target.value) : undefined);
                 setSeleccion(null);
+                setRecienCreadoId(null);
               }}
               options={[
                 { value: "", label: "Elegí una empresa" },
@@ -99,7 +104,14 @@ export default function RolesPage() {
           </div>
         )}
         {puedeCrear && (!esSistema || empresaElegidaId !== undefined) && (
-          <Button type="button" className="!w-auto px-6" onClick={() => setSeleccion("nuevo")}>
+          <Button
+            type="button"
+            className="!w-auto px-6"
+            onClick={() => {
+              setSeleccion("nuevo");
+              setRecienCreadoId(null);
+            }}
+          >
             + Nuevo rol
           </Button>
         )}
@@ -126,7 +138,10 @@ export default function RolesPage() {
                 <li key={rol.id}>
                   <button
                     type="button"
-                    onClick={() => setSeleccion(rol.id)}
+                    onClick={() => {
+                      setSeleccion(rol.id);
+                      setRecienCreadoId(null);
+                    }}
                     className={`flex w-full flex-col gap-1.5 rounded-lg border px-4 py-3 text-left transition ${
                       activo
                         ? "border-blue-400 bg-blue-50 dark:border-blue-500/60 dark:bg-blue-500/10"
@@ -159,6 +174,7 @@ export default function RolesPage() {
               puedeGuardar={enAlta ? puedeCrear : puedeEditar}
               puedeEliminar={puedeEliminar}
               esRolPropio={!esSistema && !enAlta && rolSeleccionado?.id === user?.rolId}
+              recienCreado={!enAlta && rolSeleccionado?.id === recienCreadoId}
               onGuardar={guardar}
               onEliminar={eliminar}
             />

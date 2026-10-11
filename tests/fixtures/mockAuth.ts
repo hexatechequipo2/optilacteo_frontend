@@ -12,6 +12,9 @@ export interface MockUser {
   email: string;
   rolNombre: "Administrador" | "Gerente" | "Responsable de calidad" | "Responsable de producción" | "Operario de línea";
   empresaId?: number;
+  // HU-72: rol asignado (user.rolId). RolesPage lo usa para detectar "estoy
+  // editando mi propio rol" (autobloqueo y recarga de permisos).
+  rolId?: number;
 }
 
 const ADMIN_USER: MockUser = {

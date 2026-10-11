@@ -31,11 +31,15 @@ interface RolEditorProps {
   puedeEliminar: boolean;
   // El rol que se edita es el del usuario logueado.
   esRolPropio: boolean;
+  // Recién creado: el alta remonta el editor, así que arranca con el aviso.
+  recienCreado?: boolean;
   onGuardar: (dto: GuardarRolDto) => Promise<void>;
   onEliminar: () => Promise<void>;
 }
 
 type Matriz = Partial<Record<ModuloPermiso, FlagsPermiso>>;
+
+const MENSAJE_EXITO = "Los cambios se guardaron correctamente.";
 
 function matrizInicial(rol: RolType | null): Matriz {
   const matriz: Matriz = {};
@@ -62,6 +66,7 @@ export function RolEditor({
   puedeGuardar,
   puedeEliminar,
   esRolPropio,
+  recienCreado = false,
   onGuardar,
   onEliminar,
 }: RolEditorProps) {
@@ -70,7 +75,7 @@ export function RolEditor({
   const [matriz, setMatriz] = useState<Matriz>(() => matrizInicial(rol));
   const [nombreError, setNombreError] = useState("");
   const [serverError, setServerError] = useState("");
-  const [mensajeExito, setMensajeExito] = useState("");
+  const [mensajeExito, setMensajeExito] = useState(recienCreado ? MENSAJE_EXITO : "");
   const [isSaving, setIsSaving] = useState(false);
   const [confirmandoBaja, setConfirmandoBaja] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -114,7 +119,7 @@ export function RolEditor({
         descripcion: descripcion.trim() || undefined,
         permisos: modulos.map((modulo) => ({ modulo, ...flagsDe(modulo) })),
       });
-      setMensajeExito("Los cambios se guardaron correctamente.");
+      setMensajeExito(MENSAJE_EXITO);
     } catch (err) {
       setServerError(extraerMensajeError(err, "No se pudo guardar el rol. Intentá nuevamente."));
     } finally {

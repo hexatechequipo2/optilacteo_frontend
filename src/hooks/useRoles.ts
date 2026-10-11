@@ -24,13 +24,16 @@ export function useRoles({ habilitado = true, empresaId }: UseRolesOptions = {})
   const [isLoading, setIsLoading] = useState(activo);
   const [error, setError] = useState("");
 
-  const refetch = useCallback(async () => {
+  // enSegundoPlano: recarga después de una mutación. No pasa por isLoading
+  // para que la pantalla no desmonte el formulario que acaba de guardar (y
+  // con él su mensaje de éxito).
+  const refetch = useCallback(async ({ enSegundoPlano = false } = {}) => {
     if (!activo) {
       setRoles([]);
       setIsLoading(false);
       return;
     }
-    setIsLoading(true);
+    if (!enSegundoPlano) setIsLoading(true);
     setError("");
     try {
       setRoles(await rolService.getAll(empresaParam));
@@ -48,7 +51,7 @@ export function useRoles({ habilitado = true, empresaId }: UseRolesOptions = {})
   const crearRol = useCallback(
     async (dto: GuardarRolDto) => {
       const creado = await rolService.create(dto, empresaParam);
-      await refetch();
+      await refetch({ enSegundoPlano: true });
       return creado;
     },
     [refetch, empresaParam],
@@ -57,7 +60,7 @@ export function useRoles({ habilitado = true, empresaId }: UseRolesOptions = {})
   const actualizarRol = useCallback(
     async (id: number, dto: GuardarRolDto) => {
       const actualizado = await rolService.update(id, dto, empresaParam);
-      await refetch();
+      await refetch({ enSegundoPlano: true });
       if (id === user?.rolId) await recargar();
       return actualizado;
     },
@@ -67,7 +70,7 @@ export function useRoles({ habilitado = true, empresaId }: UseRolesOptions = {})
   const eliminarRol = useCallback(
     async (id: number) => {
       await rolService.remove(id, empresaParam);
-      await refetch();
+      await refetch({ enSegundoPlano: true });
     },
     [refetch, empresaParam],
   );
@@ -76,7 +79,7 @@ export function useRoles({ habilitado = true, empresaId }: UseRolesOptions = {})
     async (usuarioId: number, rolId: number) => {
       const resultado = await rolService.asignar(usuarioId, rolId, empresaParam);
       // Cambia el conteo de usuarios por rol.
-      await refetch();
+      await refetch({ enSegundoPlano: true });
       if (usuarioId === user?.id) await recargar();
       return resultado;
     },
