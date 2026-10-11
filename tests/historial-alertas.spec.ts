@@ -217,3 +217,32 @@ test("HistorialAlertasPage - exporta a CSV y a PDF", async ({ page }) => {
   expect(pdf.suggestedFilename()).toMatch(/^historial-alertas-.*\.pdf$/);
 });
 
+
+test("HistorialAlertasPage (HU-28) - filtra por lote y estado y manda los filtros al buscar", async ({ page }) => {
+  await mockHistorialDeps(page, [HISTORIAL_ABIERTA, HISTORIAL_CERRADA]);
+  const pedidos: URLSearchParams[] = [];
+  await page.route("**/notificaciones/historial*", async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    pedidos.push(params);
+    const data = params.get("estado") === "cerrada" ? [HISTORIAL_CERRADA] : [HISTORIAL_ABIERTA, HISTORIAL_CERRADA];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data, total: data.length, page: 1, limit: 20 }),
+    });
+  });
+  await loginAsResponsableCalidad(page);
+  await page.goto("/alertas/historial");
+  const tabla = page.locator("table");
+  await expect(tabla.getByText("LOT-2026-001")).toBeVisible();
+
+  await page.locator("#historial-alertas-filtro-lote").selectOption({ label: "LOT-2026-002" });
+  await page.locator("#historial-alertas-filtro-estado").selectOption({ label: "Cerrada" });
+  await page.getByRole("button", { name: "Buscar" }).click();
+
+  await expect(tabla.getByText("LOT-2026-001")).toHaveCount(0);
+  await expect(tabla.getByText("LOT-2026-002")).toBeVisible();
+  const ultimo = pedidos.at(-1)!;
+  expect(ultimo.get("loteId")).toBe("2");
+  expect(ultimo.get("estado")).toBe("cerrada");
+});
