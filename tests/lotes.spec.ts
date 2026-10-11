@@ -2031,3 +2031,200 @@ test.describe("HU-34 — restricción de rol sobre edición de lote", () => {
     await expect(page.getByTitle("Editar lote").first()).not.toBeVisible();
   });
 });
+// ---------------------------------------------------------------------------
+// HU-62 · FinalizarLoteModal — finalizar un lote con rendimiento opcional
+// ---------------------------------------------------------------------------
+
+test.describe("FinalizarLoteModal (HU-62)", () => {
+  type Respuesta = { status: number; body: unknown } | "error-de-red";
+
+  // PATCH /lotes/:id/finalizar. Por defecto devuelve el lote finalizado con
+  // lo que se mandó; `respuesta` fuerza un error.
+  async function mockFinalizar(
+    page: Page,
+    opciones: { respuesta?: Respuesta; retener?: Promise<void> } = {},
+  ) {
+    const pedidos: { url: string; body: unknown }[] = [];
+    await page.route(/\/lotes\/\d+\/finalizar$/, async (route) => {
+      if (route.request().method() !== "PATCH") return route.fallback();
+      const body = route.request().postData() ? route.request().postDataJSON() : null;
+      pedidos.push({ url: route.request().url(), body });
+      if (opciones.retener) await opciones.retener;
+      if (opciones.respuesta === "error-de-red") return route.abort("failed");
+      if (opciones.respuesta) {
+        return route.fulfill({
+          status: opciones.respuesta.status,
+          contentType: "application/json",
+          body: JSON.stringify(opciones.respuesta.body),
+        });
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...LOTE_1, estado: "finalizado", ...(body ?? {}) }),
+      });
+    });
+    return pedidos;
+  }
+
+  const filaLote1 = (page: Page) => page.getByRole("row", { name: /LOT-2026-001/ });
+  const modalFinalizar = (page: Page) => page.getByRole("dialog");
+
+  async function abrirFinalizar(page: Page) {
+    await filaLote1(page).getByTitle("Finalizar lote").click();
+    await expect(modalFinalizar(page).getByRole("heading", { name: "Finalizar lote — LOT-2026-001" })).toBeVisible();
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await mockLotesDeps(page);
+    await loginAsResponsableCalidad(page);
+  });
+
+  test("finaliza sin rendimiento: no manda cuerpo y el lote queda 'No registrado'", async ({ page }) => {
+    const pedidos = await mockFinalizar(page);
+    await page.goto("/lotes");
+    await abrirFinalizar(page);
+
+    await expect(modalFinalizar(page)).toContainText(
+      "El lote pasa a estado finalizado. El rendimiento es opcional y no se puede modificar después.",
+    );
+    // Sin rendimiento no se pide la unidad.
+    await expect(modalFinalizar(page).getByLabel("Unidad del rendimiento *")).toHaveCount(0);
+    await modalFinalizar(page).getByRole("button", { name: "Finalizar lote" }).click();
+
+    await expect(modalFinalizar(page)).toHaveCount(0);
+    expect(pedidos).toHaveLength(1);
+    expect(new URL(pedidos[0].url).pathname).toBe("/lotes/1/finalizar");
+    expect(pedidos[0].body).toBeNull();
+    await expect(filaLote1(page)).toContainText("No registrado");
+    await expect(filaLote1(page).getByTitle("Finalizar lote")).toHaveCount(0);
+  });
+
+  test("con rendimiento exige la unidad y manda ambos valores", async ({ page }) => {
+    const pedidos = await mockFinalizar(page);
+    await page.goto("/lotes");
+    await abrirFinalizar(page);
+
+    await modalFinalizar(page).getByLabel("Rendimiento (opcional)").fill("92.5");
+    await modalFinalizar(page).getByRole("button", { name: "Finalizar lote" }).click();
+    await expect(modalFinalizar(page).getByText("Elegí la unidad del rendimiento cargado")).toBeVisible();
+    expect(pedidos).toHaveLength(0);
+
+    await modalFinalizar(page).getByLabel("Unidad del rendimiento *").selectOption({ label: "Porcentaje" });
+    await modalFinalizar(page).getByRole("button", { name: "Finalizar lote" }).click();
+
+    await expect(modalFinalizar(page)).toHaveCount(0);
+    expect(pedidos[0].body).toEqual({ rendimiento: 92.5, unidadRendimiento: "porcentaje" });
+    await expect(filaLote1(page)).toContainText("92.5 %");
+  });
+
+  test("rechaza un rendimiento negativo y acepta cero como límite", async ({ page }) => {
+    const pedidos = await mockFinalizar(page);
+    await page.goto("/lotes");
+    await abrirFinalizar(page);
+
+    await modalFinalizar(page).getByLabel("Rendimiento (opcional)").fill("-0.5");
+    await modalFinalizar(page).getByLabel("Unidad del rendimiento *").selectOption({ label: "Litros" });
+    await modalFinalizar(page).getByRole("button", { name: "Finalizar lote" }).click();
+    await expect(modalFinalizar(page).getByText("El rendimiento no puede ser negativo")).toBeVisible();
+    expect(pedidos).toHaveLength(0);
+
+    await modalFinalizar(page).getByLabel("Rendimiento (opcional)").fill("0");
+    await modalFinalizar(page).getByRole("button", { name: "Finalizar lote" }).click();
+
+    await expect(modalFinalizar(page)).toHaveCount(0);
+    expect(pedidos[0].body).toEqual({ rendimiento: 0, unidadRendimiento: "litros" });
+    await expect(filaLote1(page)).toContainText("0 L");
+  });
+
+  test("borrar el rendimiento oculta la unidad y finaliza sin valores", async ({ page }) => {
+    const pedidos = await mockFinalizar(page);
+    await page.goto("/lotes");
+    await abrirFinalizar(page);
+
+    await modalFinalizar(page).getByLabel("Rendimiento (opcional)").fill("10");
+    await expect(modalFinalizar(page).getByLabel("Unidad del rendimiento *")).toBeVisible();
+    await modalFinalizar(page).getByLabel("Rendimiento (opcional)").fill("");
+    await expect(modalFinalizar(page).getByLabel("Unidad del rendimiento *")).toHaveCount(0);
+    await modalFinalizar(page).getByRole("button", { name: "Finalizar lote" }).click();
+
+    await expect(modalFinalizar(page)).toHaveCount(0);
+    expect(pedidos[0].body).toBeNull();
+  });
+
+  test("muestra 'Cargando...' mientras el pedido está en curso", async ({ page }) => {
+    let liberar!: () => void;
+    await mockFinalizar(page, { retener: new Promise((r) => (liberar = r)) });
+    await page.goto("/lotes");
+    await abrirFinalizar(page);
+
+    await modalFinalizar(page).getByRole("button", { name: "Finalizar lote" }).click();
+    await expect(modalFinalizar(page).getByRole("button", { name: "Cargando..." })).toBeDisabled();
+
+    liberar();
+    await expect(modalFinalizar(page)).toHaveCount(0);
+  });
+
+  test("un 409 muestra el mensaje del servidor y deja el modal abierto", async ({ page }) => {
+    await mockFinalizar(page, {
+      respuesta: { status: 409, body: { message: "El lote ya fue finalizado." } },
+    });
+    await page.goto("/lotes");
+    await abrirFinalizar(page);
+    await modalFinalizar(page).getByRole("button", { name: "Finalizar lote" }).click();
+
+    await expect(modalFinalizar(page).getByText("El lote ya fue finalizado.")).toBeVisible();
+    await expect(filaLote1(page).getByTitle("Finalizar lote")).toBeVisible();
+  });
+
+  test("un 400 con varios mensajes los muestra juntos", async ({ page }) => {
+    await mockFinalizar(page, {
+      respuesta: {
+        status: 400,
+        body: { message: ["rendimiento must not be less than 0", "unidadRendimiento must be a valid enum value"] },
+      },
+    });
+    await page.goto("/lotes");
+    await abrirFinalizar(page);
+    await modalFinalizar(page).getByRole("button", { name: "Finalizar lote" }).click();
+
+    await expect(modalFinalizar(page)).toContainText("rendimiento must not be less than 0");
+    await expect(modalFinalizar(page)).toContainText("unidadRendimiento must be a valid enum value");
+  });
+
+  test("un 500 o un error de red muestran el error genérico", async ({ page }) => {
+    await mockFinalizar(page, { respuesta: { status: 500, body: {} } });
+    await page.goto("/lotes");
+    await abrirFinalizar(page);
+    await modalFinalizar(page).getByRole("button", { name: "Finalizar lote" }).click();
+    await expect(modalFinalizar(page).getByText("No se pudo finalizar el lote. Intentá nuevamente.")).toBeVisible();
+
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await mockLotesDeps(page);
+    await mockFinalizar(page, { respuesta: "error-de-red" });
+    await modalFinalizar(page).getByRole("button", { name: "Finalizar lote" }).click();
+    await expect(modalFinalizar(page).getByText("No se pudo finalizar el lote. Intentá nuevamente.")).toBeVisible();
+  });
+
+  test("cancelar no finaliza y al reabrir el formulario está limpio", async ({ page }) => {
+    const pedidos = await mockFinalizar(page);
+    await page.goto("/lotes");
+    await abrirFinalizar(page);
+
+    await modalFinalizar(page).getByLabel("Rendimiento (opcional)").fill("50");
+    await modalFinalizar(page).getByRole("button", { name: "Cancelar" }).click();
+    await expect(modalFinalizar(page)).toHaveCount(0);
+    expect(pedidos).toHaveLength(0);
+
+    await abrirFinalizar(page);
+    await expect(modalFinalizar(page).getByLabel("Rendimiento (opcional)")).toHaveValue("");
+  });
+
+  test("un rol sin permiso de edición sobre lotes no ve la acción de finalizar", async ({ page }) => {
+    await loginAsOperario(page);
+    await page.goto("/lotes");
+
+    await expect(filaLote1(page)).toBeVisible();
+    await expect(filaLote1(page).getByTitle("Finalizar lote")).toHaveCount(0);
+  });
+});
