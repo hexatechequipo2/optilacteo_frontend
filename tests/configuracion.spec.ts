@@ -580,6 +580,37 @@ test.describe("ConfiguracionPage", () => {
     await expect(page.getByText("0 de 0 activos")).toBeVisible();
   });
 
+  test("marca los horarios activos que se superponen, incluso cruzando medianoche y de sábado a domingo", async ({ page }) => {
+    const horario = (id: string, nombre: string, horaInicio: string, horaFin: string, dias: string[], activo = true) => ({
+      id, nombre, horaInicio, horaFin, dias, activo, creadoEn: "2026-09-16T00:00:00.000Z",
+    });
+    await page.evaluate((horarios) => {
+      localStorage.setItem("optilacteo:horarios-silencio", JSON.stringify(horarios));
+    }, [
+      horario("1", "Noche del sábado", "22:00", "06:00", ["sab"]),
+      horario("2", "Madrugada del domingo", "05:00", "07:00", ["dom"]),
+      horario("3", "Mañana del lunes", "08:00", "12:00", ["lun"]),
+      horario("4", "Mediodía del lunes", "11:00", "13:00", ["lun"]),
+      // Se tocan en el borde (12:00 / 14:00) pero no se superponen.
+      horario("5", "Martes temprano", "12:00", "14:00", ["mar"]),
+      horario("6", "Martes tarde", "14:00", "15:00", ["mar"]),
+      // Inactivo: aunque se cruce con otros, no cuenta.
+      horario("7", "Domingo inactivo", "04:00", "08:00", ["dom"], false),
+    ]);
+    await page.reload();
+    await page.getByRole("button", { name: "Horarios de silencio" }).click();
+
+    const aviso = (nombre: string) => page.locator("li").filter({ hasText: nombre }).getByText("Se superpone");
+    await expect(aviso("Noche del sábado")).toHaveAttribute("title", "Se superpone con: Madrugada del domingo");
+    await expect(aviso("Madrugada del domingo")).toHaveAttribute("title", "Se superpone con: Noche del sábado");
+    await expect(aviso("Mañana del lunes")).toHaveAttribute("title", "Se superpone con: Mediodía del lunes");
+    await expect(aviso("Mediodía del lunes")).toHaveAttribute("title", "Se superpone con: Mañana del lunes");
+    await expect(aviso("Martes temprano")).toHaveCount(0);
+    await expect(aviso("Martes tarde")).toHaveCount(0);
+    await expect(aviso("Domingo inactivo")).toHaveCount(0);
+    await expect(page.locator("li").filter({ hasText: "Noche del sábado" })).toContainText("CRUZA MEDIANOCHE");
+  });
+
   test("crear un horario nuevo lo agrega a la lista", async ({ page }) => {
     await page.getByRole("button", { name: "+ Nuevo horario de silencio" }).click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
@@ -806,6 +837,71 @@ test.describe("DestinosProductivosConfigTab", () => {
 
       await expect(page.getByText("La política de retención se guardó correctamente.")).toBeVisible();
       await expect(page.locator("#retencion-periodo")).toHaveValue("30");
+    });
+
+    test("cambiar la acción al vencer actualiza su descripción y queda guardada", async ({ page }) => {
+      await page.getByLabel("Conservar activo").check();
+      await expect(
+        page.getByText("El registro sigue activo y editable aunque se haya cumplido el período. Ninguna opción elimina registros."),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Guardar política" }).click();
+      await expect(page.getByText("La política de retención se guardó correctamente.")).toBeVisible();
+
+      await page.reload();
+      await page.getByRole("button", { name: "Retención de datos" }).click();
+      await expect(page.getByLabel("Conservar activo")).toBeChecked();
+    });
+
+    test("desactivar el aviso anticipado se guarda y persiste", async ({ page }) => {
+      const aviso = page.getByRole("checkbox", { name: /Avisar \d+ días antes del vencimiento/ });
+      await expect(aviso).toBeChecked();
+      await aviso.uncheck();
+      await page.getByRole("button", { name: "Guardar política" }).click();
+      await expect(page.getByText("La política de retención se guardó correctamente.")).toBeVisible();
+
+      await page.reload();
+      await page.getByRole("button", { name: "Retención de datos" }).click();
+      await expect(page.getByRole("checkbox", { name: /Avisar \d+ días antes del vencimiento/ })).not.toBeChecked();
+    });
+
+    test("sin cambios no deja guardar, y volver al valor original lo deshabilita otra vez", async ({ page }) => {
+      const guardar = page.getByRole("button", { name: "Guardar política" });
+      await expect(guardar).toBeDisabled();
+
+      await page.locator("#retencion-periodo").fill("36");
+      await expect(guardar).toBeEnabled();
+      await page.locator("#retencion-periodo").fill("24");
+      await expect(guardar).toBeDisabled();
+    });
+
+    test("Enter con un período inválido no guarda nada", async ({ page }) => {
+      await page.locator("#retencion-periodo").fill("23");
+      await page.locator("#retencion-periodo").press("Enter");
+
+      await expect(page.getByText("La política de retención se guardó correctamente.")).toHaveCount(0);
+      await page.reload();
+      await page.getByRole("button", { name: "Retención de datos" }).click();
+      await expect(page.locator("#retencion-periodo")).toHaveValue("24");
+    });
+
+    test("si no se puede guardar muestra el error y editar lo limpia", async ({ page }) => {
+      // La política vive en localStorage (mock): se simula el almacenamiento lleno.
+      await page.evaluate((key) => {
+        const original = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (k: string, v: string) {
+          if (k === key) throw new DOMException("No queda espacio de almacenamiento.", "QuotaExceededError");
+          return original.call(this, k, v);
+        };
+      }, STORAGE_POLITICA);
+
+      await page.locator("#retencion-periodo").fill("30");
+      await page.getByRole("button", { name: "Guardar política" }).click();
+      // El mock muestra el mensaje del error tal cual (igual que sus validaciones).
+      await expect(page.getByText("No queda espacio de almacenamiento.")).toBeVisible();
+      await expect(page.getByText("La política de retención se guardó correctamente.")).toHaveCount(0);
+
+      await page.locator("#retencion-periodo").fill("31");
+      await expect(page.getByText("No queda espacio de almacenamiento.")).toHaveCount(0);
     });
 
     test("muestra los contadores y solo lista los registros no protegidos", async ({ page }) => {
