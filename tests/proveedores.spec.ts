@@ -752,3 +752,85 @@ test.describe("ProveedoresPage", () => {
   });
 });
 });
+// ---------------------------------------------------------------------------
+// HU-64 — Orden por estabilidad y clasificaciones desconocidas
+// ---------------------------------------------------------------------------
+
+test.describe("ProveedoresPage (HU-64) › Orden por estabilidad", () => {
+  const tambo = (id: number, razonSocial: string) => ({
+    ...PROVEEDORES_MOCK.data[0],
+    id,
+    razonSocial,
+    cuit: `30-0000000${id}-1`,
+  });
+  const LISTA = [
+    tambo(11, "Tambo Moderado"),
+    PROVEEDORES_MOCK.data[1], // transporte: no aplica
+    tambo(12, "Tambo Estable Seis"),
+    tambo(13, "Tambo Sin Datos"),
+    tambo(14, "Tambo Inestable"),
+    tambo(15, "Tambo Estable Dos"),
+    tambo(16, "Tambo Clasificación Nueva"),
+  ];
+  const ok = (clasificacion: string, score: number) => ({ ...ESTABILIDAD_OK, clasificacion, score });
+  const ESTABILIDAD_POR_ID: Record<number, unknown> = {
+    11: ok("moderada", 0.1),
+    12: ok("estable", 0.06),
+    13: { status: "insufficient_data", mensaje: "Sin datos suficientes", cantidadLotes: 4, minimoLotes: 5 },
+    14: ok("inestable", 0.3),
+    15: ok("estable", 0.02),
+    // Una clasificación que el front no conoce se trata como sin datos.
+    16: ok("excelente", 0.01),
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await page.route("**/proveedores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: LISTA, meta: { page: 1, limit: 3, total: LISTA.length, totalPages: 1 } }),
+      });
+    });
+    await mockProveedorDetalle(page, (id) => ({
+      status: 200,
+      body: { ...LISTA.find((p) => p.id === id), estabilidad: ESTABILIDAD_POR_ID[id] },
+    }));
+    await loginAsAdministrador(page);
+    await page.goto("/proveedores");
+    await expect(page.getByRole("row", { name: /Tambo Inestable/ }).getByText("Inestable", { exact: true })).toBeVisible();
+  });
+
+  test("ordena de más a menos confiable, después al revés, y vuelve al orden original", async ({ page }) => {
+    const ordenar = page.getByRole("button", { name: "ESTABILIDAD" });
+    const fila = (n: number) => page.getByRole("table").locator("tbody tr").nth(n);
+
+    await ordenar.click();
+    // Clasificadas por rango y desvío; sin datos y no aplica siempre al final.
+    await expect(fila(0)).toContainText("Tambo Estable Dos");
+    await expect(fila(1)).toContainText("Tambo Estable Seis");
+    await expect(fila(2)).toContainText("Tambo Moderado");
+    await expect(fila(3)).toContainText("Tambo Inestable");
+    await expect(fila(6)).toContainText("Transportes Rápido SA");
+
+    await ordenar.click();
+    await expect(fila(0)).toContainText("Tambo Inestable");
+    await expect(fila(1)).toContainText("Tambo Moderado");
+    await expect(fila(3)).toContainText("Tambo Estable Dos");
+    await expect(fila(6)).toContainText("Transportes Rápido SA");
+
+    await ordenar.click();
+    await expect(fila(0)).toContainText("Tambo Moderado");
+    await expect(fila(1)).toContainText("Transportes Rápido SA");
+    await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(LISTA.length);
+  });
+
+  test("una clasificación desconocida se muestra como sin datos, sin desvío", async ({ page }) => {
+    const nueva = page.getByRole("row", { name: /Tambo Clasificación Nueva/ });
+    await expect(nueva.getByText("Sin datos suficientes")).toBeVisible();
+    await expect(nueva).not.toContainText("%");
+    await expect(page.getByRole("row", { name: /Tambo Sin Datos/ }).getByText("faltan 1 lote")).toBeVisible();
+  });
+});
