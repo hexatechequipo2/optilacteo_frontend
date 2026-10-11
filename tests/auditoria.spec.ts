@@ -246,3 +246,127 @@ test("AuditoriaPage - un Gerente sin permiso de auditoría ve acceso no autoriza
 
   await expect(page.getByText("Acceso no autorizado")).toBeVisible();
 });
+// ---------------------------------------------------------------------------
+// HU-43 — filtros que viajan al backend y paginación
+// ---------------------------------------------------------------------------
+
+test.describe("AuditoriaPage (HU-43) › Filtros y paginación", () => {
+  // Registra los query params de cada GET /audit-log y responde `total`
+  // filas totales (20 por página).
+  async function mockAuditLog(page: import("@playwright/test").Page, total = 2) {
+    const pedidos: URLSearchParams[] = [];
+    await page.route("**/audit-log*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      const params = new URL(route.request().url()).searchParams;
+      pedidos.push(params);
+      const pagina = Number(params.get("page") ?? 1);
+      const items = AUDIT_LOGS_MOCK.map((e) => ({ ...e, id: e.id + pagina * 100, descripcion: `${e.descripcion ?? "Sin descripción"} (página ${pagina})` }));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([items, total]) });
+    });
+    return pedidos;
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/user*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (!new URL(route.request().url()).searchParams.has("limit")) return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            { id: 7, name: "Zoe Ruiz", email: "zoe@empresa.com", isActive: true },
+            { id: 5, name: "Juan Pérez", email: "juan@empresa.com", isActive: true },
+            { id: 9, name: "Ana Gómez", email: "ana@empresa.com", isActive: false },
+          ],
+          total: 3,
+        }),
+      });
+    });
+  });
+
+  test("el filtro de usuario lista por nombre, marca inactivos y manda userId", async ({ page }) => {
+    const pedidos = await mockAuditLog(page);
+    await loginAsGerente(page);
+    await page.goto("/auditoria");
+
+    const usuario = page.getByLabel("Usuario", { exact: true });
+    await expect(usuario.locator("option")).toHaveText([
+      "Todos los usuarios",
+      "Ana Gómez (inactivo)",
+      "Juan Pérez",
+      "Zoe Ruiz",
+    ]);
+    await usuario.selectOption({ label: "Juan Pérez" });
+
+    await expect.poll(() => pedidos.at(-1)?.get("userId")).toBe("5");
+    expect(pedidos.at(-1)?.get("page")).toBe("1");
+  });
+
+  test("el filtro de resultado manda el estado elegido", async ({ page }) => {
+    const pedidos = await mockAuditLog(page);
+    await loginAsGerente(page);
+    await page.goto("/auditoria");
+
+    await page.getByLabel("Resultado", { exact: true }).selectOption({ label: "Fallidas" });
+    await expect.poll(() => pedidos.at(-1)?.get("estado")).toBe("FAILURE");
+
+    await page.getByLabel("Resultado", { exact: true }).selectOption({ label: "Todas" });
+    await expect.poll(() => pedidos.at(-1)?.has("estado")).toBe(false);
+  });
+
+  test("un período válido se manda como inicio y fin del día local", async ({ page }) => {
+    const pedidos = await mockAuditLog(page);
+    await loginAsGerente(page);
+    await page.goto("/auditoria");
+
+    await page.getByLabel("Desde", { exact: true }).fill("2026-09-20");
+    await page.getByLabel("Hasta", { exact: true }).fill("2026-09-26");
+
+    // Córdoba es UTC-3: 00:00 local = 03:00Z y 23:59:59.999 local = 02:59:59.999Z del día siguiente.
+    await expect.poll(() => pedidos.at(-1)?.get("fechaHasta")).toBe("2026-09-27T02:59:59.999Z");
+    expect(pedidos.at(-1)?.get("fechaDesde")).toBe("2026-09-20T03:00:00.000Z");
+  });
+
+  test("pagina de a 20 entradas y deshabilita los extremos", async ({ page }) => {
+    const pedidos = await mockAuditLog(page, 45);
+    await loginAsGerente(page);
+    await page.goto("/auditoria");
+
+    await expect(page.getByText("1 de 3 · 45 resultados")).toBeVisible();
+    const anterior = page.getByRole("button").filter({ has: page.locator("svg.lucide-chevron-left") });
+    const siguiente = page.getByRole("button").filter({ has: page.locator("svg.lucide-chevron-right") });
+    await expect(anterior).toBeDisabled();
+
+    await siguiente.click();
+    await expect(page.getByText("2 de 3 · 45 resultados")).toBeVisible();
+    await expect(page.getByText("Creó el lote LOT-2026-001 (página 2)")).toBeVisible();
+    expect(pedidos.at(-1)?.get("page")).toBe("2");
+    expect(pedidos.at(-1)?.get("limit")).toBe("20");
+
+    await siguiente.click();
+    await expect(page.getByText("3 de 3 · 45 resultados")).toBeVisible();
+    await expect(siguiente).toBeDisabled();
+
+    await anterior.click();
+    await expect(page.getByText("2 de 3 · 45 resultados")).toBeVisible();
+  });
+
+  test("un tipo de acción desconocido se muestra tal como viene", async ({ page }) => {
+    await page.route("**/audit-log*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([[{ ...AUDIT_LOGS_MOCK[0], tipo: "IMPORTACION", accion: "LOTE_IMPORTAR_SUCCESS" }], 1]),
+      });
+    });
+    await loginAsGerente(page);
+    await page.goto("/auditoria");
+
+    await expect(page.getByRole("row", { name: /Juan Pérez/ }).getByText("IMPORTACION")).toBeVisible();
+  });
+});
