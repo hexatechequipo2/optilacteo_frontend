@@ -349,3 +349,53 @@ test("cambiar indicador actualiza el gráfico sin recargar la página", async ({
   await expect(page.locator("svg polyline")).toHaveCount(1);
 });
 });
+
+// HU-39: los períodos sin mediciones llegan como valor:null y tienen que
+// cortar el trazo, no unirse con una recta "puente" sobre el hueco.
+test("un período sin mediciones corta la línea en vez de unir los puntos vecinos", async ({ page }) => {
+  await mockDashboardProduccionDeps(page);
+  await page.route("**/indicadores/evolucion*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...EVOLUCION_MOCK,
+        series: [
+          {
+            parametro: "grasa",
+            // Dos tramos de 2 puntos separados por un hueco → 2 polylines.
+            puntos: [
+              { fecha: "2026-08-18", valor: 3.5 },
+              { fecha: "2026-08-25", valor: 3.7 },
+              { fecha: "2026-09-01", valor: null },
+              { fecha: "2026-09-08", valor: 3.8 },
+              { fecha: "2026-09-15", valor: 3.9 },
+            ],
+          },
+          {
+            parametro: "proteina",
+            // Puntos aislados entre huecos: nada que conectar → sin polyline.
+            puntos: [
+              { fecha: "2026-08-18", valor: null },
+              { fecha: "2026-08-25", valor: 3.1 },
+              { fecha: "2026-09-01", valor: null },
+              { fecha: "2026-09-08", valor: 3.4 },
+              { fecha: "2026-09-15", valor: null },
+            ],
+          },
+        ],
+      }),
+    });
+  });
+  await loginAsResponsableProduccion(page);
+  await page.goto("/dashboard-produccion");
+
+  const lineas = page.locator("svg polyline");
+  await expect(lineas).toHaveCount(2);
+  // Cada tramo une solo sus 2 puntos contiguos.
+  for (const linea of await lineas.all()) {
+    expect((await linea.getAttribute("points"))?.trim().split(" ")).toHaveLength(2);
+  }
+});

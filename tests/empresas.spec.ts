@@ -824,3 +824,99 @@ test.describe("EmpresasPage", () => {
     });
   });
 });
+// ---------------------------------------------------------------------------
+// Combobox de localidad (componente compartido) dentro de NuevaEmpresaModal
+// ---------------------------------------------------------------------------
+
+test.describe("Combobox de localidad › NuevaEmpresaModal", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockEmpresasGet(page);
+    await loginAsAdministrador(page);
+    await page.goto("/empresas");
+    await page.getByRole("button", { name: "+ Nueva empresa" }).click();
+    await expect(page.getByRole("heading", { name: "Nueva empresa" })).toBeVisible();
+  });
+
+  // El <label> del combobox no está asociado al input (ver hallazgos): se
+  // ubica por su placeholder.
+  const localidad = (page: Page) => page.getByPlaceholder("Buscar localidad...");
+  const opciones = (page: Page) => page.getByRole("listbox").getByRole("option");
+
+  async function capturarAlta(page: Page) {
+    const cuerpos: Record<string, unknown>[] = [];
+    await page.route("**/empresa", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      cuerpos.push(route.request().postDataJSON());
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: 3, isActive: true, name: "X", plan: "starter" }) });
+    });
+    return cuerpos;
+  }
+
+  test("filtra mientras se escribe, sin distinguir mayúsculas, y avisa si no hay coincidencias", async ({ page }) => {
+    await localidad(page).fill("jesus m");
+    await expect(opciones(page)).toHaveText(["JESUS MARIA"]);
+
+    await localidad(page).fill("zzzz");
+    await expect(page.getByRole("listbox")).toContainText("No se encontraron resultados");
+    await expect(opciones(page)).toHaveCount(0);
+  });
+
+  test("con flechas y Enter elige una opción, y la localidad viaja en la dirección", async ({ page }) => {
+    const cuerpos = await capturarAlta(page);
+    await page.getByLabel("Nombre *").fill("Lácteos Norte");
+    await page.getByLabel("Dirección").fill("San Martín 100");
+
+    await localidad(page).fill("maria");
+    await expect(opciones(page).first()).toHaveText("ADELIA MARIA");
+    await localidad(page).press("ArrowDown");
+    await localidad(page).press("ArrowDown");
+    await localidad(page).press("ArrowUp");
+    await localidad(page).press("Enter");
+
+    await expect(localidad(page)).toHaveValue("ARSENAL JOSE MARIA ROJAS");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Crear empresa" }).click();
+    await expect.poll(() => cuerpos[0]?.direccion).toBe("San Martín 100, ARSENAL JOSE MARIA ROJAS");
+  });
+
+  test("con el mouse elige una opción y la cruz la limpia", async ({ page }) => {
+    await localidad(page).fill("villa mari");
+    await opciones(page).filter({ hasText: /^VILLA MARIA$/ }).click();
+    await expect(localidad(page)).toHaveValue("VILLA MARIA");
+
+    // Con valor elegido y la lista cerrada aparece la cruz.
+    await page.getByLabel("Nombre *").click();
+    await page.getByRole("button", { name: "Limpiar selección" }).click();
+    await expect(localidad(page)).toHaveValue("");
+  });
+
+  test("tocar afuera descarta lo escrito y vuelve a la opción elegida", async ({ page }) => {
+    await localidad(page).fill("rio cuar");
+    await localidad(page).press("Enter");
+    await expect(localidad(page)).toHaveValue("RIO CUARTO");
+
+    await localidad(page).fill("otra cosa");
+    await page.getByLabel("Nombre *").click();
+    await expect(localidad(page)).toHaveValue("RIO CUARTO");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+
+    // Con la lista cerrada y el foco en el campo, flecha abajo la vuelve a abrir.
+    await localidad(page).focus();
+    await page.getByLabel("Nombre *").click();
+    await localidad(page).press("ArrowDown");
+    await expect(page.getByRole("listbox")).toBeVisible();
+  });
+
+  test("borrar todo el texto deja la localidad vacía", async ({ page }) => {
+    const cuerpos = await capturarAlta(page);
+    await page.getByLabel("Nombre *").fill("Lácteos Norte");
+    await localidad(page).fill("jesus maria");
+    await localidad(page).press("Enter");
+    await localidad(page).fill("");
+
+    await page.getByRole("button", { name: "Crear empresa" }).click();
+    await expect.poll(() => cuerpos.length).toBe(1);
+    expect("direccion" in cuerpos[0]).toBe(false);
+  });
+});
