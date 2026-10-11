@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, History, Link2, Power, PowerOff } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Select } from "../../../components/ui/Select";
@@ -113,9 +113,17 @@ export function RegistroSensoresTab({
   // muestra a quien tiene el módulo de auditoría.
   const puedeVerAuditoriaSensor = puede("auditoria", "ver");
 
+  // El debounce lee los filtros al dispararse, no al programarse: si en esos
+  // 400 ms se cambió tipo/ubicación/estado, no hay que pisarlos con la copia
+  // vieja.
+  const filtrosRef = useRef(filtros);
+  filtrosRef.current = filtros;
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      onFiltrosChange({ ...filtros, marca: marcaInput || undefined });
+      const actuales = filtrosRef.current;
+      if ((actuales.marca ?? "") === marcaInput) return;
+      onFiltrosChange({ ...actuales, marca: marcaInput || undefined });
     }, MARCA_DEBOUNCE_MS);
     return () => clearTimeout(timer);
     // Solo re-dispara con marcaInput: si dependiera de filtros/onFiltrosChange

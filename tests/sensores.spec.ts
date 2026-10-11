@@ -1120,8 +1120,6 @@ test.describe("RegistroSensoresTab (HU-17) › Filtros y errores", () => {
     await loginAsGerente(page);
     await page.goto("/sensores");
     await expect(page.getByRole("row", { name: /Sensor pH Laboratorio/ })).toBeVisible();
-    // Primero la marca y se espera su pedido: cambiar un select mientras el
-    // debounce de marca está pendiente lo pisa (ver hallazgos).
     await page.getByLabel("Marca", { exact: true }).fill("Hanna");
     await expect.poll(() => pedidos.at(-1)?.get("marca")).toBe("Hanna");
 
@@ -1137,6 +1135,21 @@ test.describe("RegistroSensoresTab (HU-17) › Filtros y errores", () => {
     // Volver a "todos" saca el parámetro.
     await page.getByLabel("Tipo", { exact: true }).selectOption({ index: 0 });
     await expect.poll(() => pedidos.at(-1)?.has("tipo")).toBe(false);
+  });
+
+  test("cambiar otro filtro mientras corre el debounce de marca no se pierde", async ({ page }) => {
+    const { pedidos } = await prepararRegistro(page);
+    await loginAsGerente(page);
+    await page.goto("/sensores");
+    await expect(page.getByRole("row", { name: /Sensor pH Laboratorio/ })).toBeVisible();
+
+    // Tipo se elige antes de que venza el debounce de 400 ms de la marca.
+    await page.getByLabel("Marca", { exact: true }).fill("Hanna");
+    await page.getByLabel("Tipo", { exact: true }).selectOption({ label: "Digital" });
+
+    await expect.poll(() => pedidos.at(-1)?.get("marca")).toBe("Hanna");
+    expect(pedidos.at(-1)?.get("tipo")).toBe("digital");
+    await expect(page.getByLabel("Tipo", { exact: true })).toHaveValue("digital");
   });
 
   test("el filtro por marca espera a que se termine de escribir", async ({ page }) => {
