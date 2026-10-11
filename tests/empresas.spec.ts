@@ -908,6 +908,25 @@ test.describe("Combobox de localidad › NuevaEmpresaModal", () => {
     await expect(page.getByRole("listbox")).toBeVisible();
   });
 
+  test("Escape cierra la lista sin cerrar el formulario, y un segundo Escape cierra el modal", async ({ page }) => {
+    await page.getByLabel("Nombre *").fill("Lácteos Norte");
+    await localidad(page).fill("rio cuar");
+    await localidad(page).press("Enter");
+    await localidad(page).fill("algo a medio escribir");
+    await expect(page.getByRole("listbox")).toBeVisible();
+
+    await localidad(page).press("Escape");
+
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await expect(localidad(page)).toHaveValue("RIO CUARTO");
+    await expect(page.getByRole("heading", { name: "Nueva empresa" })).toBeVisible();
+    await expect(page.getByLabel("Nombre *")).toHaveValue("Lácteos Norte");
+
+    // Con la lista ya cerrada, Escape vuelve a cerrar el modal como siempre.
+    await localidad(page).press("Escape");
+    await expect(page.getByRole("heading", { name: "Nueva empresa" })).toHaveCount(0);
+  });
+
   test("borrar todo el texto deja la localidad vacía", async ({ page }) => {
     const cuerpos = await capturarAlta(page);
     await page.getByLabel("Nombre *").fill("Lácteos Norte");

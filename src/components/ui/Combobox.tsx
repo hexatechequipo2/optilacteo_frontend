@@ -85,6 +85,9 @@ export function Combobox({
       e.preventDefault();
       if (filtered[highlighted]) select(filtered[highlighted]);
     } else if (e.key === "Escape") {
+      // Con la lista abierta, Escape solo la cierra: sin esto burbujea hasta
+      // el listener de Modal (document) y cierra el formulario entero.
+      e.stopPropagation();
       setIsOpen(false);
       setQuery(value);
     }
