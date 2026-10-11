@@ -697,3 +697,131 @@ test.describe("TrazabilidadLoteModal › Generar reporte PDF (HU-45)", () => {
     ).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// HU-32 / HU-34 / HU-37 — detalle de cada tipo de evento y destino productivo
+// ---------------------------------------------------------------------------
+
+test.describe("HistorialTrazabilidadModal (HU-32) › Detalle por tipo de evento", () => {
+  const evento = (tipo: string, descripcion: string, detalle: Record<string, unknown>) => ({
+    tipo,
+    fecha: "2026-08-02T12:00:00.000Z",
+    descripcion,
+    detalle,
+  });
+
+  const EVENTOS = [
+    evento("RECEPCION", "Ingreso sin datos", {}),
+    evento("RECEPCION", "Ingreso de materia prima nueva", { materiaPrima: "suero", cantidad: null }),
+    evento("CLASIFICACION", "Clasificación pendiente", {}),
+    evento("REVISION_CALIDAD", "Revisión aprobada", { decision: "aprobado", justificacion: "Parámetros dentro de rango" }),
+    evento("REVISION_CALIDAD", "Revisión rechazada", { decision: "rechazado" }),
+    evento("CAMBIO_UBICACION", "Primera ubicación", { ubicacionAnterior: null, ubicacionNueva: "camara_frigorifica_1" }),
+    evento("CAMBIO_UBICACION", "Ubicación sin destino", { ubicacionAnterior: "laboratorio" }),
+    evento("INGRESO_CAMARA", "Ingreso con SKU", { skuNombre: "Dulce de leche 500 g", skuId: 3, cantidad: 120 }),
+    evento("INGRESO_CAMARA", "Ingreso sin nombre de SKU", { skuId: 7 }),
+    evento("CONSUMO_PARCIAL", "Consumo sin lote destino", { cantidad: 250 }),
+    evento("FINALIZACION", "Finalizado sin rendimiento", { rendimiento: null }),
+    evento("FINALIZACION", "Finalizado con rendimiento sin unidad", { rendimiento: 80, unidadRendimiento: null }),
+    evento("RECOMENDACION_DESTINO", "Recomendación con divergencia", {
+      destinoRecomendadoNombre: "Queso",
+      destinoRealNombre: "Yogur",
+      divergencia: true,
+      justificacion: "Stock de queso completo",
+      usuarioId: 4,
+    }),
+    evento("RECOMENDACION_DESTINO", "Recomendación sin datos", {}),
+    evento("AJUSTE_STOCK", "Evento que el front todavía no conoce", {}),
+  ];
+
+  const HISTORIAL_DESTINO = [
+    {
+      id: 3, loteId: 1, destinoProductivoId: 2, destinoProductivoNombre: "Yogur",
+      destinoAnteriorId: 1, destinoAnteriorNombre: "Queso", usuarioId: 4,
+      origen: "manual", recomendacionDestinoId: null, createdAt: "2026-08-03T15:00:00.000Z",
+    },
+    {
+      id: 2, loteId: 1, destinoProductivoId: 1, destinoProductivoNombre: "Queso",
+      destinoAnteriorId: null, destinoAnteriorNombre: null, usuarioId: 9,
+      origen: "recomendacion_ml", recomendacionDestinoId: null, createdAt: "2026-08-02T15:00:00.000Z",
+    },
+    {
+      id: 1, loteId: 1, destinoProductivoId: 1, destinoProductivoNombre: "Queso",
+      destinoAnteriorId: null, destinoAnteriorNombre: null, usuarioId: 2,
+      origen: "manual", recomendacionDestinoId: null, createdAt: "2026-08-01T15:00:00.000Z",
+    },
+  ];
+
+  async function abrirHistorial(page: Page, historialDestino: unknown[]) {
+    await mockTrazabilidadDeps(page);
+    await page.route(/\/lotes\/\d+\/trazabilidad/, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ loteId: 1, codigoLote: "LOT-2026-001", eventos: EVENTOS }),
+      }),
+    );
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(historialDestino) }),
+    );
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+    await abrirModalPorTitulo(page, "LOT-2026-001", "Historial de trazabilidad completo");
+    return page.getByRole("dialog");
+  }
+
+  const itemEvento = (dialog: import("@playwright/test").Locator, descripcion: string) =>
+    dialog.locator("li").filter({ hasText: descripcion });
+
+  test("cada tipo de evento muestra su resumen y tolera datos faltantes", async ({ page }) => {
+    const dialog = await abrirHistorial(page, []);
+
+    await expect(dialog.locator("ol").last().locator("> li")).toHaveCount(EVENTOS.length);
+    await expect(itemEvento(dialog, "Ingreso sin datos")).toContainText("Recepción—");
+    await expect(itemEvento(dialog, "Ingreso de materia prima nueva")).toContainText("suero");
+    await expect(itemEvento(dialog, "Ingreso de materia prima nueva")).not.toContainText(" L");
+    await expect(itemEvento(dialog, "Revisión aprobada")).toContainText("Aprobado");
+    await expect(itemEvento(dialog, "Revisión aprobada")).toContainText("Parámetros dentro de rango");
+    await expect(itemEvento(dialog, "Revisión rechazada")).toContainText("Rechazado");
+    await expect(itemEvento(dialog, "Primera ubicación")).toContainText("Sin ubicación previa → Cámara frigorífica 1");
+    await expect(itemEvento(dialog, "Ubicación sin destino")).toContainText("Laboratorio → —");
+    await expect(itemEvento(dialog, "Ingreso con SKU")).toContainText("Dulce de leche 500 g · 120");
+    await expect(itemEvento(dialog, "Ingreso sin nombre de SKU")).toContainText("SKU #7");
+    await expect(itemEvento(dialog, "Consumo sin lote destino")).toContainText("250 L → —");
+    await expect(itemEvento(dialog, "Finalizado sin rendimiento")).not.toContainText("Rendimiento");
+    await expect(itemEvento(dialog, "Finalizado con rendimiento sin unidad")).toContainText("Rendimiento: 80");
+
+    const conDivergencia = itemEvento(dialog, "Recomendación con divergencia");
+    await expect(conDivergencia).toContainText("Recomendado: Queso · Elegido: Yogur");
+    await expect(conDivergencia).toContainText("Divergencia justificada");
+    await expect(conDivergencia).toContainText("Justificación: Stock de queso completo");
+    await expect(conDivergencia).toContainText("Usuario ID: 4");
+    const sinDatos = itemEvento(dialog, "Recomendación sin datos");
+    await expect(sinDatos).toContainText("Recomendado: — · Elegido: —");
+    await expect(sinDatos).not.toContainText("Divergencia");
+
+    // Un tipo fuera del enum vigente usa la etiqueta genérica.
+    await expect(itemEvento(dialog, "Evento que el front todavía no conoce")).toContainText("Evento");
+  });
+
+  test("muestra el destino vigente y solo las asignaciones manuales", async ({ page }) => {
+    const dialog = await abrirHistorial(page, HISTORIAL_DESTINO);
+
+    await expect(dialog.getByText("DESTINO PRODUCTIVO")).toBeVisible();
+    await expect(dialog).toContainText("Destino vigente: Yogur");
+    const asignaciones = dialog.locator("ol").first().locator("> li");
+    // La de origen recomendacion_ml ya figura en el timeline: no se repite.
+    await expect(asignaciones).toHaveCount(2);
+    await expect(asignaciones.nth(0)).toContainText("Queso → Yogur");
+    await expect(asignaciones.nth(0)).toContainText("Usuario ID: 4");
+    await expect(asignaciones.nth(1)).not.toContainText("→");
+    await expect(asignaciones.nth(1)).toContainText("Usuario ID: 2");
+  });
+
+  test("sin historial de destino no muestra la sección", async ({ page }) => {
+    const dialog = await abrirHistorial(page, []);
+
+    await expect(dialog.getByRole("heading", { name: "Historial de trazabilidad completo" })).toBeVisible();
+    await expect(dialog.getByText("DESTINO PRODUCTIVO")).toHaveCount(0);
+  });
+});

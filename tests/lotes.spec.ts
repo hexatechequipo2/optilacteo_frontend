@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import {
   loginAsResponsableCalidad,
   loginAsAdministrador,
+  loginAsGerente,
   loginAsOperario,
   loginAsResponsableProduccion,
   quitarPermisos,
@@ -2226,5 +2227,336 @@ test.describe("FinalizarLoteModal (HU-62)", () => {
 
     await expect(filaLote1(page)).toBeVisible();
     await expect(filaLote1(page).getByTitle("Finalizar lote")).toHaveCount(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-63 · AuditoriaModal — quién creó y modificó un lote
+// ---------------------------------------------------------------------------
+
+test.describe("AuditoriaModal (HU-63) › Lotes", () => {
+  test.use({ timezoneId: "America/Argentina/Cordoba", locale: "es-AR" });
+
+  const LOTE_AUDITADO = {
+    ...LOTE_1,
+    auditoria: {
+      creadoPor: { userId: 3, userEmail: "calidad@optilacteo.com", fecha: "2026-08-01T12:00:00.000Z" },
+      ultimaModificacion: { userId: 2, userEmail: "gerente@optilacteo.com", fecha: "2026-08-03T18:30:00.000Z" },
+    },
+  };
+  // Viene el bloque pero sin eventos (registros previos a HU-63).
+  const LOTE_SIN_DATOS = { ...LOTE_2, auditoria: {} };
+
+  test.beforeEach(async ({ page }) => {
+    await mockLotesDeps(page);
+    await page.route("**/lotes*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...LOTES_PAGINATED_MOCK, data: [LOTE_AUDITADO, LOTE_SIN_DATOS] }),
+      });
+    });
+  });
+
+  test("muestra quién creó y quién modificó el lote, con fecha local", async ({ page }) => {
+    await loginAsGerente(page);
+    await page.goto("/lotes");
+
+    await page.getByRole("row", { name: /LOT-2026-001/ }).getByTitle("Auditoría").click();
+
+    const modal = page.getByRole("dialog");
+    await expect(modal.getByRole("heading", { name: "Auditoría — LOT-2026-001" })).toBeVisible();
+    await expect(modal).toContainText("Historial de creación y modificación de este registro.");
+    await expect(modal).toContainText("calidad@optilacteo.com · 01/08/2026, 09:00 a. m.");
+    await expect(modal).toContainText("gerente@optilacteo.com · 03/08/2026, 03:30 p. m.");
+
+    await modal.getByRole("button", { name: "Cerrar" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("sin eventos registrados lo aclara en cada sección", async ({ page }) => {
+    await loginAsGerente(page);
+    await page.goto("/lotes");
+
+    await page.getByRole("row", { name: /LOT-2026-002/ }).getByTitle("Auditoría").click();
+
+    await expect(page.getByRole("dialog")).toContainText("Sin datos de creación disponibles.");
+    await expect(page.getByRole("dialog")).toContainText("Sin modificaciones posteriores.");
+  });
+
+  test("un rol sin permiso de auditoría no ve la acción", async ({ page }) => {
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    await expect(page.getByRole("row", { name: /LOT-2026-001/ })).toBeVisible();
+    await expect(page.getByRole("row", { name: /LOT-2026-001/ }).getByTitle("Auditoría")).toHaveCount(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-19 / HU-20 · Historiales del modal de mediciones: filtros, export,
+// errores y paginación
+// ---------------------------------------------------------------------------
+
+const SENSOR_DEL_LOTE_1 = {
+  id: 1,
+  nombre: "Sensor pH Laboratorio",
+  tipo: "analogico",
+  parametro: "ph",
+  ubicacion: "laboratorio",
+  rangoMinFavor: 6.0,
+  rangoMaxFavor: 7.5,
+  estado: "activo",
+  empresaId: 10,
+  loteActualId: 1,
+  createdAt: "2026-08-01T00:00:00.000Z",
+  updatedAt: "2026-08-01T00:00:00.000Z",
+};
+
+const esApiGet = (route: import("@playwright/test").Route) => {
+  const rt = route.request().resourceType();
+  return route.request().method() === "GET" && (rt === "fetch" || rt === "xhr");
+};
+
+// Los Input de fecha de estos tabs no tienen id: su <label> no queda asociado
+// (ver hallazgos), así que se ubican por posición.
+const fechaDesde = (dialog: import("@playwright/test").Locator) => dialog.locator("input[type='date']").nth(0);
+const fechaHasta = (dialog: import("@playwright/test").Locator) => dialog.locator("input[type='date']").nth(1);
+
+const paginaAnterior = (dialog: import("@playwright/test").Locator) =>
+  dialog.getByRole("button").filter({ has: dialog.page().locator("svg.lucide-chevron-left") });
+const paginaSiguiente = (dialog: import("@playwright/test").Locator) =>
+  dialog.getByRole("button").filter({ has: dialog.page().locator("svg.lucide-chevron-right") });
+
+test.describe("HistorialLecturasLoteTab (HU-19) › Filtros, export y paginación", () => {
+  type Control = { status: number; total: number; rangoAmplio: boolean; pedidos: URLSearchParams[] };
+
+  function lectura(id: number, origen: "sensor" | "manual" = "sensor") {
+    return {
+      id,
+      valor: 6.8,
+      unidad: "pH",
+      sensorNombre: "Sensor pH Laboratorio",
+      parametro: "pH",
+      loteCodigo: "LOT-2026-001",
+      timestampLectura: "2026-08-01T08:00:00.000Z",
+      estado: origen === "manual" ? "FUERA_DE_RANGO" : "NORMAL",
+      origen,
+    };
+  }
+
+  async function abrir(page: Page, control: Control) {
+    await mockLotesDeps(page);
+    await page.route("**/sensores*", (route) =>
+      esApiGet(route)
+        ? route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([SENSOR_DEL_LOTE_1]) })
+        : route.fallback(),
+    );
+    await page.route("**/sensores/lecturas/historial-mediciones*", async (route) => {
+      if (!esApiGet(route)) return route.fallback();
+      const params = new URL(route.request().url()).searchParams;
+      control.pedidos.push(params);
+      if (control.status !== 200) return route.fulfill({ status: control.status, body: "{}" });
+      const pagina = Number(params.get("page") ?? 1);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [lectura(pagina * 10), lectura(pagina * 10 + 1, "manual")],
+          total: control.total,
+          page: pagina,
+          limit: 20,
+          rangoAmplio: control.rangoAmplio,
+        }),
+      });
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.getByRole("row").filter({ hasText: "LOT-2026-001" }).getByTitle("Mediciones").click();
+    return page.getByRole("dialog");
+  }
+
+  const nuevoControl = (parcial: Partial<Control> = {}): Control => ({
+    status: 200,
+    total: 2,
+    rangoAmplio: false,
+    pedidos: [],
+    ...parcial,
+  });
+
+  test("filtra por el lote y fechas, y 'Limpiar filtros' vuelve al listado completo", async ({ page }) => {
+    const control = nuevoControl();
+    const dialog = await abrir(page, control);
+    await expect(dialog.getByRole("row").filter({ hasText: "Sensor pH Laboratorio" }).first()).toBeVisible();
+    expect(control.pedidos.at(-1)?.get("loteCodigo")).toBe("LOT-2026-001");
+    await expect(dialog.getByRole("button", { name: "Limpiar filtros" })).toHaveCount(0);
+
+    await fechaDesde(dialog).fill("2026-08-01");
+    await fechaHasta(dialog).fill("2026-08-31");
+    await dialog.getByRole("button", { name: "Buscar" }).click();
+    await expect.poll(() => control.pedidos.at(-1)?.get("fechaFin")).toBe("2026-08-31");
+    expect(control.pedidos.at(-1)?.get("fechaInicio")).toBe("2026-08-01");
+
+    await dialog.getByRole("button", { name: "Limpiar filtros" }).click();
+    await expect.poll(() => control.pedidos.at(-1)?.has("fechaInicio")).toBe(false);
+    await expect(fechaDesde(dialog)).toHaveValue("");
+    await expect(dialog.getByRole("button", { name: "Limpiar filtros" })).toHaveCount(0);
+  });
+
+  test("marca los ingresos manuales y avisa cuando el rango supera 30 días", async ({ page }) => {
+    const dialog = await abrir(page, nuevoControl({ rangoAmplio: true }));
+
+    const manual = dialog.getByRole("row").filter({ hasText: "Fuera de rango" });
+    await expect(manual.getByText("Manual", { exact: true })).toBeVisible();
+    await expect(
+      dialog.getByText("El rango de fechas seleccionado supera los 30 días: la consulta puede tardar más de lo habitual."),
+    ).toBeVisible();
+  });
+
+  test("exporta el historial filtrado a CSV", async ({ page }) => {
+    const control = nuevoControl();
+    const dialog = await abrir(page, control);
+    const exportados: URLSearchParams[] = [];
+    await page.route("**/sensores/lecturas/historial-mediciones/export*", (route) => {
+      exportados.push(new URL(route.request().url()).searchParams);
+      return route.fulfill({ status: 200, contentType: "text/csv", body: "fecha,valor\n" });
+    });
+
+    const descarga = page.waitForEvent("download");
+    await dialog.getByRole("button", { name: "Exportar CSV" }).click();
+
+    expect((await descarga).suggestedFilename()).toMatch(/^historial-mediciones-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(exportados[0].get("loteCodigo")).toBe("LOT-2026-001");
+  });
+
+  test("si falla el export muestra el error", async ({ page }) => {
+    const dialog = await abrir(page, nuevoControl());
+    await page.route("**/sensores/lecturas/historial-mediciones/export*", (route) =>
+      route.fulfill({ status: 500, body: "" }),
+    );
+
+    await dialog.getByRole("button", { name: "Exportar CSV" }).click();
+
+    await expect(dialog.getByText("No se pudo descargar el CSV.")).toBeVisible();
+  });
+
+  test("si falla la carga ofrece reintentar", async ({ page }) => {
+    const control = nuevoControl({ status: 500 });
+    const dialog = await abrir(page, control);
+    await expect(dialog.getByText("No se pudo cargar el historial de mediciones.")).toBeVisible();
+
+    control.status = 200;
+    await dialog.getByRole("button", { name: "Reintentar" }).click();
+
+    await expect(dialog.getByText("No se pudo cargar el historial de mediciones.")).toHaveCount(0);
+    await expect(dialog.getByRole("row").filter({ hasText: "Sensor pH Laboratorio" }).first()).toBeVisible();
+  });
+
+  test("pagina de a 20 mediciones", async ({ page }) => {
+    const control = nuevoControl({ total: 41 });
+    const dialog = await abrir(page, control);
+
+    await expect(dialog.getByText("1 de 3 · 41 mediciones")).toBeVisible();
+    await expect(paginaAnterior(dialog)).toBeDisabled();
+    await paginaSiguiente(dialog).click();
+    await expect(dialog.getByText("2 de 3 · 41 mediciones")).toBeVisible();
+    expect(control.pedidos.at(-1)?.get("page")).toBe("2");
+    await paginaSiguiente(dialog).click();
+    await expect(paginaSiguiente(dialog)).toBeDisabled();
+    await paginaAnterior(dialog).click();
+    await expect(dialog.getByText("2 de 3 · 41 mediciones")).toBeVisible();
+  });
+});
+
+test.describe("HistorialMedicionesManualesTab (HU-20) › Filtros, errores y paginación", () => {
+  type Control = { status: number; total: number; pedidos: URLSearchParams[] };
+
+  async function abrir(page: Page, control: Control) {
+    await mockLotesDeps(page);
+    await page.route(/\/lotes\/\d+\/mediciones-manuales/, async (route) => {
+      if (!esApiGet(route)) return route.fallback();
+      const params = new URL(route.request().url()).searchParams;
+      control.pedidos.push(params);
+      if (control.status !== 200) return route.fulfill({ status: control.status, body: "{}" });
+      const pagina = Number(params.get("page") ?? 1);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            { id: pagina * 10, parametro: "ph", valor: 6.7, estado: "NORMAL", createdAt: "2026-08-01T10:00:00.000Z" },
+            { id: pagina * 10 + 1, parametro: "grasa", valor: 3.4, estado: "FUERA_DE_RANGO", createdAt: "2026-08-01T10:05:00.000Z" },
+            // Un parámetro que el front no conoce se muestra tal cual.
+            { id: pagina * 10 + 2, parametro: "lactosa", valor: 4.8, estado: "SIN_UMBRAL_CONFIGURADO", createdAt: "2026-08-01T10:10:00.000Z" },
+          ],
+          total: control.total,
+          page: pagina,
+          limit: 20,
+        }),
+      });
+    });
+    // Sin sensor asociado: el historial es el de mediciones manuales.
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes");
+    await page.getByRole("row").filter({ hasText: "LOT-2026-001" }).getByTitle("Mediciones").click();
+    return page.getByRole("dialog");
+  }
+
+  test("muestra parámetro, valor con unidad y estado de cada medición", async ({ page }) => {
+    const dialog = await abrir(page, { status: 200, total: 3, pedidos: [] });
+
+    await expect(dialog.getByRole("row").filter({ hasText: "Materia grasa" })).toContainText("3.4 %");
+    await expect(dialog.getByRole("row").filter({ hasText: "Materia grasa" })).toContainText("Fuera de rango");
+    // pH no tiene unidad.
+    await expect(dialog.getByRole("row").filter({ hasText: "Normal" })).toContainText("6.7");
+    await expect(dialog.getByRole("row").filter({ hasText: "lactosa" })).toContainText("Sin umbral configurado");
+  });
+
+  test("filtra por fechas, valida el rango y limpia los filtros", async ({ page }) => {
+    const control: Control = { status: 200, total: 3, pedidos: [] };
+    const dialog = await abrir(page, control);
+    await expect(dialog.getByRole("row").filter({ hasText: "Materia grasa" })).toBeVisible();
+
+    await fechaDesde(dialog).fill("2026-08-10");
+    await fechaHasta(dialog).fill("2026-08-01");
+    await dialog.getByRole("button", { name: "Buscar" }).click();
+    await expect(dialog.getByText("La fecha hasta no puede ser anterior a la fecha desde.")).toBeVisible();
+    expect(control.pedidos.at(-1)?.has("fechaInicio")).toBe(false);
+
+    await fechaHasta(dialog).fill("2026-08-20");
+    await dialog.getByRole("button", { name: "Buscar" }).click();
+    await expect(dialog.getByText("La fecha hasta no puede ser anterior a la fecha desde.")).toHaveCount(0);
+    await expect.poll(() => control.pedidos.at(-1)?.get("fechaInicio")).toBe("2026-08-10");
+    expect(control.pedidos.at(-1)?.get("fechaFin")).toBe("2026-08-20");
+
+    await dialog.getByRole("button", { name: "Limpiar filtros" }).click();
+    await expect.poll(() => control.pedidos.at(-1)?.has("fechaInicio")).toBe(false);
+    await expect(fechaHasta(dialog)).toHaveValue("");
+  });
+
+  test("si falla la carga ofrece reintentar", async ({ page }) => {
+    const control: Control = { status: 500, total: 3, pedidos: [] };
+    const dialog = await abrir(page, control);
+    await expect(dialog.getByText("No se pudo cargar el historial de mediciones manuales.")).toBeVisible();
+
+    control.status = 200;
+    await dialog.getByRole("button", { name: "Reintentar" }).click();
+    await expect(dialog.getByRole("row").filter({ hasText: "Materia grasa" })).toBeVisible();
+  });
+
+  test("pagina de a 20 mediciones", async ({ page }) => {
+    const control: Control = { status: 200, total: 25, pedidos: [] };
+    const dialog = await abrir(page, control);
+
+    await expect(dialog.getByText("1 de 2 · 25 mediciones")).toBeVisible();
+    await paginaSiguiente(dialog).click();
+    await expect(dialog.getByText("2 de 2 · 25 mediciones")).toBeVisible();
+    expect(control.pedidos.at(-1)?.get("page")).toBe("2");
+    await expect(paginaSiguiente(dialog)).toBeDisabled();
+    await paginaAnterior(dialog).click();
+    await expect(dialog.getByText("1 de 2 · 25 mediciones")).toBeVisible();
   });
 });
