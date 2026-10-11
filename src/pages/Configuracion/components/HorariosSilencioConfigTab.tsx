@@ -5,6 +5,7 @@ import { Badge } from "../../../components/ui/Badge";
 import { Toggle } from "../../../components/ui/Toggle";
 import { ConfirmModal } from "../../../components/ui/ConfirmModal";
 import { useHorariosSilencio } from "../../../hooks/useHorariosSilencio";
+import { usePermisos } from "../../../hooks/usePermisos";
 import { calcularSolapamientos } from "../../../utils/solapamientoHorarioSilencio";
 import {
   DIAS_SEMANA,
@@ -30,12 +31,22 @@ function etiquetaDias(dias: HorarioSilencio["dias"]): string {
 // silencio (AC1). Ver horarioSilencio.types.ts para el detalle de qué es
 // mock y qué se espera del backend cuando exista.
 export function HorariosSilencioConfigTab() {
-  const { horarios, crear, editar, eliminar, toggleActivo } = useHorariosSilencio();
+  const { horarios, crear, editar, eliminar, toggleActivo } =
+    useHorariosSilencio();
+  // POST/PATCH/DELETE /notificaciones/horarios-silencio exigen
+  // monitoreo_alertas:editar; GET, monitoreo_alertas:ver.
+  const { puede } = usePermisos();
+  const puedeEditar = puede("monitoreo_alertas", "editar");
   const [modalAbierto, setModalAbierto] = useState(false);
-  const [horarioEditando, setHorarioEditando] = useState<HorarioSilencio | null>(null);
-  const [horarioAEliminar, setHorarioAEliminar] = useState<HorarioSilencio | null>(null);
+  const [horarioEditando, setHorarioEditando] =
+    useState<HorarioSilencio | null>(null);
+  const [horarioAEliminar, setHorarioAEliminar] =
+    useState<HorarioSilencio | null>(null);
 
-  const solapamientos = useMemo(() => calcularSolapamientos(horarios), [horarios]);
+  const solapamientos = useMemo(
+    () => calcularSolapamientos(horarios),
+    [horarios],
+  );
   const activos = horarios.filter((h) => h.activo).length;
 
   const abrirNuevo = () => {
@@ -70,8 +81,8 @@ export function HorariosSilencioConfigTab() {
                 Horarios de silencio
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Ventanas horarias en las que no se notifican alertas informativas. Podés
-                configurar varias en simultáneo.
+                Ventanas horarias en las que no se notifican alertas
+                informativas. Podés configurar varias en simultáneo.
               </p>
             </div>
           </div>
@@ -90,8 +101,8 @@ export function HorariosSilencioConfigTab() {
             El silencio aplica únicamente a alertas informativas.
           </span>{" "}
           Las alertas <span className="font-semibold">críticas</span> y de{" "}
-          <span className="font-semibold">advertencia</span> nunca se silencian: se
-          notifican siempre, incluso dentro de estas ventanas.
+          <span className="font-semibold">advertencia</span> nunca se silencian:
+          se notifican siempre, incluso dentro de estas ventanas.
         </p>
       </div>
 
@@ -100,9 +111,11 @@ export function HorariosSilencioConfigTab() {
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
             Horarios configurados
           </h3>
-          <Button onClick={abrirNuevo} className="!w-auto px-4">
-            + Nuevo horario de silencio
-          </Button>
+          {puedeEditar && (
+            <Button onClick={abrirNuevo} className="!w-auto px-4">
+              + Nuevo horario de silencio
+            </Button>
+          )}
         </div>
 
         {horarios.length === 0 ? (
@@ -155,26 +168,30 @@ export function HorariosSilencioConfigTab() {
                     <Badge variant={horario.activo ? "success" : "neutral"}>
                       {horario.activo ? "Activo" : "Inactivo"}
                     </Badge>
-                    <Toggle
-                      checked={horario.activo}
-                      onChange={() => toggleActivo(horario.id)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => abrirEdicion(horario)}
-                      title="Editar"
-                      className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setHorarioAEliminar(horario)}
-                      title="Eliminar"
-                      className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                    {puedeEditar && (
+                      <>
+                        <Toggle
+                          checked={horario.activo}
+                          onChange={() => toggleActivo(horario.id)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => abrirEdicion(horario)}
+                          title="Editar"
+                          className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHorarioAEliminar(horario)}
+                          title="Eliminar"
+                          className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </li>
               );

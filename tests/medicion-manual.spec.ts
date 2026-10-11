@@ -209,7 +209,7 @@ test.describe("MedicionManualPage", () => {
 
   test.describe("HistorialMedicionesManualesTab", () => {
     test.beforeEach(async ({ page }) => {
-      await page.getByRole("button", { name: "Historial" }).click();
+      await page.getByRole("button", { name: "Historial", exact: true }).click();
     });
 
     test("muestra estado vacío cuando no hay mediciones", async ({ page }) => {
@@ -235,7 +235,7 @@ test.describe("MedicionManualPage", () => {
         });
       });
       await page.goto("/mediciones-manuales");
-      await page.getByRole("button", { name: "Historial" }).click();
+      await page.getByRole("button", { name: "Historial", exact: true }).click();
       await expect(page.getByRole("row").filter({ hasText: "pH" })).toBeVisible();
       await expect(page.getByRole("row").filter({ hasText: "pH" }).getByText("Normal")).toBeVisible();
     });
@@ -257,7 +257,7 @@ test.describe("MedicionManualPage", () => {
         await route.fulfill({ status: 500, body: "" });
       });
       await page.goto("/mediciones-manuales");
-      await page.getByRole("button", { name: "Historial" }).click();
+      await page.getByRole("button", { name: "Historial", exact: true }).click();
       await expect(
         page.getByText("No se pudo cargar el historial de mediciones manuales."),
       ).toBeVisible();
@@ -547,5 +547,93 @@ test.describe("HU-55 — Registro de parámetros por voz", () => {
     await expect(dialog.getByText("Error del servidor")).toBeVisible();
     // El texto dictado sigue disponible para reintentar, no se perdió.
     await expect(dialog.getByText("ph 6.8")).toBeVisible();
+  });
+});
+// ---------------------------------------------------------------------------
+// HU-55 — Cambio de lote en la revisión y "Volver a dictar"
+// ---------------------------------------------------------------------------
+
+test.describe("HU-55 — Revisión del dictado › cambio de lote", () => {
+  const respuestaParseo = (texto: string, ph: number) => ({
+    textoOriginal: texto,
+    parametros: [
+      { parametro: "ph", valor: ph, confianza: "alta", fueraDeRangoFisico: false, fueraDeUmbralEmpresa: false, textoOriginal: texto },
+    ],
+    noReconocido: [],
+    obligatoriosFaltantes: [],
+  });
+
+  // Dos lotes elegibles; el parseo responde distinto según el lote.
+  async function prepararRevision(page: Page, falloLote2 = false) {
+    await mockMedicionManualDeps(page);
+    await mockSpeechRecognitionSoportado(page);
+    await page.route("**/lotes*", (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: [LOTE_1, LOTE_2], total: 2, page: 1, limit: 20 }),
+      });
+    });
+    const pedidos: { loteId: number; texto: string }[] = [];
+    await page.route(/\/lotes\/\d+\/dictado\/parsear/, async (route) => {
+      const loteId = Number(new URL(route.request().url()).pathname.split("/")[2]);
+      const { texto } = route.request().postDataJSON() as { texto: string };
+      pedidos.push({ loteId, texto });
+      if (loteId === 2 && falloLote2) {
+        return route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "El lote LOT-2026-002 no tiene parámetros configurados." }),
+        });
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(respuestaParseo(texto, loteId === 1 ? 6.8 : 7.1)),
+      });
+    });
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+    await simularResultadoFinal(page, "ph 6.8");
+    await page.getByRole("dialog", { name: "Dictando valores" }).getByRole("button", { name: "Revisar y confirmar" }).click();
+    const revision = page.getByRole("dialog", { name: "Revisar dictado" });
+    await expect(revision.locator("#revision-dictado-ph")).toHaveValue("6.8");
+    return { revision, pedidos };
+  }
+
+  test("cambiar de lote vuelve a interpretar el mismo texto contra el lote nuevo", async ({ page }) => {
+    const { revision, pedidos } = await prepararRevision(page);
+
+    await revision.getByRole("combobox").selectOption({ label: "LOT-2026-002" });
+
+    await expect(revision.locator("#revision-dictado-ph")).toHaveValue("7.1");
+    await expect(revision.getByRole("combobox")).toHaveValue("2");
+    expect(pedidos.at(-1)).toEqual({ loteId: 2, texto: "ph 6.8" });
+  });
+
+  test("si falla la nueva interpretación conserva el lote y el resultado anteriores", async ({ page }) => {
+    const { revision, pedidos } = await prepararRevision(page, true);
+
+    await revision.getByRole("combobox").selectOption({ label: "LOT-2026-002" });
+
+    await expect(revision.getByText("El lote LOT-2026-002 no tiene parámetros configurados.")).toBeVisible();
+    await expect(revision.getByRole("combobox")).toHaveValue("1");
+    await expect(revision.locator("#revision-dictado-ph")).toHaveValue("6.8");
+    expect(pedidos).toHaveLength(2);
+  });
+
+  test("'Volver a dictar' regresa a la captura con la transcripción vacía", async ({ page }) => {
+    const { revision } = await prepararRevision(page);
+
+    await revision.getByRole("button", { name: "Volver a dictar" }).click();
+
+    const captura = page.getByRole("dialog", { name: "Dictando valores" });
+    await expect(captura).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Revisar dictado" })).toHaveCount(0);
+    await expect(captura.getByText("ph 6.8", { exact: true })).toHaveCount(0);
+    await expect(captura.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   });
 });

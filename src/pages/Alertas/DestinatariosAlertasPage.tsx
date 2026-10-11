@@ -1,20 +1,17 @@
 import { Layout } from "../../components/layout/Layout";
 import { DestinatariosYUmbralSection } from "./components/DestinatariosYUmbralSection";
 import { HorariosSilencioCard } from "./components/HorariosSilencioCard";
-import { useAuth } from "../../hooks/useAuth";
+import { usePermisos } from "../../hooks/usePermisos";
 
-// HU-30: a diferencia de destinatarios/umbral de desconexión (Admin/Gerente
-// only), horarios de silencio también lo administra Responsable de
-// producción (ver @Roles en NotificacionesController.listarHorariosSilencio
-// del backend) — por eso la ruta se amplió a los 3 roles (ver App.tsx), pero
-// DestinatariosYUmbralSection solo se monta para Admin/Gerente. El
-// título/breadcrumb varía por rol para no anunciarle "Destinatarios de
-// alertas" a quien solo va a ver la card de horarios de silencio (coincide
-// con el nav item propio "Horarios de silencio" en Sidebar.tsx).
+// HU-29/HU-30/HU-31: destinatarios por nivel y umbral de desconexión
+// (configuracion_empresa) + horarios de silencio (monitoreo_alertas). La
+// ruta acepta cualquiera de los dos módulos; cada sección se monta con su
+// propio permiso. El título no anuncia "Destinatarios" a quien solo ve
+// horarios de silencio.
 export default function DestinatariosAlertasPage() {
-  const { user } = useAuth();
-  const puedeVerDestinatarios =
-    user?.rolNombre === "Administrador" || user?.rolNombre === "Gerente";
+  const { puede } = usePermisos();
+  const puedeVerDestinatarios = puede("configuracion_empresa", "ver");
+  const puedeVerHorarios = puede("monitoreo_alertas", "ver");
   const titulo = puedeVerDestinatarios ? "Destinatarios de alertas" : "Horarios de silencio";
   const subtitulo = puedeVerDestinatarios
     ? "Quién recibe cada nivel de alerta · los cambios se aplican de inmediato, sin reinicio"
@@ -31,7 +28,7 @@ export default function DestinatariosAlertasPage() {
 
       {puedeVerDestinatarios && <DestinatariosYUmbralSection />}
 
-      <HorariosSilencioCard />
+      {puedeVerHorarios && <HorariosSilencioCard />}
     </Layout>
   );
 }

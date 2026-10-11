@@ -24,9 +24,18 @@ function esSensorValido(value: unknown): value is Sensor {
   return typeof value === "object" && value !== null && "id" in value && "estado" in value;
 }
 
+interface UseSensoresOptions {
+  // false: no pide GET /sensores (sin sensores_iot:ver daría 403) y deja la
+  // lista vacía.
+  habilitado?: boolean;
+}
+
 // La empresa se resuelve en el backend a partir del JWT (CurrentEmpresa),
 // no hace falta resolverla ni pasarla desde acá.
-export function useSensores(filters: SensorFilterQuery = {}): UseSensoresResult {
+export function useSensores(
+  filters: SensorFilterQuery = {},
+  { habilitado = true }: UseSensoresOptions = {},
+): UseSensoresResult {
   const { nombre, marca, tipo, parametro, estado, ubicacion } = filters;
 
   const [sensores, setSensores] = useState<Sensor[]>([]);
@@ -37,6 +46,11 @@ export function useSensores(filters: SensorFilterQuery = {}): UseSensoresResult 
   const [isTogglingEstado, setIsTogglingEstado] = useState(false);
 
   const fetchSensores = useCallback(async () => {
+    if (!habilitado) {
+      setSensores([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -47,7 +61,7 @@ export function useSensores(filters: SensorFilterQuery = {}): UseSensoresResult 
     } finally {
       setIsLoading(false);
     }
-  }, [nombre, marca, tipo, parametro, estado, ubicacion]);
+  }, [habilitado, nombre, marca, tipo, parametro, estado, ubicacion]);
 
   useEffect(() => {
     fetchSensores();

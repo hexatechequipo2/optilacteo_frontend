@@ -32,11 +32,13 @@ export function LotesProcesadosChart({ datos }: LotesProcesadosChartProps) {
 
   const pathPoints = puntos.map((p) => `${p.x},${p.y}`).join(" ");
 
+  // `fecha` es yyyy-MM-dd: sin hora, new Date() la toma como medianoche UTC
+  // y en Argentina (UTC-3) muestra el día anterior.
   const formatDia = (fecha: string) =>
-    new Date(fecha).toLocaleDateString("es-AR", { weekday: "short" });
+    new Date(`${fecha}T00:00:00`).toLocaleDateString("es-AR", { weekday: "short" });
 
   const formatFechaCompleta = (fecha: string) =>
-    new Date(fecha).toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
+    new Date(`${fecha}T00:00:00`).toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
 
   const hovered = hoverIndex !== null ? puntos[hoverIndex] : null;
 

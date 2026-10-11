@@ -2,7 +2,6 @@ import { expect, test } from "./fixtures/coverageFixtures.js";
 import type { Page } from "@playwright/test";
 import {
   loginAsGerente,
-  loginAsOperario,
   loginAsResponsableCalidad,
 } from "./fixtures/mockAuth.js";
 
@@ -139,7 +138,7 @@ test.describe("TambosPage", () => {
     await expect(table.getByText("Inactivo", { exact: true })).toBeVisible();
   });
 
-  test("un Operario de línea da de alta un tambo nuevo con proveedor obligatorio", async ({ page }) => {
+  test("un Responsable de calidad da de alta un tambo nuevo con proveedor obligatorio", async ({ page }) => {
     await mockCatchAll(page);
     await mockTambosCatalogo(page);
 
@@ -158,7 +157,8 @@ test.describe("TambosPage", () => {
       return route.continue();
     });
 
-    await loginAsOperario(page);
+    // HU-72: con la matriz por defecto el alta (recepcion:crear) es de Calidad.
+    await loginAsResponsableCalidad(page);
     await page.goto("/tambos");
 
     await page.getByRole("button", { name: "+ Nuevo tambo" }).click();
@@ -196,7 +196,8 @@ test.describe("TambosPage", () => {
       });
     });
 
-    await loginAsOperario(page);
+    // HU-72: con la matriz por defecto el alta (recepcion:crear) es de Calidad.
+    await loginAsResponsableCalidad(page);
     await page.goto("/tambos");
 
     await page.getByRole("button", { name: "+ Nuevo tambo" }).click();

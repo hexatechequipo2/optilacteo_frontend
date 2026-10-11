@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { TEST_API_URL } from "./tests/fixtures/backendDeTest.ts";
 
 export default defineConfig({
   testDir: "./tests",
@@ -25,6 +26,8 @@ export default defineConfig({
     url: "http://localhost:5173",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    // Ver tests/fixtures/backendDeTest.ts. Pisa el VITE_API_URL del .env.
+    env: { VITE_API_URL: TEST_API_URL },
   },
 
   projects: [

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsResponsableCalidad, loginAsGerente, loginAsResponsableProduccion } from "./fixtures/mockAuth.ts";
+import { loginAsResponsableCalidad, loginAsGerente, loginAsResponsableProduccion, quitarPermisos } from "./fixtures/mockAuth.ts";
 
 const CONFIGURACION_CRITICA_ROL = {
   id: 1,
@@ -134,12 +134,15 @@ test.describe("DestinatariosAlertasPage", () => {
   });
 });
 
-test("DestinatariosAlertasPage - un RC ve acceso no autorizado", async ({ page }) => {
+// HU-72: Calidad tiene configuracion_empresa:ver (sin editar) en la matriz
+// por defecto, así que entra en solo lectura.
+test("DestinatariosAlertasPage - un RC ve los destinatarios en solo lectura", async ({ page }) => {
   await mockDestinatariosDeps(page, []);
   await loginAsResponsableCalidad(page);
   await page.goto("/alertas/destinatarios");
 
-  await expect(page.getByText("Acceso no autorizado")).toBeVisible();
+  await expect(page.getByText("Solo lectura: tu rol no puede modificar este umbral.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "+ Usuario" })).toHaveCount(0);
 });
 
 test("DestinatariosAlertasPage - agrega un usuario como destinatario de nivel crítico", async ({ page }) => {
@@ -656,4 +659,91 @@ test("muestra error del servidor cuando falla la creación de un horario", async
     page.getByText("No se pudo crear el horario. Intentá nuevamente."),
   ).toBeVisible();
 });
+});
+// ---------------------------------------------------------------------------
+// HU-26 — Alta de destinatarios por rol y errores al agregar
+// ---------------------------------------------------------------------------
+
+const cardNivel = (page: Page, nivel: string) =>
+  page.locator(".rounded-xl").filter({ has: page.getByText(nivel, { exact: true }) });
+
+test.describe("DestinatariosAlertasPage (HU-26) › Destinatarios por rol", () => {
+  test("agrega un rol como destinatario de un nivel", async ({ page }) => {
+    await mockDestinatariosDeps(page, []);
+    const posts: unknown[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && /\/notificaciones\/configuracion$/.test(new URL(r.url()).pathname)) {
+        posts.push(r.postDataJSON());
+      }
+    });
+    await loginAsGerente(page);
+    await page.goto("/alertas/destinatarios");
+
+    const card = cardNivel(page, "Crítica");
+    await expect(card.getByText("Nadie configurado — este nivel no notifica a nadie.")).toBeVisible();
+    await card.getByRole("button", { name: "+ Rol" }).click();
+    await card.getByRole("combobox").selectOption({ label: "Gerente" });
+
+    await expect(page.getByRole("button", { name: "Quitar Gerente de Crítica" })).toBeVisible();
+    await expect(card.getByRole("combobox")).toHaveCount(0);
+    expect(posts).toEqual([{ nivelAlerta: "critica", rolId: 1 }]);
+  });
+
+  test("si el servidor rechaza el rol muestra el error y deja el selector abierto", async ({ page }) => {
+    await mockDestinatariosDeps(page, []);
+    await page.route("**/notificaciones/configuracion*", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "El rol ya recibe alertas de este nivel." }),
+      });
+    });
+    await loginAsGerente(page);
+    await page.goto("/alertas/destinatarios");
+
+    const card = cardNivel(page, "Crítica");
+    await card.getByRole("button", { name: "+ Rol" }).click();
+    await card.getByRole("combobox").selectOption({ label: "Gerente" });
+
+    await expect(page.getByText("El rol ya recibe alertas de este nivel.")).toBeVisible();
+    await expect(card.getByRole("combobox")).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Quitar Gerente de Crítica" })).toHaveCount(0);
+  });
+
+  test("si falla agregar un usuario muestra el error genérico y deja el selector abierto", async ({ page }) => {
+    await mockDestinatariosDeps(page, []);
+    await page.route("**/notificaciones/configuracion*", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+    });
+    await loginAsGerente(page);
+    await page.goto("/alertas/destinatarios");
+
+    const card = cardNivel(page, "Crítica");
+    await card.getByRole("button", { name: "+ Usuario" }).click();
+    await card.getByRole("combobox").selectOption({ label: "Juan Calidad (calidad@optilacteo.com)" });
+
+    await expect(page.getByText("No se pudo agregar el destinatario.")).toBeVisible();
+    await expect(card.getByRole("combobox")).toBeVisible();
+  });
+
+  test("sin permiso para ver roles o usuarios los botones de agregar explican por qué", async ({ page }) => {
+    await mockDestinatariosDeps(page, []);
+    await loginAsGerente(page);
+    await quitarPermisos(page, "Gerente", ["gestion_roles", "gestion_usuarios"]);
+    await page.goto("/alertas/destinatarios");
+
+    const card = cardNivel(page, "Crítica");
+    await expect(card.getByRole("button", { name: "+ Rol" })).toBeDisabled();
+    await expect(card.getByRole("button", { name: "+ Rol" })).toHaveAttribute(
+      "title",
+      "Requiere permiso para ver roles (gestión de roles).",
+    );
+    await expect(card.getByRole("button", { name: "+ Usuario" })).toBeDisabled();
+    await expect(card.getByRole("button", { name: "+ Usuario" })).toHaveAttribute(
+      "title",
+      "Requiere permiso para ver usuarios (gestión de usuarios).",
+    );
+  });
 });

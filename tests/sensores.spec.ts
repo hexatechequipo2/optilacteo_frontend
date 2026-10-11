@@ -1,9 +1,13 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
 import {
   loginAsResponsableProduccion,
+  loginAsGerente,
   loginAsAdministrador,
   loginAsOperario,
+  loginAsResponsableCalidad,
+  quitarPermisos,
 } from "./fixtures/mockAuth.ts";
+import { mockSocketIo } from "./fixtures/socketIoMock.ts";
 
 // ---------------------------------------------------------------------------
 // Datos de prueba
@@ -553,7 +557,17 @@ test.describe("SensoresPage › EstadoDiagnosticoTab", () => {
 // SensoresPage › SensorLoteHistorialModal
 // ---------------------------------------------------------------------------
 
+async function abrirHistorialModalSinEsperar(page: Page) {
+  await page.getByRole("button", { name: "Registro (alta / edición)" }).click();
+  const row = page.getByRole("row").filter({ hasText: "Sensor pH Laboratorio" });
+  await row.waitFor();
+  await row.getByTitle("Asociación a lote / historial").click();
+}
+
 async function abrirHistorialModal(page: Page, sensorNombre = "Sensor pH Laboratorio") {
+  // HU-72: quien ve el semáforo y no da de alta sensores (Operario) arranca
+  // en esa pestaña; la tabla vive en Registro.
+  await page.getByRole("button", { name: "Registro (alta / edición)" }).click();
   const row = page.getByRole("row").filter({ hasText: sensorNombre });
   await row.waitFor();
   await row.getByTitle("Asociación a lote / historial").click();
@@ -596,6 +610,9 @@ test.describe("SensoresPage › SensorLoteHistorialModal", () => {
     });
 
     await loginAsOperario(page);
+    // HU-72: sin dashboard/monitoreo no hay semáforo y arranca en Registro
+    // (estos tests no mockean los endpoints del semáforo).
+    await quitarPermisos(page, "Operario de línea", ["dashboard", "monitoreo_alertas"]);
     await page.goto("/sensores");
     await abrirHistorialModal(page);
   });
@@ -700,6 +717,7 @@ test("SensoresPage - muestra el historial de asociaciones cuando hay registros",
   });
 
   await loginAsOperario(page);
+  await quitarPermisos(page, "Operario de línea", ["dashboard", "monitoreo_alertas"]);
   await page.goto("/sensores");
   await abrirHistorialModal(page);
 
@@ -906,14 +924,373 @@ test("SensoresPage - un usuario sin permiso de asociación no ve la sección de 
     });
   });
 
-  await loginAsResponsableProduccion(page);
+  // HU-72: asociar exige sensores_iot:editar; Calidad solo tiene ver.
+  await loginAsResponsableCalidad(page);
   await page.goto("/sensores");
-  const row = page.getByRole("row").filter({ hasText: "Sensor pH Laboratorio" });
-  await row.waitFor();
-  await row.getByTitle("Asociación a lote / historial").click();
+  await abrirHistorialModalSinEsperar(page);
   await expect(
     page.getByRole("heading", { name: "Asociación a lote — Sensor pH Laboratorio" }),
   ).toBeVisible();
 
   await expect(page.getByRole("button", { name: "Asociar" })).not.toBeVisible();
+});
+// ---------------------------------------------------------------------------
+// HU-13 / HU-15 — Estado y diagnóstico en vivo (WebSocket /sensores)
+// ---------------------------------------------------------------------------
+
+test.describe("EstadoDiagnosticoTab (HU-13) › Tiempo real", () => {
+  test.use({ timezoneId: "America/Argentina/Cordoba", locale: "es-AR" });
+
+  // Ahora fijo: los "hace X" quedan estables.
+  const AHORA = new Date("2026-09-26T13:10:00.000Z");
+  const hace = (segundos: number) => new Date(AHORA.getTime() - segundos * 1000).toISOString();
+
+  const SENSORES_EN_VIVO = [
+    { ...SENSOR_1, ultimaLectura: hace(30) },
+    { ...SENSOR_2, ultimaLectura: hace(2 * 3600 + 5) },
+    { ...SENSOR_1, id: 3, nombre: "Sensor Densidad Recepción", parametro: "densidad", ultimaLectura: hace(5 * 60) },
+    { ...SENSOR_1, id: 4, nombre: "Sensor Grasa Recepción", parametro: "grasa", ultimaLectura: null },
+  ];
+
+  const card = (page: Page, nombre: string) =>
+    page.locator("div.rounded-xl.border.p-4").filter({ hasText: nombre });
+
+  async function abrirEnVivo(page: Page) {
+    await page.clock.setFixedTime(AHORA);
+    await mockSensoresDeps(page);
+    await page.route("**/sensores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SENSORES_EN_VIVO) });
+    });
+    const socket = await mockSocketIo(page);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/sensores");
+    await page.getByRole("button", { name: "Estado y diagnóstico" }).click();
+    await expect(page.getByText("EN VIVO")).toBeVisible();
+    return socket;
+  }
+
+  test("se conecta al WebSocket de sensores y muestra 'EN VIVO'", async ({ page }) => {
+    const socket = await abrirEnVivo(page);
+
+    expect(socket.conectados()).toContain("/sensores");
+    await expect(page.getByText("Reconectando...")).toHaveCount(0);
+  });
+
+  test("muestra hace cuánto llegó la última lectura de cada sensor", async ({ page }) => {
+    await abrirEnVivo(page);
+
+    await expect(card(page, "Sensor pH Laboratorio")).toContainText("hace 30 s");
+    await expect(card(page, "Sensor Densidad Recepción")).toContainText("hace 5 min");
+    await expect(card(page, "Sensor Temperatura Caldera")).toContainText("hace 2 h");
+    await expect(card(page, "Sensor Grasa Recepción")).toContainText("Sin lote asociado · —");
+  });
+
+  test("una lectura nueva actualiza el valor, el lote y cuándo llegó", async ({ page }) => {
+    const socket = await abrirEnVivo(page);
+
+    socket.emitir("/sensores", "lectura:nueva", {
+      id: 900, sensorId: 3, loteId: 7, valor: 1.031, timestampLectura: AHORA.toISOString(),
+      empresaId: 10, origen: "sensor", usuarioId: null,
+    });
+
+    const densidad = card(page, "Sensor Densidad Recepción");
+    await expect(densidad).toContainText("1.031");
+    await expect(densidad).toContainText("g/mL");
+    // Sin lote en el sensor, toma el de la lectura.
+    await expect(densidad).toContainText("Lote #7");
+    await expect(densidad).toContainText("ahora");
+    await expect(densidad.getByText("Manual", { exact: true })).toHaveCount(0);
+  });
+
+  test("una lectura de ingreso manual se marca como 'Manual'", async ({ page }) => {
+    const socket = await abrirEnVivo(page);
+
+    socket.emitir("/sensores", "lectura:nueva", {
+      id: 901, sensorId: 4, loteId: 8, valor: 3.6, timestampLectura: hace(12),
+      empresaId: 10, origen: "manual", usuarioId: 5,
+    });
+
+    const grasa = card(page, "Sensor Grasa Recepción");
+    await expect(grasa).toContainText("3.6");
+    await expect(grasa.getByText("Manual", { exact: true })).toBeVisible();
+    await expect(grasa).toContainText("hace 12 s");
+  });
+
+  test("una falla y su recuperación cambian el estado y los contadores", async ({ page }) => {
+    const socket = await abrirEnVivo(page);
+    await expect(page.getByText("0 con falla")).toBeVisible();
+
+    socket.emitir("/sensores", "sensor:falla", { sensorId: 1, nombre: "Sensor pH Laboratorio" });
+    await expect(card(page, "Sensor pH Laboratorio")).toContainText("Con falla");
+    await expect(page.getByText("1 con falla")).toBeVisible();
+    await expect(page.getByText("2 activos")).toBeVisible();
+
+    socket.emitir("/sensores", "sensor:recuperado", { sensorId: 1, nombre: "Sensor pH Laboratorio" });
+    await expect(card(page, "Sensor pH Laboratorio")).toContainText("Activo");
+    await expect(page.getByText("0 con falla")).toBeVisible();
+  });
+
+  test("ignora eventos de sensores que no están en la lista", async ({ page }) => {
+    const socket = await abrirEnVivo(page);
+    const avisos: string[] = [];
+    page.on("console", (m) => {
+      if (m.type() === "warning") avisos.push(m.text());
+    });
+
+    socket.emitir("/sensores", "sensor:falla", { sensorId: 99, nombre: "Fantasma" });
+    socket.emitir("/sensores", "sensor:recuperado", { sensorId: 99, nombre: "Fantasma" });
+    socket.emitir("/sensores", "lectura:nueva", {
+      id: 902, sensorId: 99, loteId: 1, valor: 9, timestampLectura: AHORA.toISOString(),
+      empresaId: 10, origen: "sensor", usuarioId: null,
+    });
+
+    await expect.poll(() => avisos.length).toBe(3);
+    expect(avisos.every((a) => a.includes("sensor desconocido (id=99)"))).toBe(true);
+    await expect(page.getByText("0 con falla")).toBeVisible();
+    await expect(page.getByText("3 de 4 conectados")).toBeVisible();
+  });
+
+  test("si el servidor desconecta muestra 'Reconectando...', y tras una caída de red reconecta solo", async ({ page }) => {
+    const socket = await abrirEnVivo(page);
+
+    socket.desconectarNamespace("/sensores");
+    await expect(page.getByText("Reconectando...")).toBeVisible();
+
+    await page.reload();
+    await page.getByRole("button", { name: "Estado y diagnóstico" }).click();
+    await expect(page.getByText("EN VIVO")).toBeVisible();
+    const antes = socket.handshakes();
+
+    socket.cortarConexion();
+    await expect.poll(() => socket.handshakes()).toBeGreaterThan(antes);
+    await expect(page.getByText("EN VIVO")).toBeVisible();
+    expect(socket.conectados()).toContain("/sensores");
+  });
+
+  test("si falla la carga de sensores muestra el error", async ({ page }) => {
+    await mockSensoresDeps(page);
+    await page.route("**/sensores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback();
+      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/sensores");
+    await page.getByRole("button", { name: "Estado y diagnóstico" }).click();
+
+    await expect(page.getByText("No se pudieron cargar los sensores.")).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-17 / HU-65 / HU-63 — Registro de sensores: filtros, errores, auditoría
+// y vista mobile
+// ---------------------------------------------------------------------------
+
+test.describe("RegistroSensoresTab (HU-17) › Filtros y errores", () => {
+  const SENSOR_AUDITADO = {
+    ...SENSOR_1,
+    auditoria: {
+      creadoPor: { userId: 2, userEmail: "gerente@optilacteo.com", fecha: "2026-08-01T12:00:00.000Z" },
+    },
+  };
+
+  // Registra los query params de cada GET /sensores.
+  async function prepararRegistro(page: Page, sensores: unknown[] = [SENSOR_AUDITADO, SENSOR_2]) {
+    const pedidos: URLSearchParams[] = [];
+    const control = { status: 200 };
+    await mockSensoresDeps(page);
+    await page.route("**/sensores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback();
+      pedidos.push(new URL(route.request().url()).searchParams);
+      if (control.status !== 200) return route.fulfill({ status: control.status, body: "{}" });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(sensores) });
+    });
+    return { pedidos, control };
+  }
+
+  test("los filtros de tipo, ubicación y estado se mandan al backend", async ({ page }) => {
+    const { pedidos } = await prepararRegistro(page);
+    await loginAsGerente(page);
+    await page.goto("/sensores");
+    await expect(page.getByRole("row", { name: /Sensor pH Laboratorio/ })).toBeVisible();
+    await page.getByLabel("Marca", { exact: true }).fill("Hanna");
+    await expect.poll(() => pedidos.at(-1)?.get("marca")).toBe("Hanna");
+
+    await page.getByLabel("Tipo", { exact: true }).selectOption({ label: "Digital" });
+    await expect.poll(() => pedidos.at(-1)?.get("tipo")).toBe("digital");
+    await page.getByLabel("Ubicación", { exact: true }).selectOption({ label: "Caldera" });
+    await expect.poll(() => pedidos.at(-1)?.get("ubicacion")).toBe("caldera");
+    await page.getByLabel("Estado", { exact: true }).selectOption({ label: "Inactivo" });
+    await expect.poll(() => pedidos.at(-1)?.get("estado")).toBe("inactivo");
+    expect(pedidos.at(-1)?.get("tipo")).toBe("digital");
+    expect(pedidos.at(-1)?.get("marca")).toBe("Hanna");
+
+    // Volver a "todos" saca el parámetro.
+    await page.getByLabel("Tipo", { exact: true }).selectOption({ index: 0 });
+    await expect.poll(() => pedidos.at(-1)?.has("tipo")).toBe(false);
+  });
+
+  test("cambiar otro filtro mientras corre el debounce de marca no se pierde", async ({ page }) => {
+    const { pedidos } = await prepararRegistro(page);
+    await loginAsGerente(page);
+    await page.goto("/sensores");
+    await expect(page.getByRole("row", { name: /Sensor pH Laboratorio/ })).toBeVisible();
+
+    // Tipo se elige antes de que venza el debounce de 400 ms de la marca.
+    await page.getByLabel("Marca", { exact: true }).fill("Hanna");
+    await page.getByLabel("Tipo", { exact: true }).selectOption({ label: "Digital" });
+
+    await expect.poll(() => pedidos.at(-1)?.get("marca")).toBe("Hanna");
+    expect(pedidos.at(-1)?.get("tipo")).toBe("digital");
+    await expect(page.getByLabel("Tipo", { exact: true })).toHaveValue("digital");
+  });
+
+  test("el filtro por marca espera a que se termine de escribir", async ({ page }) => {
+    const { pedidos } = await prepararRegistro(page);
+    await loginAsGerente(page);
+    await page.goto("/sensores");
+    await expect(page.getByRole("row", { name: /Sensor pH Laboratorio/ })).toBeVisible();
+
+    await page.getByLabel("Marca", { exact: true }).pressSequentially("Hanna");
+
+    await expect.poll(() => pedidos.at(-1)?.get("marca")).toBe("Hanna");
+    // Un solo pedido con la marca completa, no uno por tecla.
+    expect(pedidos.filter((p) => p.has("marca"))).toHaveLength(1);
+  });
+
+  test("si falla la carga ofrece reintentar", async ({ page }) => {
+    const { control } = await prepararRegistro(page);
+    control.status = 500;
+    await loginAsGerente(page);
+    await page.goto("/sensores");
+    await expect(page.getByText("No se pudieron cargar los sensores.")).toBeVisible();
+
+    control.status = 200;
+    await page.getByRole("button", { name: "Reintentar" }).click();
+    await expect(page.getByRole("row", { name: /Sensor pH Laboratorio/ })).toBeVisible();
+  });
+
+  test("si el backend rechaza la baja muestra su mensaje y se puede cerrar", async ({ page }) => {
+    await prepararRegistro(page);
+    await page.route("**/sensores/1", (route) =>
+      route.request().method() === "DELETE"
+        ? route.fulfill({
+            status: 409,
+            contentType: "application/json",
+            body: JSON.stringify({ message: "El sensor está asociado a un lote activo." }),
+          })
+        : route.fallback(),
+    );
+    await loginAsGerente(page);
+    await page.goto("/sensores");
+
+    const fila = page.getByRole("row", { name: /Sensor pH Laboratorio/ });
+    await fila.getByTitle("Dar de baja sensor").click();
+    await expect(page.getByRole("alertdialog")).toContainText(
+      '"Sensor pH Laboratorio" pasará a estado inactivo',
+    );
+    await page.getByRole("button", { name: "Dar de baja", exact: true }).click();
+
+    await expect(page.getByText("El sensor está asociado a un lote activo.")).toBeVisible();
+    await expect(fila.getByTitle("Dar de baja sensor")).toBeVisible();
+    await page.getByRole("button", { name: "Cerrar", exact: true }).click();
+    await expect(page.getByText("El sensor está asociado a un lote activo.")).toHaveCount(0);
+  });
+
+  test("si falla la reactivación muestra el error genérico", async ({ page }) => {
+    await prepararRegistro(page);
+    await page.route("**/sensores/2/activar", (route) => route.fulfill({ status: 500, body: "{}" }));
+    await loginAsGerente(page);
+    await page.goto("/sensores");
+
+    await page.getByRole("row", { name: /Sensor Temperatura Caldera/ }).getByTitle("Reactivar sensor").click();
+
+    await expect(page.getByText("No se pudo reactivar el sensor.")).toBeVisible();
+  });
+
+  test("cancelar la confirmación no da de baja el sensor", async ({ page }) => {
+    await prepararRegistro(page);
+    const bajas: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "DELETE") bajas.push(r.url());
+    });
+    await loginAsGerente(page);
+    await page.goto("/sensores");
+
+    await page.getByRole("row", { name: /Sensor pH Laboratorio/ }).getByTitle("Dar de baja sensor").click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Cancelar" }).click();
+
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    expect(bajas).toHaveLength(0);
+  });
+
+  test("muestra la auditoría del sensor a quien tiene el módulo de auditoría", async ({ page }) => {
+    await prepararRegistro(page);
+    await loginAsGerente(page);
+    await page.goto("/sensores");
+
+    await page.getByRole("row", { name: /Sensor pH Laboratorio/ }).getByTitle("Auditoría").click();
+    const modal = page.getByRole("dialog");
+    await expect(modal.getByRole("heading", { name: "Auditoría — Sensor pH Laboratorio" })).toBeVisible();
+    await expect(modal).toContainText("gerente@optilacteo.com");
+    await expect(modal).toContainText("Sin modificaciones posteriores.");
+    await modal.getByRole("button", { name: "Cerrar" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    // Sin bloque de auditoría no se ofrece la acción.
+    await expect(page.getByRole("row", { name: /Sensor Temperatura Caldera/ }).getByTitle("Auditoría")).toHaveCount(0);
+  });
+});
+
+test.describe("RegistroSensoresTab (HU-17) › Vista mobile", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("lista los sensores en tarjetas con sus acciones", async ({ page }) => {
+    await mockSensoresDeps(page);
+    await page.route("**/sensores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          { ...SENSOR_1, auditoria: { creadoPor: { userId: 2, userEmail: "gerente@optilacteo.com", fecha: "2026-08-01T12:00:00.000Z" } } },
+          SENSOR_2,
+        ]),
+      });
+    });
+    await page.route(/\/sensores\/\d+\/historial/, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+    );
+    await loginAsGerente(page);
+    await page.goto("/sensores");
+
+    // La tabla de escritorio queda oculta: las acciones visibles son las de las tarjetas.
+    await expect(page.getByRole("table")).toBeHidden();
+    const tarjeta = page.locator("div.rounded-xl").filter({ hasText: "Sensor pH Laboratorio" }).filter({ visible: true }).last();
+    await expect(tarjeta).toContainText("Activo");
+
+    await tarjeta.getByTitle("Editar sensor").click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Cancelar" }).click();
+
+    await tarjeta.getByTitle("Asociación a lote / historial").click();
+    await expect(page.getByRole("heading", { name: "Asociación a lote — Sensor pH Laboratorio" })).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Cerrar" }).click();
+
+    await tarjeta.getByTitle("Auditoría").click();
+    await expect(page.getByRole("heading", { name: "Auditoría — Sensor pH Laboratorio" })).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Cerrar" }).click();
+
+    await tarjeta.getByTitle("Dar de baja sensor").click();
+    await expect(page.getByRole("heading", { name: "¿Dar de baja este sensor?" })).toBeVisible();
+  });
 });

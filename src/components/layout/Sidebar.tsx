@@ -14,12 +14,14 @@ import {
   Cpu,
   FlaskConical,
   Bell,
-  Moon,
   Siren,
   History,
   Snowflake,
   Droplets,
+  HardDrive,
+  ShieldCheck,
   X,
+  KeyRound,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
@@ -28,6 +30,8 @@ import { proveedoresService } from "../../services/proveedores.service";
 import { loteService } from "../../services/lote.service";
 import { sensorService } from "../../services/sensor.service";
 import { useEmpresaActual } from "../../hooks/useEmpresaActual";
+import { usePermisos } from "../../hooks/usePermisos";
+import { puedeEntrarA, type RutaApp } from "../../utils/accesoRutas";
 import optilacteoLogo from "../../assets/images/optilacteo_logo.png";
 
 interface SidebarProps {
@@ -41,86 +45,32 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const { empresa, isLoading: isLoadingEmpresa } = useEmpresaActual();
 
-  const esAdmin = user?.rolNombre === "Administrador";
-  const esGerente = user?.rolNombre === "Gerente";
+  const permisos = usePermisos();
+  const entra = (ruta: RutaApp) => puedeEntrarA(ruta, permisos);
+
+  // Badge abreviado (solo visual, no gatea nada).
   const esResponsableProduccion = user?.rolNombre === "Responsable de producción";
-  const puedeVerDashboard = esAdmin;
-  // HU-38: dashboard operativo propio del Responsable de producción — no es
-  // el mismo /dashboard de plataforma que ve el Administrador. Gerente
-  // también lo puede consultar (ver allowedRoles en App.tsx).
-  const puedeVerDashboardProduccion = esResponsableProduccion || esGerente;
-  const puedeVerUsuarios = esAdmin || esGerente;
-  const puedeVerEmpresas = esAdmin;
-  // HU-23: Responsable de calidad entra en modo solo lectura (ver
-  // ConfiguracionPage.tsx / App.tsx).
-  // HU-61: Responsable de producción entra solo para la pestaña "Conexión
-  // PLC/Gateway" (ver PlcGatewayConfigTab.tsx).
-  const puedeVerConfiguracion =
-    esGerente || user?.rolNombre === "Responsable de calidad" || esResponsableProduccion;
-  const puedeVerPlanes = esAdmin;
-  const puedeVerProveedores = esAdmin || esGerente;
-  // HU-36: mismo set de roles que @Roles en GET /tambos (tambo.controller.ts
-  // del backend) — a propósito más amplio que puedeVerProveedores, porque
-  // Operario de línea/Responsable de producción/Responsable de calidad
-  // también necesitan ver (y, según el rol, cargar) el tambo de origen sin
-  // tener acceso a la gestión de proveedores en sí. El gating fino de qué
-  // acción puede hacer cada rol dentro de la pantalla vive en TambosPage.tsx.
-  const puedeVerTambos =
-    esAdmin ||
-    esGerente ||
-    user?.rolNombre === "Operario de línea" ||
-    user?.rolNombre === "Responsable de calidad" ||
-    user?.rolNombre === "Responsable de producción";
-  // HU-20 suma Operario de línea (carga manual) y Responsable de producción
-  // (historial) además de Responsable de calidad/Gerente/Administrador
-  // (HU-60).
-  // TODO(backend): GET /lotes todavía no habilita esos dos roles nuevos
-  // (ver comentario en App.tsx) — la pantalla les va a quedar vacía/con
-  // error 403 hasta que se actualice ese lado.
-  const puedeVerLotes =
-    esAdmin ||
-    esGerente ||
-    user?.rolNombre === "Responsable de calidad" ||
-    user?.rolNombre === "Operario de línea" ||
-    user?.rolNombre === "Responsable de producción";
-  // HU-22: GET /lotes/no-aptos y POST /lotes/:id/revision son exclusivos de
-  // Responsable de Calidad en el backend (lote.controller.ts) — a diferencia
-  // de /lotes, ningún otro rol tiene acceso de lectura acá.
-  const puedeVerRevisionCalidad = user?.rolNombre === "Responsable de calidad";
-  // HU-20: vista standalone de medición manual, exclusiva de Operario de
-  // línea (ver comentario en App.tsx sobre por qué no reusa /lotes).
-  const puedeVerMedicionManual = user?.rolNombre === "Operario de línea";
-  // HU-67 Parte 1/2: mock data, exclusiva de Responsable de producción (ver
-  // allowedRoles en App.tsx).
-  const puedeVerIngresoCamara = esResponsableProduccion;
-  // GET /sensores (backend) habilita también a Responsable de producción y
-  // Operario de línea, ver sensor.controller.ts.
-  const puedeVerSensores =
-    esAdmin ||
-    esGerente ||
-    user?.rolNombre === "Responsable de calidad" ||
-    user?.rolNombre === "Responsable de producción" ||
-    user?.rolNombre === "Operario de línea";
-  // HU-29: Administrador y Gerente configuran destinatarios de alertas
-  // (AC1/AC4 del backlog — ver allowedRoles en App.tsx para la ruta
-  // protegida). A partir de HU-30, Responsable de producción también entra
-  // a esta misma ruta, pero con su propio nav item (ver
-  // puedeVerHorariosSilencio más abajo): en esa página solo llega a ver la
-  // card de horarios de silencio, no destinatarios.
-  const puedeVerAlertasDestinatarios = esAdmin || esGerente;
-  // HU-30: Responsable de producción administra horarios de silencio desde
-  // la misma ruta /alertas/destinatarios (@Roles en
-  // NotificacionesController.listarHorariosSilencio incluye
-  // RESPONSABLE_PRODUCCION), pero con un nav item propio en vez de reusar
-  // "Alertas" — ese label ya lo usa puedeVerAlertasMonitoreo para /alertas
-  // (HU-25) y tener dos ítems iguales sería confuso.
-  const puedeVerHorariosSilencio = esResponsableProduccion;
-  // HU-25: pantalla "Monitoreo y Alertas", exclusiva de Responsable de
-  // producción (ver allowedRoles en App.tsx).
-  const puedeVerAlertasMonitoreo = esResponsableProduccion;
-  // HU-28: historial de alertas por lote/período, exclusivo de Responsable
-  // de calidad (ver allowedRoles en App.tsx).
-  const puedeVerHistorialAlertas = user?.rolNombre === "Responsable de calidad";
+  // La visibilidad de cada ítem sale de la misma regla que protege la ruta
+  // (utils/accesoRutas.ts), así menú y ProtectedRoute no se desalinean.
+  const puedeVerDashboard = entra("/dashboard");
+  const puedeVerDashboardProduccion = entra("/dashboard-produccion");
+  const puedeVerUsuarios = entra("/usuarios");
+  const puedeVerRoles = entra("/roles");
+  const puedeVerAuditoria = entra("/auditoria");
+  const puedeVerEmpresas = entra("/empresas");
+  const puedeVerDispositivos = entra("/dispositivos");
+  const puedeVerConfiguracion = entra("/configuracion");
+  const puedeVerPlanes = entra("/planes");
+  const puedeVerProveedores = entra("/proveedores");
+  const puedeVerTambos = entra("/tambos");
+  const puedeVerLotes = entra("/lotes");
+  const puedeVerRevisionCalidad = entra("/lotes/revision");
+  const puedeVerMedicionManual = entra("/mediciones-manuales");
+  const puedeVerIngresoCamara = entra("/ingreso-camara");
+  const puedeVerSensores = entra("/sensores");
+  const puedeVerConfigAlertas = entra("/alertas/destinatarios");
+  const puedeVerAlertasMonitoreo = entra("/alertas");
+  const puedeVerHistorialAlertas = entra("/alertas/historial");
 
   const [counts, setCounts] = useState({
     empresas: 0,
@@ -159,8 +109,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             puedeVerProveedores
               ? proveedoresService.getAll({ page: 1, limit: 1 }).catch(() => ({ data: [], meta: { total: 0 } }))
               : { data: [], meta: { total: 0 } },
-            // GET /lotes todavía no habilita Operario de línea/Responsable de
-            // producción (ver comentario en puedeVerLotes).
             puedeVerLotes ? loteService.count().catch(() => 0) : 0,
             // No hay endpoint de conteo dedicado para sensores, se toma el length del getAll.
             puedeVerSensores ? sensorService.getAll().catch(() => []) : [],
@@ -205,17 +153,33 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(puedeVerEmpresas
       ? [{ label: "Empresas", icon: Building2, count: counts.empresas, path: "/empresas" }]
       : []),
+    ...(puedeVerDispositivos
+      ? [{ label: "Dispositivos", icon: HardDrive, path: "/dispositivos" }]
+      : []),
     ...(puedeVerConfiguracion
       ? [{ label: "Configuración", icon: Settings, path: "/configuracion" }]
       : []),
     ...(puedeVerUsuarios
       ? [{ label: "Usuarios", icon: Users, count: counts.usuarios, path: "/usuarios" }]
       : []),
+    ...(puedeVerRoles
+      ? [{ label: "Roles y permisos", icon: KeyRound, path: "/roles" }]
+      : []),
+    ...(puedeVerAuditoria
+      ? [{ label: "Auditoría", icon: ShieldCheck, path: "/auditoria" }]
+      : []),
     ...(puedeVerPlanes
       ? [{ label: "Planes", icon: Package, count: counts.planes, path: "/planes" }]
       : []),
     ...(puedeVerProveedores
-      ? [{ label: "Proveedores", icon: Home, count: counts.proveedores, path: "/proveedores" }]
+      ? [
+          {
+            label: "Proveedores",
+            icon: Home,
+            count: counts.proveedores,
+            path: "/proveedores",
+          },
+        ]
       : []),
     ...(puedeVerTambos ? [{ label: "Tambos", icon: Droplets, path: "/tambos" }] : []),
     ...(puedeVerLotes
@@ -240,11 +204,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(puedeVerSensores
       ? [{ label: "Sensores", icon: Cpu, count: counts.sensores, path: "/sensores" }]
       : []),
-    ...(puedeVerAlertasDestinatarios
-      ? [{ label: "Alertas", icon: Bell, path: "/alertas/destinatarios" }]
-      : []),
-    ...(puedeVerHorariosSilencio
-      ? [{ label: "Horarios de silencio", icon: Moon, path: "/alertas/destinatarios" }]
+    ...(puedeVerConfigAlertas
+      ? [{ label: "Config. de alertas", icon: Bell, path: "/alertas/destinatarios" }]
       : []),
     ...(puedeVerAlertasMonitoreo
       ? [{ label: "Alertas", icon: Siren, path: "/alertas" }]

@@ -5,6 +5,7 @@ import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
 import { SectionHeader } from "../../../components/ui/SectionHeader";
 import { LogoDropzone } from "../../../components/empresas/LogoDropzone";
+import { usePermisos } from "../../../hooks/usePermisos";
 import { useEmpresaActual } from "../../../hooks/useEmpresaActual";
 import { empresasService } from "../../../services/empresa.service";
 
@@ -17,6 +18,10 @@ function extraerMensajeError(err: unknown, fallback: string): string {
 
 export function LogoIdentidadTab() {
   const { empresa, isLoading, error, refetch } = useEmpresaActual();
+  // PATCH /empresa/me/identidad, POST y DELETE /empresa/me/logo:
+  // configuracion_empresa:editar. Sin eso, la pestaña queda de consulta.
+  const { puede } = usePermisos();
+  const puedeEditar = puede("configuracion_empresa", "editar");
 
   const [nombre, setNombre] = useState("");
   const [nombreError, setNombreError] = useState("");
@@ -147,8 +152,8 @@ export function LogoIdentidadTab() {
             <SectionHeader>LOGO DE LA EMPRESA</SectionHeader>
             <LogoDropzone
               previewUrl={previewUrl}
-              canRemove={!pendingFile && !!logoUrlGuardado}
-              disabled={isSaving}
+              canRemove={puedeEditar && !pendingFile && !!logoUrlGuardado}
+              disabled={isSaving || !puedeEditar}
               isRemoving={isRemoving}
               onFileStaged={handleFileStaged}
               onRemove={handleRemoveLogo}
@@ -165,7 +170,7 @@ export function LogoIdentidadTab() {
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               error={nombreError}
-              disabled={isSaving}
+              disabled={isSaving || !puedeEditar}
             />
             {nombreServerError && (
               <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
@@ -202,10 +207,16 @@ export function LogoIdentidadTab() {
             </p>
           )}
 
-          <Button type="button" className="w-full" isLoading={isSaving} onClick={handleGuardarIdentidad}>
-            <Check className="mr-2 h-4 w-4" />
-            Guardar identidad
-          </Button>
+          {puedeEditar ? (
+            <Button type="button" className="w-full" isLoading={isSaving} onClick={handleGuardarIdentidad}>
+              <Check className="mr-2 h-4 w-4" />
+              Guardar identidad
+            </Button>
+          ) : (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Solo lectura: tu rol no puede modificar la identidad de la empresa.
+            </p>
+          )}
         </div>
       </div>
     </div>

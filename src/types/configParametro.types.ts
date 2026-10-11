@@ -17,13 +17,23 @@ export enum TipoMateriaPrima {
   MASA_HILADA = "masa_hilada",
 }
 
-export interface ConfigParametro {
+// HU-40: los 4 umbrales que arman el semáforo. Cadena que exige el backend:
+// umbralAlertaMin <= umbralMin < umbralMax <= umbralAlertaMax.
+//   - entre min y max → verde (NORMAL)
+//   - entre alerta y min/max → amarillo (EN_LIMITE)
+//   - fuera de la banda de alerta → rojo (FUERA_DE_RANGO)
+export interface UmbralesConfig {
+  umbralAlertaMin: number;
+  umbralMin: number;
+  umbralMax: number;
+  umbralAlertaMax: number;
+}
+
+export interface ConfigParametro extends UmbralesConfig {
   id: number;
   empresaId: number;
   parametro: Parametro;
   tipoMateriaPrima: TipoMateriaPrima;
-  umbralMin: number;
-  umbralMax: number;
   createdAt: string;
   updatedAt: string;
   // HU-63: quién creó esta configuración de umbral y, si aplica, quién la
@@ -33,14 +43,11 @@ export interface ConfigParametro {
   auditoria?: TrazabilidadEntidad;
 }
 
-export interface CreateConfigParametroDto {
+export interface CreateConfigParametroDto extends UmbralesConfig {
   parametro: Parametro;
   tipoMateriaPrima: TipoMateriaPrima;
-  umbralMin: number;
-  umbralMax: number;
 }
 
-export interface UpdateConfigParametroDto {
-  umbralMin?: number;
-  umbralMax?: number;
-}
+// El backend acepta un PUT parcial, pero el front manda siempre los 4 valores
+// para que lo validado en cliente sea exactamente lo que se guarda.
+export type UpdateConfigParametroDto = UmbralesConfig;

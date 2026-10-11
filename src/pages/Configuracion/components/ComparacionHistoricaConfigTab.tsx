@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { TrendingUp, Check } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
-import { useAuth } from "../../../hooks/useAuth";
+import { usePermisos } from "../../../hooks/usePermisos";
 import { useConfigComparacionHistorica } from "../../../hooks/useConfigComparacionHistorica";
 import { extraerMensajeError } from "../../../services/configParametro.service";
 import type { UpdateConfigComparacionHistoricaDto } from "../../../types/configComparacionHistorica.types";
@@ -18,15 +18,19 @@ function validarDesvio(valor: string): string | null {
 function validarCantidad(valor: string): string | null {
   if (valor.trim() === "") return "La cantidad de registros es obligatoria";
   const num = Number(valor);
-  if (Number.isNaN(num) || !Number.isInteger(num)) return "Debe ser un número entero";
+  if (Number.isNaN(num) || !Number.isInteger(num))
+    return "Debe ser un número entero";
   if (num < 1) return "Debe ser al menos 1";
   return null;
 }
 
 export function ComparacionHistoricaConfigTab() {
-  const { user } = useAuth();
-  const esGerente = user?.rolNombre === "Gerente";
-  const { config, isLoading, error, updateConfig } = useConfigComparacionHistorica();
+  // GET/PATCH /config-parametros/comparacion-historica:
+  // configuracion_empresa ver/editar.
+  const { puede } = usePermisos();
+  const puedeEditar = puede("configuracion_empresa", "editar");
+  const { config, isLoading, error, updateConfig } =
+    useConfigComparacionHistorica();
 
   const [desvioInput, setDesvioInput] = useState("");
   const [cantidadInput, setCantidadInput] = useState("");
@@ -42,7 +46,8 @@ export function ComparacionHistoricaConfigTab() {
     setCantidadInput(config.cantidadRegistrosHistoricos.toString());
   }, [config]);
 
-  if (isLoading) return <p className="text-slate-500 dark:text-slate-400">Cargando...</p>;
+  if (isLoading)
+    return <p className="text-slate-500 dark:text-slate-400">Cargando...</p>;
 
   if (error || !config) {
     return (
@@ -66,8 +71,10 @@ export function ComparacionHistoricaConfigTab() {
     const cantidad = Number(cantidadInput);
 
     const dto: UpdateConfigComparacionHistoricaDto = {};
-    if (desvio !== config.desvioSignificativoPorcentaje) dto.desvioSignificativoPorcentaje = desvio;
-    if (cantidad !== config.cantidadRegistrosHistoricos) dto.cantidadRegistrosHistoricos = cantidad;
+    if (desvio !== config.desvioSignificativoPorcentaje)
+      dto.desvioSignificativoPorcentaje = desvio;
+    if (cantidad !== config.cantidadRegistrosHistoricos)
+      dto.cantidadRegistrosHistoricos = cantidad;
     if (Object.keys(dto).length === 0) return;
 
     setIsSaving(true);
@@ -75,7 +82,12 @@ export function ComparacionHistoricaConfigTab() {
       await updateConfig(dto);
       setSuccessMessage("La configuración se actualizó correctamente.");
     } catch (err) {
-      setServerError(extraerMensajeError(err, "No se pudo guardar la configuración. Intentá nuevamente."));
+      setServerError(
+        extraerMensajeError(
+          err,
+          "No se pudo guardar la configuración. Intentá nuevamente.",
+        ),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -88,12 +100,14 @@ export function ComparacionHistoricaConfigTab() {
           <span className="flex h-9 w-9 items-center justify-center rounded-md bg-blue-600 text-white">
             <TrendingUp className="h-5 w-5" />
           </span>
-          <span className="font-semibold text-slate-900 dark:text-white">Comparación histórica de lotes</span>
+          <span className="font-semibold text-slate-900 dark:text-white">
+            Comparación histórica de lotes
+          </span>
         </div>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Estos parámetros definen cuándo la comparación de lotes (HU-24) marca un desvío significativo contra el
-          histórico de la empresa.
-          {!esGerente && " Solo el Gerente puede modificarlos."}
+          Estos parámetros definen cuándo la comparación de lotes (HU-24) marca
+          un desvío significativo contra el histórico de la empresa.
+          {!puedeEditar && " Solo lectura: tu rol no puede modificarlos."}
         </p>
       </div>
 
@@ -106,7 +120,7 @@ export function ComparacionHistoricaConfigTab() {
           min={0}
           max={100}
           value={desvioInput}
-          disabled={!esGerente || isSaving}
+          disabled={!puedeEditar || isSaving}
           onChange={(e) => setDesvioInput(e.target.value)}
           error={desvioError}
         />
@@ -118,7 +132,7 @@ export function ComparacionHistoricaConfigTab() {
           min={1}
           step={1}
           value={cantidadInput}
-          disabled={!esGerente || isSaving}
+          disabled={!puedeEditar || isSaving}
           onChange={(e) => setCantidadInput(e.target.value)}
           error={cantidadError}
         />
@@ -135,8 +149,13 @@ export function ComparacionHistoricaConfigTab() {
         </p>
       )}
 
-      {esGerente && (
-        <Button type="button" className="w-fit" isLoading={isSaving} onClick={handleGuardar}>
+      {puedeEditar && (
+        <Button
+          type="button"
+          className="w-fit"
+          isLoading={isSaving}
+          onClick={handleGuardar}
+        >
           <Check className="mr-2 h-4 w-4" />
           Guardar
         </Button>

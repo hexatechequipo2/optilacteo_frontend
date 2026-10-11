@@ -1,5 +1,5 @@
 import { test, expect } from "./fixtures/coverageFixtures.ts";
-import { loginAsAdministrador } from "./fixtures/mockAuth.ts";
+import { loginAsAdministrador, mockPermisos } from "./fixtures/mockAuth.ts";
 
 test.describe("LoginPage", () => {
   test("muestra errores de validación con campos vacíos", async ({ page }) => {
@@ -22,6 +22,7 @@ test.describe("LoginPage", () => {
   });
 
   test("login exitoso redirige a /dashboard", async ({ page }) => {
+    await mockPermisos(page, "Administrador");
     await page.route("**/login", async (route) => {
       if (route.request().method() !== "POST") return route.continue();
       await route.fulfill({
@@ -360,5 +361,176 @@ test.describe("Interceptor de refresh de token (401)", () => {
 
     // clearSession() + redirectToLogin() — recarga dura a /login.
     await expect(page).toHaveURL("/login");
+  });
+});
+// ---------------------------------------------------------------------------
+// Sesión y refresh de token: casos de borde del interceptor y de AuthContext
+// ---------------------------------------------------------------------------
+
+test.describe("Interceptor de refresh de token (401) › Casos de borde", () => {
+  test("varios 401 simultáneos comparten un único refresh y todos se reintentan con el token nuevo", async ({ page }) => {
+    await mockCatchAllYNotificaciones(page);
+    await loginAsAdministrador(page);
+    // Se sale del dashboard (sigue pidiendo contadores) a una pantalla quieta.
+    await page.goto("/planes");
+    await expect(page.getByRole("heading", { name: "Planes" })).toBeVisible();
+
+    // Desde acá: la restauración de sesión del goto recibe un token que el
+    // back ya considera vencido; el siguiente refresh entrega uno válido.
+    let refreshes = 0;
+    await page.route("**/refresh", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      refreshes++;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          access_token: refreshes === 1 ? "token-vencido" : "token-nuevo",
+          refresh_token: `refresh-${refreshes}`,
+        }),
+      });
+    });
+    const reintentos: string[] = [];
+    let rechazos = 0;
+    await page.route(/\/(empresa|user|planes|proveedores)(\?|$)/, async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.fallback();
+      const auth = route.request().headers()["authorization"];
+      if (auth === "Bearer token-vencido") {
+        rechazos++;
+        return route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "Token expirado" }) });
+      }
+      reintentos.push(`${new URL(route.request().url()).pathname} ${auth}`);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } }),
+      });
+    });
+
+    await page.goto("/empresas");
+
+    // La pantalla y los contadores del menú piden varias cosas a la vez.
+    await expect.poll(() => reintentos.length).toBeGreaterThanOrEqual(3);
+    expect(rechazos).toBeGreaterThanOrEqual(3);
+    expect(refreshes).toBe(2); // restauración de sesión + un único refresh compartido
+    expect(reintentos.every((r) => r.endsWith("Bearer token-nuevo"))).toBe(true);
+    await expect(page).toHaveURL("/empresas");
+    // El refresh token rotado queda guardado donde estaba.
+    expect(await page.evaluate(() => sessionStorage.getItem("refreshToken"))).toBe("refresh-2");
+  });
+
+  test("un 401 sin refresh token guardado cierra la sesión", async ({ page }) => {
+    await mockCatchAllYNotificaciones(page);
+    await loginAsAdministrador(page);
+    await page.goto("/planes");
+    await expect(page.getByRole("heading", { name: "Planes" })).toBeVisible();
+    // Solo el listado de la pantalla Empresas (limit=5) responde 401; los
+    // contadores del menú (limit=1) siguen normales para no adelantarse.
+    await page.route("**/empresa*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.fallback();
+      if (new URL(route.request().url()).searchParams.get("limit") !== "5") return route.fallback();
+      await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "Token expirado" }) });
+    });
+    await page.evaluate(() => {
+      sessionStorage.removeItem("refreshToken");
+      localStorage.removeItem("refreshToken");
+    });
+
+    // Navegación dentro de la SPA: el token en memoria sigue, pero no hay con qué refrescarlo.
+    await page.getByRole("complementary").getByRole("button", { name: /^Empresas/ }).click();
+
+    await expect(page).toHaveURL("/login");
+    await expect(page.getByRole("button", { name: "Ingresar a la consola" })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem("usuario"))).toBeNull();
+  });
+});
+
+test.describe("AuthContext › Sesión", () => {
+  test("sin sesión, una ruta protegida lleva al login", async ({ page }) => {
+    await mockCatchAllYNotificaciones(page);
+
+    await page.goto("/lotes");
+
+    await expect(page).toHaveURL("/login");
+    await expect(page.getByRole("button", { name: "Ingresar a la consola" })).toBeVisible();
+  });
+
+  async function loginConRecordarme(page: import("@playwright/test").Page, recordarme: boolean) {
+    await mockCatchAllYNotificaciones(page);
+    await mockPermisos(page, "Administrador");
+    await page.route("**/login", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          access_token: "fake-token",
+          refresh_token: "refresh-recordado",
+          user: { id: 1, email: "admin@optilacteo.com", rolNombre: "Administrador" },
+        }),
+      });
+    });
+    await page.goto("/login");
+    await page.getByLabel("Correo corporativo").fill("admin@optilacteo.com");
+    await page.locator("#password").fill("password123");
+    if (recordarme) await page.getByLabel("Recordarme").check();
+    await page.getByRole("button", { name: "Ingresar a la consola" }).click();
+    await expect(page).toHaveURL("/dashboard");
+  }
+
+  async function abrirOtraPestana(page: import("@playwright/test").Page) {
+    const otra = await page.context().newPage();
+    await mockCatchAllYNotificaciones(otra);
+    await mockPermisos(otra, "Administrador");
+    await otra.route("**/refresh", (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ access_token: "fake-token-2", refresh_token: "refresh-rotado" }),
+          })
+        : route.fallback(),
+    );
+    await otra.goto("/planes");
+    return otra;
+  }
+
+  test("con 'Recordarme' la sesión sigue abierta en otra pestaña", async ({ page }) => {
+    await loginConRecordarme(page, true);
+    expect(await page.evaluate(() => localStorage.getItem("refreshToken"))).toBe("refresh-recordado");
+
+    const otra = await abrirOtraPestana(page);
+
+    await expect(otra).toHaveURL("/planes");
+    await expect(otra.getByRole("heading", { name: "Planes" })).toBeVisible();
+    // El refresh rotado se reescribe en el mismo storage.
+    expect(await otra.evaluate(() => localStorage.getItem("refreshToken"))).toBe("refresh-rotado");
+  });
+
+  test("sin 'Recordarme' la sesión no pasa a otra pestaña", async ({ page }) => {
+    await loginConRecordarme(page, false);
+    expect(await page.evaluate(() => localStorage.getItem("refreshToken"))).toBeNull();
+
+    const otra = await abrirOtraPestana(page);
+
+    await expect(otra).toHaveURL("/login");
+  });
+
+  test("si el servidor falla al cerrar sesión igual limpia la sesión local", async ({ page }) => {
+    await mockCatchAllYNotificaciones(page);
+    await page.route("**/logout", (route) => route.fulfill({ status: 500, body: "" }));
+    await loginAsAdministrador(page);
+    await page.goto("/planes");
+    await expect(page.getByRole("heading", { name: "Planes" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Cerrar sesión" }).first().click();
+
+    await expect(page).toHaveURL("/login");
+    await expect(page.getByRole("button", { name: "Ingresar a la consola" })).toBeVisible();
+    expect(
+      await page.evaluate(() => [localStorage.getItem("usuario"), sessionStorage.getItem("refreshToken")]),
+    ).toEqual([null, null]);
   });
 });

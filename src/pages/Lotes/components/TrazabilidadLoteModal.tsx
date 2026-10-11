@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Check } from "lucide-react";
+import { Check, FileText } from "lucide-react";
 import { Modal } from "../../../components/ui/Modal";
 import { Badge } from "../../../components/ui/Badge";
 import { Input } from "../../../components/ui/Input";
@@ -10,6 +10,7 @@ import { useConsumosLote } from "../../../hooks/useConsumosLote";
 import { useLotesProduccion } from "../../../hooks/useLotesProduccion";
 import { useRegistrarConsumo } from "../../../hooks/useRegistrarConsumo";
 import { useConfigParametros } from "../../../hooks/useConfigParametros";
+import { useReporteTrazabilidad } from "../../../hooks/useReporteTrazabilidad";
 import {
   ORDEN_PARAMETROS,
   PARAMETROS_META,
@@ -50,6 +51,9 @@ interface TrazabilidadLoteModalProps {
   // en modo solo lectura (tienen acceso a GET /lotes/:id/consumos pero no al
   // POST).
   puedeRegistrarConsumo: boolean;
+  // HU-45: solo Responsable de calidad ve el botón de generar reporte
+  // (ver comentario en LotesPage, puedeGenerarReporteTrazabilidad).
+  puedeGenerarReporte: boolean;
   onClose: () => void;
   // Se dispara tras registrar un consumo con éxito: LotesPage hace
   // refetch() de useLotes() para que este mismo lote (buscado de nuevo por
@@ -65,6 +69,7 @@ export function TrazabilidadLoteModal({
   proveedorMap,
   tamboMap,
   puedeRegistrarConsumo,
+  puedeGenerarReporte,
   onClose,
   onConsumoRegistrado,
 }: TrazabilidadLoteModalProps) {
@@ -74,6 +79,14 @@ export function TrazabilidadLoteModal({
   const { lotesProduccion } = useLotesProduccion();
   const { configs } = useConfigParametros();
   const { registrar, isSubmitting, error: errorRegistro, resetError } = useRegistrarConsumo();
+  // HU-45: el PDF (contenido + firma SHA-256) lo arma el backend en
+  // GET /lotes/:id/reporte-trazabilidad; acá solo se descarga.
+  const {
+    descargar: descargarReporte,
+    isGenerando: isGenerandoReporte,
+    error: errorReporte,
+    resetError: resetErrorReporte,
+  } = useReporteTrazabilidad();
 
   const [cantidad, setCantidad] = useState("");
   const [loteProduccionId, setLoteProduccionId] = useState("");
@@ -91,7 +104,8 @@ export function TrazabilidadLoteModal({
     setErrorCantidad("");
     setErrorParametros("");
     resetError();
-  }, [isOpen, loteId, resetError]);
+    resetErrorReporte();
+  }, [isOpen, loteId, resetError, resetErrorReporte]);
 
   if (!isOpen || !lote) return null;
 
@@ -175,12 +189,48 @@ export function TrazabilidadLoteModal({
     }
   };
 
+  // HU-45 (AC2/AC3): "un solo clic" — sin paso intermedio de confirmación,
+  // el PDF se descarga directo.
+  const handleGenerarReporte = () => {
+    void descargarReporte(lote.id, lote.codigo);
+  };
+
   return (
     <Modal
       isOpen={isOpen}
       title="Detalle de trazabilidad de lote"
       description={lote.codigo}
       onClose={onClose}
+      footer={
+        <div className="flex flex-col gap-3">
+          {errorReporte && (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
+              {errorReporte}
+            </p>
+          )}
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Cerrar
+            </button>
+            {puedeGenerarReporte && (
+              <Button
+                type="button"
+                disabled={isGenerandoReporte}
+                onClick={handleGenerarReporte}
+                className="!w-auto items-center gap-1.5 px-6"
+                title="Genera y descarga el reporte de trazabilidad en PDF para presentar ante inspecciones"
+              >
+                <FileText className="h-4 w-4" />
+                {isGenerandoReporte ? "Generando…" : "Generar reporte"}
+              </Button>
+            )}
+          </div>
+        </div>
+      }
     >
       <div className="flex flex-col gap-8">
         {/* Datos de ingreso */}

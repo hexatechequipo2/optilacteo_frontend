@@ -46,6 +46,32 @@ const EMPRESAS_MOCK = {
   meta: { page: 1, limit: 5, total: 1, totalPages: 1 },
 };
 
+// HU-64: GET /proveedores/:id trae el bloque `estabilidad` (el listado no).
+// Solo se pide para Tambo; el backend manda null explícito en los opcionales.
+const ESTABILIDAD_OK = {
+  status: "ok",
+  mensaje: null,
+  clasificacion: "estable",
+  score: 0.042,
+  detalle: [],
+  cantidadLotes: 8,
+  minimoLotes: null,
+  calculadoEn: "2026-09-20T12:00:00.000Z",
+};
+
+async function mockProveedorDetalle(
+  page: Page,
+  responder: (id: number) => { status: number; body?: unknown },
+) {
+  await page.route("**/proveedores/*", async (route) => {
+    const rt = route.request().resourceType();
+    if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+    const id = Number(new URL(route.request().url()).pathname.split("/").pop());
+    const { status, body } = responder(id);
+    await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body ?? {}) });
+  });
+}
+
 async function mockProveedoresAndEmpresas(page: Page) {
   await page.route("**/proveedores*", async (route) => {
     const rt = route.request().resourceType();
@@ -56,6 +82,10 @@ async function mockProveedoresAndEmpresas(page: Page) {
       body: JSON.stringify(PROVEEDORES_MOCK),
     });
   });
+  await mockProveedorDetalle(page, (id) => ({
+    status: 200,
+    body: { ...PROVEEDORES_MOCK.data.find((p) => p.id === id), estabilidad: ESTABILIDAD_OK },
+  }));
   await page.route("**/empresa*", async (route) => {
     const rt = route.request().resourceType();
     if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
@@ -147,6 +177,55 @@ test.describe("ProveedoresPage", () => {
     await page.goto("/proveedores");
 
     await expect(page.getByText("No se encontraron proveedores")).toBeVisible();
+  });
+
+  test.describe("columna Estabilidad (HU-64)", () => {
+    test("Tambo con status ok muestra clasificación y % de desvío; Transporte 'No aplica' sin pedir detalle", async ({ page }) => {
+      await mockProveedoresAndEmpresas(page);
+      const idsPedidos: string[] = [];
+      page.on("request", (req) => {
+        const m = new URL(req.url()).pathname.match(/\/proveedores\/(\d+)$/);
+        if (m && req.method() === "GET") idsPedidos.push(m[1]);
+      });
+      await loginAsAdministrador(page);
+      await page.goto("/proveedores");
+
+      const filaTambo = page.getByRole("row", { name: /Tambo El Roble/ });
+      await expect(filaTambo.getByText("Estable")).toBeVisible();
+      await expect(filaTambo.getByText("4.2%")).toBeVisible();
+
+      const filaTransporte = page.getByRole("row", { name: /Transportes Rápido SA/ });
+      await expect(filaTransporte.getByText("No aplica")).toBeVisible();
+      expect(idsPedidos).toEqual(["1"]);
+    });
+
+    test("insufficient_data muestra 'Sin datos suficientes' y cuántos lotes faltan (default 5 si minimoLotes es null)", async ({ page }) => {
+      await mockProveedoresAndEmpresas(page);
+      await mockProveedorDetalle(page, () => ({
+        status: 200,
+        body: {
+          ...PROVEEDORES_MOCK.data[0],
+          estabilidad: { status: "insufficient_data", mensaje: "Sin datos suficientes", cantidadLotes: 2, minimoLotes: null },
+        },
+      }));
+      await loginAsAdministrador(page);
+      await page.goto("/proveedores");
+
+      const filaTambo = page.getByRole("row", { name: /Tambo El Roble/ });
+      await expect(filaTambo.getByText("Sin datos suficientes")).toBeVisible();
+      await expect(filaTambo.getByText("faltan 3 lotes")).toBeVisible();
+    });
+
+    test("si falla GET /proveedores/:id la fila muestra 'No disponible' y la tabla sigue", async ({ page }) => {
+      await mockProveedoresAndEmpresas(page);
+      await mockProveedorDetalle(page, () => ({ status: 500 }));
+      await loginAsAdministrador(page);
+      await page.goto("/proveedores");
+
+      const filaTambo = page.getByRole("row", { name: /Tambo El Roble/ });
+      await expect(filaTambo.getByText("No disponible")).toBeVisible();
+      await expect(page.getByRole("table").getByText("Transportes Rápido SA")).toBeVisible();
+    });
   });
 
   test("editar un proveedor y guardar llama a proveedoresService.update", async ({ page }) => {
@@ -672,4 +751,86 @@ test.describe("ProveedoresPage", () => {
     ).toBeVisible();
   });
 });
+});
+// ---------------------------------------------------------------------------
+// HU-64 — Orden por estabilidad y clasificaciones desconocidas
+// ---------------------------------------------------------------------------
+
+test.describe("ProveedoresPage (HU-64) › Orden por estabilidad", () => {
+  const tambo = (id: number, razonSocial: string) => ({
+    ...PROVEEDORES_MOCK.data[0],
+    id,
+    razonSocial,
+    cuit: `30-0000000${id}-1`,
+  });
+  const LISTA = [
+    tambo(11, "Tambo Moderado"),
+    PROVEEDORES_MOCK.data[1], // transporte: no aplica
+    tambo(12, "Tambo Estable Seis"),
+    tambo(13, "Tambo Sin Datos"),
+    tambo(14, "Tambo Inestable"),
+    tambo(15, "Tambo Estable Dos"),
+    tambo(16, "Tambo Clasificación Nueva"),
+  ];
+  const ok = (clasificacion: string, score: number) => ({ ...ESTABILIDAD_OK, clasificacion, score });
+  const ESTABILIDAD_POR_ID: Record<number, unknown> = {
+    11: ok("moderada", 0.1),
+    12: ok("estable", 0.06),
+    13: { status: "insufficient_data", mensaje: "Sin datos suficientes", cantidadLotes: 4, minimoLotes: 5 },
+    14: ok("inestable", 0.3),
+    15: ok("estable", 0.02),
+    // Una clasificación que el front no conoce se trata como sin datos.
+    16: ok("excelente", 0.01),
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await page.route("**/proveedores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: LISTA, meta: { page: 1, limit: 3, total: LISTA.length, totalPages: 1 } }),
+      });
+    });
+    await mockProveedorDetalle(page, (id) => ({
+      status: 200,
+      body: { ...LISTA.find((p) => p.id === id), estabilidad: ESTABILIDAD_POR_ID[id] },
+    }));
+    await loginAsAdministrador(page);
+    await page.goto("/proveedores");
+    await expect(page.getByRole("row", { name: /Tambo Inestable/ }).getByText("Inestable", { exact: true })).toBeVisible();
+  });
+
+  test("ordena de más a menos confiable, después al revés, y vuelve al orden original", async ({ page }) => {
+    const ordenar = page.getByRole("button", { name: "ESTABILIDAD" });
+    const fila = (n: number) => page.getByRole("table").locator("tbody tr").nth(n);
+
+    await ordenar.click();
+    // Clasificadas por rango y desvío; sin datos y no aplica siempre al final.
+    await expect(fila(0)).toContainText("Tambo Estable Dos");
+    await expect(fila(1)).toContainText("Tambo Estable Seis");
+    await expect(fila(2)).toContainText("Tambo Moderado");
+    await expect(fila(3)).toContainText("Tambo Inestable");
+    await expect(fila(6)).toContainText("Transportes Rápido SA");
+
+    await ordenar.click();
+    await expect(fila(0)).toContainText("Tambo Inestable");
+    await expect(fila(1)).toContainText("Tambo Moderado");
+    await expect(fila(3)).toContainText("Tambo Estable Dos");
+    await expect(fila(6)).toContainText("Transportes Rápido SA");
+
+    await ordenar.click();
+    await expect(fila(0)).toContainText("Tambo Moderado");
+    await expect(fila(1)).toContainText("Transportes Rápido SA");
+    await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(LISTA.length);
+  });
+
+  test("una clasificación desconocida se muestra como sin datos, sin desvío", async ({ page }) => {
+    const nueva = page.getByRole("row", { name: /Tambo Clasificación Nueva/ });
+    await expect(nueva.getByText("Sin datos suficientes")).toBeVisible();
+    await expect(nueva).not.toContainText("%");
+    await expect(page.getByRole("row", { name: /Tambo Sin Datos/ }).getByText("faltan 1 lote")).toBeVisible();
+  });
 });

@@ -5,6 +5,7 @@ import {
   loginAsResponsableProduccion,
   loginAsResponsableCalidad,
   loginAsOperario,
+  quitarPermisos,
 } from "./fixtures/mockAuth.js";
 
 // ---------------------------------------------------------------------------
@@ -121,12 +122,13 @@ async function irATabPlc(page: Page) {
 }
 
 test.describe("PlcGatewayConfigTab (HU-61)", () => {
-  test("un Responsable de producción llega directo a la tab, sin configuración previa", async ({
+  test("un Responsable de producción ve la tab sin configuración previa", async ({
     page,
   }) => {
     await mockPlcDeps(page);
     await loginAsResponsableProduccion(page);
     await page.goto("/configuracion");
+    await page.getByRole("button", { name: "Conexión PLC/Gateway" }).click();
 
     await expect(page.getByLabel("URL del endpoint *")).toBeVisible();
     await expect(page.getByText("Todavía no se guardó ninguna configuración de conexión.")).toBeVisible();
@@ -322,6 +324,7 @@ test.describe("PlcGatewayConfigTab (HU-61)", () => {
   test("un Operario de línea no tiene acceso a Configuración", async ({ page }) => {
     await mockPlcDeps(page);
     await loginAsOperario(page);
+    await quitarPermisos(page, "Operario de línea", ["sensores_iot"]);
     await page.goto("/configuracion");
 
     await expect(page.getByText("Acceso no autorizado")).toBeVisible();

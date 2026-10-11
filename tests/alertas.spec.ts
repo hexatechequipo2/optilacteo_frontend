@@ -2,6 +2,7 @@ import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
 import {
   loginAsResponsableProduccion,
   loginAsResponsableCalidad,
+  quitarPermisos,
 } from "./fixtures/mockAuth.ts";
 
 // ---------------------------------------------------------------------------
@@ -210,6 +211,7 @@ test.describe("AlertasPage", () => {
 test("AlertasPage - un Responsable de calidad ve acceso no autorizado", async ({ page }) => {
   await mockAlertasDeps(page);
   await loginAsResponsableCalidad(page);
+  await quitarPermisos(page, "Responsable de calidad", ["monitoreo_alertas"]);
   await page.goto("/alertas");
   await expect(page.getByText("Acceso no autorizado")).toBeVisible();
 });
@@ -599,5 +601,218 @@ test.describe("HU-50 — Detección de anomalías en mediciones", () => {
     await page.locator("#alertas-filtro-tipo-desvio").selectOption("tendencia");
     await expect(page.locator("[role='button']").filter({ hasText: "LOT-2026-002" })).toBeVisible();
     await expect(page.locator("[role='button']").filter({ hasText: "LOT-2026-001" })).not.toBeVisible();
+  });
+});
+// ---------------------------------------------------------------------------
+// HU-25 / HU-50 — Cards de alerta: teclado, lectura y variantes
+// ---------------------------------------------------------------------------
+
+const ALERTA_ADVERTENCIA_PH = {
+  ...ALERTA_CRITICA,
+  id: 3,
+  nivelAlerta: "advertencia",
+  mensaje: "Valor de pH cerca del umbral en LOT-2026-003",
+  loteId: 3,
+  loteCodigo: "LOT-2026-003",
+  createdAt: "2026-08-05T10:00:00.000Z",
+  data: { ...ALERTA_CRITICA.data, loteId: 3, loteCodigo: "LOT-2026-003", nivelAlerta: "advertencia", valor: 7.6 },
+};
+
+const cardDe = (page: Page, texto: string) => page.locator("[role='button']").filter({ hasText: texto });
+
+test.describe("AlertasPage (HU-25) › Teclado y lectura", () => {
+  test("Enter o Espacio sobre una card abren el panel de detalle", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_CRITICA]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await cardDe(page, "LOT-2026-001").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    await cardDe(page, "LOT-2026-001").focus();
+    await page.keyboard.press(" ");
+    await expect(page.getByRole("dialog")).toBeVisible();
+  });
+
+  test("Enter sobre 'Marcar como leída' marca la alerta sin abrir el panel", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_CRITICA]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await page.getByRole("button", { name: "Marcar como leída", exact: true }).focus();
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByText("No hay alertas no leídas")).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("las alertas leídas se ven con 'Viendo: Todas' y no ofrecen marcarlas", async ({ page }) => {
+    await mockAlertasDeps(page, [{ ...ALERTA_ADVERTENCIA_PH, leida: true }]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+    await expect(cardDe(page, "LOT-2026-003")).toHaveCount(0);
+
+    // El switch no tiene nombre accesible (su texto es un span aparte).
+    await page.getByRole("switch").click();
+
+    await expect(page.getByText("Viendo: Todas")).toBeVisible();
+    const card = cardDe(page, "LOT-2026-003");
+    await expect(card.getByText("Leída", { exact: true })).toBeVisible();
+    await expect(card.getByText("Advertencia")).toBeVisible();
+    // pH no tiene unidad: el umbral se muestra solo con los valores.
+    await expect(card).toContainText("6–7.5");
+    await expect(card.getByRole("button", { name: "Marcar como leída" })).toHaveCount(0);
+  });
+});
+
+test.describe("AlertasPage (HU-50) › Card de anomalía", () => {
+  test("Enter abre el detalle de la anomalía", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_ANOMALIA]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await cardDe(page, "Anomalía detectada").focus();
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByRole("dialog").getByText("v1.3.0")).toBeVisible();
+  });
+
+  test("marcar una anomalía como leída no abre el detalle", async ({ page }) => {
+    const marcadas: string[] = [];
+    await mockAlertasDeps(page, [ALERTA_ANOMALIA]);
+    await page.route("**/notificaciones/*/leida", (route) => {
+      marcadas.push(new URL(route.request().url()).pathname);
+      return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    const card = cardDe(page, "Anomalía detectada");
+    await card.getByRole("button", { name: "Marcar como leída" }).focus();
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByText("No hay alertas no leídas")).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(marcadas).toEqual(["/notificaciones/20/leida"]);
+  });
+
+  test("muestra confianza media o baja según el porcentaje del modelo", async ({ page }) => {
+    await mockAlertasDeps(page, [
+      ALERTA_ANOMALIA_TENDENCIA,
+      { ...ALERTA_ANOMALIA, id: 22, confianza: 30, loteId: 3, data: { ...ALERTA_ANOMALIA.data, loteCodigo: "LOT-2026-003" } },
+    ]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await expect(cardDe(page, "LOT-2026-002").getByText("Confianza media")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-003").getByText("Confianza baja")).toBeVisible();
+  });
+
+  test("una anomalía leída se muestra como 'Leída' y sin acción de marcar", async ({ page }) => {
+    await mockAlertasDeps(page, [{ ...ALERTA_ANOMALIA, leida: true }]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+    await page.getByRole("switch").click();
+
+    const card = cardDe(page, "Anomalía detectada");
+    await expect(card.getByText("Leída", { exact: true })).toBeVisible();
+    await expect(card.getByRole("button", { name: "Marcar como leída" })).toHaveCount(0);
+  });
+});
+
+test.describe("AlertasPage (HU-25) › Filtros por lote y fecha", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_CRITICA, ALERTA_INFORMATIVA, ALERTA_ADVERTENCIA_PH]);
+    // El selector de lote se arma con GET /lotes (ordenado por código).
+    await page.route("**/lotes*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            { id: 2, codigo: "LOT-2026-002" },
+            { id: 1, codigo: "LOT-2026-001" },
+            { id: 3, codigo: "LOT-2026-003" },
+          ],
+          total: 3,
+          page: 1,
+          limit: 20,
+        }),
+      });
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+    await expect(cardDe(page, "LOT-2026-001")).toBeVisible();
+  });
+
+  test("filtra por lote y vuelve a mostrar todo con 'Todos los lotes'", async ({ page }) => {
+    const lote = page.getByLabel("Lote", { exact: true });
+    await expect(lote.locator("option")).toHaveText(["Todos los lotes", "LOT-2026-001", "LOT-2026-002", "LOT-2026-003"]);
+
+    await lote.selectOption({ label: "LOT-2026-002" });
+    await expect(cardDe(page, "LOT-2026-002")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-001")).toHaveCount(0);
+    await expect(cardDe(page, "LOT-2026-003")).toHaveCount(0);
+
+    await lote.selectOption({ label: "Todos los lotes" });
+    await expect(cardDe(page, "LOT-2026-001")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-003")).toBeVisible();
+  });
+
+  test("filtra por rango de fechas", async ({ page }) => {
+    // Alertas del 1/8 (dos) y del 5/8.
+    await page.getByLabel("Desde", { exact: true }).fill("2026-08-03");
+    await expect(cardDe(page, "LOT-2026-003")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-001")).toHaveCount(0);
+
+    await page.getByLabel("Desde", { exact: true }).fill("");
+    await page.getByLabel("Hasta", { exact: true }).fill("2026-08-03");
+    await expect(cardDe(page, "LOT-2026-001")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-002")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-003")).toHaveCount(0);
+
+    await page.getByLabel("Desde", { exact: true }).fill("2026-08-02");
+    await expect(page.getByText("No hay alertas no leídas para los filtros seleccionados.")).toBeVisible();
+  });
+});
+
+// Los filtros Desde/Hasta son días calendario en hora local: una alerta de
+// las 23:30 del 1/8 en Córdoba (02:30Z del 2/8) pertenece al 1/8.
+test.describe("AlertasPage (HU-25) › Filtro de fechas en hora local", () => {
+  test.use({ timezoneId: "America/Argentina/Cordoba", locale: "es-AR" });
+
+  const DIA1_MANANA = { ...ALERTA_CRITICA, createdAt: "2026-08-01T08:00:00.000Z" }; // 05:00 del 1/8
+  const DIA1_NOCHE = {
+    ...ALERTA_INFORMATIVA,
+    createdAt: "2026-08-02T02:30:00.000Z", // 23:30 del 1/8
+  };
+  const DIA2 = { ...ALERTA_ADVERTENCIA_PH, createdAt: "2026-08-02T15:00:00.000Z" }; // 12:00 del 2/8
+
+  test.beforeEach(async ({ page }) => {
+    await mockAlertasDeps(page, [DIA1_MANANA, DIA1_NOCHE, DIA2]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+    await expect(cardDe(page, "LOT-2026-003")).toBeVisible();
+  });
+
+  test("'Hasta' incluye todo ese día local, hasta las 23:59", async ({ page }) => {
+    await page.getByLabel("Hasta", { exact: true }).fill("2026-08-01");
+
+    await expect(cardDe(page, "LOT-2026-001")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-002")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-003")).toHaveCount(0);
+  });
+
+  test("'Desde' arranca a las 00:00 locales de ese día", async ({ page }) => {
+    await page.getByLabel("Desde", { exact: true }).fill("2026-08-02");
+
+    await expect(cardDe(page, "LOT-2026-003")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-002")).toHaveCount(0);
+    await expect(cardDe(page, "LOT-2026-001")).toHaveCount(0);
   });
 });

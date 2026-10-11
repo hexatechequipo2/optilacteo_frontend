@@ -5,7 +5,8 @@ import type {
   UpdateUsuarioDto,
   UsuarioType,
 } from "../../../types/usuario.types";
-import { UsuarioForm, type UsuarioFormValues } from "./UsuarioForm";
+import { RolNoAsignadoError, UsuarioForm, type UsuarioFormValues } from "./UsuarioForm";
+import { extraerMensajeError } from "../../../services/rol.service";
 
 interface EditarUsuarioModalProps {
   usuario: UsuarioType | null;
@@ -20,6 +21,11 @@ interface EditarUsuarioModalProps {
     payload: UpdateUsuarioDto,
     nuevoEstado: boolean,
   ) => Promise<void>;
+  // gestion_roles:editar (PUT /roles/usuarios/:usuarioId).
+  puedeCambiarRol: boolean;
+  onAsignarRol: (usuarioId: number, rolId: number) => Promise<void>;
+  // Administrador: carga los roles de la empresa del usuario.
+  onEmpresaChange?: (empresaId: number | undefined) => void;
 }
 
 export function EditarUsuarioModal({
@@ -30,6 +36,9 @@ export function EditarUsuarioModal({
   isSubmitting,
   onClose,
   onUpdate,
+  puedeCambiarRol,
+  onAsignarRol,
+  onEmpresaChange,
 }: EditarUsuarioModalProps) {
   if (!usuario) return null;
 
@@ -39,11 +48,19 @@ export function EditarUsuarioModal({
       {
         name: values.name,
         email: values.email,
-        rolId: values.rolId,
         empresaId: Number(values.empresaId),
       },
       values.isActive,
     );
+    // El rol va aparte: PUT /roles/usuarios/:id aplica las protecciones del
+    // back (autobloqueo, empresa sin gestor, rol de sistema).
+    if (puedeCambiarRol && values.rolId !== usuario.rolId) {
+      try {
+        await onAsignarRol(usuario.id, values.rolId);
+      } catch (err) {
+        throw new RolNoAsignadoError(extraerMensajeError(err, "Intentá nuevamente."));
+      }
+    }
     onClose();
   };
 
@@ -78,7 +95,10 @@ export function EditarUsuarioModal({
         usuario={usuario}
         roles={roles}
         empresas={empresas}
-        empresaIdBloqueada={empresaIdBloqueada}
+        // PATCH /user/:id no mueve al usuario de empresa: queda fija en la suya.
+        empresaIdBloqueada={empresaIdBloqueada ?? usuario.empresa?.id}
+        rolEditable={puedeCambiarRol}
+        onEmpresaChange={onEmpresaChange}
         onSubmit={handleSubmit}
       />
     </Modal>

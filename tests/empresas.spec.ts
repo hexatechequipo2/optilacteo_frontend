@@ -17,7 +17,7 @@ async function mockEmpresasGet(page: Page) {
   await page.route("**/empresa*", async (route) => {
     const rt = route.request().resourceType();
     if (rt !== "fetch" && rt !== "xhr") return route.continue();
-    if (route.request().method() !== "GET") return route.continue();
+    if (route.request().method() !== "GET") return route.fallback();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -46,7 +46,7 @@ test.describe("EmpresasPage", () => {
     await expect(page.getByText("Acceso no autorizado")).toBeVisible();
     await expect(
       page.getByText(
-        "No tenés el rol permitido para ingresar a la Administración de OptiLácteo.",
+        "Tu rol no tiene permiso para ver esta sección.",
       ),
     ).toBeVisible();
   });
@@ -119,7 +119,7 @@ test.describe("EmpresasPage", () => {
     await page.goto("/empresas");
 
     await page.route("**/empresa", async (route) => {
-      if (route.request().method() !== "POST") return route.continue();
+      if (route.request().method() !== "POST") return route.fallback();
       const body = route.request().postDataJSON();
       await route.fulfill({
         status: 201,
@@ -188,7 +188,7 @@ test.describe("EmpresasPage", () => {
         postCount++;
       }
 
-      await route.continue();
+      await route.fallback();
     });
 
     await page.getByRole("button", { name: "Crear empresa" }).click();
@@ -249,7 +249,7 @@ test.describe("EmpresasPage", () => {
 
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       requestBody = route.request().postDataJSON();
@@ -291,7 +291,7 @@ test.describe("EmpresasPage", () => {
 
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       requestBody = route.request().postDataJSON();
@@ -320,7 +320,7 @@ test.describe("EmpresasPage", () => {
   test("muestra el mensaje del backend ante error 409", async ({ page }) => {
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       await route.fulfill({
@@ -349,7 +349,7 @@ test.describe("EmpresasPage", () => {
   test("muestra el mensaje del backend ante error 400", async ({ page }) => {
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       await route.fulfill({
@@ -372,7 +372,7 @@ test.describe("EmpresasPage", () => {
   test("muestra error genérico ante un error inesperado", async ({ page }) => {
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       await route.fulfill({
@@ -435,7 +435,7 @@ test.describe("EmpresasPage", () => {
   }) => {
     await page.route("**/empresa", async (route) => {
       if (route.request().method() !== "POST") {
-        return route.continue();
+        return route.fallback();
       }
 
       await route.fulfill({
@@ -467,6 +467,9 @@ test.describe("EmpresasPage", () => {
   await expect(
     page.getByText("Editar empresa", { exact: true }),
   ).toBeVisible();
+  // El modal monta con el formulario vacío y lo completa en un useEffect:
+  // editar antes de eso deja que el efecto pise lo que escribió el test.
+  await expect(page.getByLabel("Nombre *")).toHaveValue(empresa);
 }
 
   test.describe("EditarEmpresaModal", () => {
@@ -555,7 +558,7 @@ test.describe("EmpresasPage", () => {
           updateCount++;
         }
 
-        await route.continue();
+        await route.fallback();
       });
 
       await page.getByLabel("Nombre *").fill("");
@@ -611,7 +614,7 @@ test.describe("EmpresasPage", () => {
           route.request().method() !== "PATCH" &&
           route.request().method() !== "PUT"
         ) {
-          return route.continue();
+          return route.fallback();
         }
 
         requestBody = route.request().postDataJSON();
@@ -671,7 +674,7 @@ test.describe("EmpresasPage", () => {
           route.request().method() !== "PATCH" &&
           route.request().method() !== "PUT"
         ) {
-          return route.continue();
+          return route.fallback();
         }
 
         requestBody = route.request().postDataJSON();
@@ -725,7 +728,7 @@ test.describe("EmpresasPage", () => {
           route.request().method() !== "PATCH" &&
           route.request().method() !== "PUT"
         ) {
-          return route.continue();
+          return route.fallback();
         }
 
         await route.fulfill({
@@ -760,7 +763,7 @@ test.describe("EmpresasPage", () => {
           route.request().method() !== "PATCH" &&
           route.request().method() !== "PUT"
         ) {
-          return route.continue();
+          return route.fallback();
         }
 
         await route.fulfill({
@@ -789,7 +792,7 @@ test.describe("EmpresasPage", () => {
           route.request().method() !== "PATCH" &&
           route.request().method() !== "PUT"
         ) {
-          return route.continue();
+          return route.fallback();
         }
 
         await route.fulfill({
@@ -819,5 +822,120 @@ test.describe("EmpresasPage", () => {
         page.getByText("Editar empresa", { exact: true }),
       ).not.toBeVisible();
     });
+  });
+});
+// ---------------------------------------------------------------------------
+// Combobox de localidad (componente compartido) dentro de NuevaEmpresaModal
+// ---------------------------------------------------------------------------
+
+test.describe("Combobox de localidad › NuevaEmpresaModal", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockEmpresasGet(page);
+    await loginAsAdministrador(page);
+    await page.goto("/empresas");
+    await page.getByRole("button", { name: "+ Nueva empresa" }).click();
+    await expect(page.getByRole("heading", { name: "Nueva empresa" })).toBeVisible();
+  });
+
+  // El <label> del combobox no está asociado al input (ver hallazgos): se
+  // ubica por su placeholder.
+  const localidad = (page: Page) => page.getByPlaceholder("Buscar localidad...");
+  const opciones = (page: Page) => page.getByRole("listbox").getByRole("option");
+
+  async function capturarAlta(page: Page) {
+    const cuerpos: Record<string, unknown>[] = [];
+    await page.route("**/empresa", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      cuerpos.push(route.request().postDataJSON());
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: 3, isActive: true, name: "X", plan: "starter" }) });
+    });
+    return cuerpos;
+  }
+
+  test("filtra mientras se escribe, sin distinguir mayúsculas, y avisa si no hay coincidencias", async ({ page }) => {
+    await localidad(page).fill("jesus m");
+    await expect(opciones(page)).toHaveText(["JESUS MARIA"]);
+
+    await localidad(page).fill("zzzz");
+    await expect(page.getByRole("listbox")).toContainText("No se encontraron resultados");
+    await expect(opciones(page)).toHaveCount(0);
+  });
+
+  test("con flechas y Enter elige una opción, y la localidad viaja en la dirección", async ({ page }) => {
+    const cuerpos = await capturarAlta(page);
+    await page.getByLabel("Nombre *").fill("Lácteos Norte");
+    await page.getByLabel("Dirección").fill("San Martín 100");
+
+    await localidad(page).fill("maria");
+    await expect(opciones(page).first()).toHaveText("ADELIA MARIA");
+    await localidad(page).press("ArrowDown");
+    await localidad(page).press("ArrowDown");
+    await localidad(page).press("ArrowUp");
+    await localidad(page).press("Enter");
+
+    await expect(localidad(page)).toHaveValue("ARSENAL JOSE MARIA ROJAS");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Crear empresa" }).click();
+    await expect.poll(() => cuerpos[0]?.direccion).toBe("San Martín 100, ARSENAL JOSE MARIA ROJAS");
+  });
+
+  test("con el mouse elige una opción y la cruz la limpia", async ({ page }) => {
+    await localidad(page).fill("villa mari");
+    await opciones(page).filter({ hasText: /^VILLA MARIA$/ }).click();
+    await expect(localidad(page)).toHaveValue("VILLA MARIA");
+
+    // Con valor elegido y la lista cerrada aparece la cruz.
+    await page.getByLabel("Nombre *").click();
+    await page.getByRole("button", { name: "Limpiar selección" }).click();
+    await expect(localidad(page)).toHaveValue("");
+  });
+
+  test("tocar afuera descarta lo escrito y vuelve a la opción elegida", async ({ page }) => {
+    await localidad(page).fill("rio cuar");
+    await localidad(page).press("Enter");
+    await expect(localidad(page)).toHaveValue("RIO CUARTO");
+
+    await localidad(page).fill("otra cosa");
+    await page.getByLabel("Nombre *").click();
+    await expect(localidad(page)).toHaveValue("RIO CUARTO");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+
+    // Con la lista cerrada y el foco en el campo, flecha abajo la vuelve a abrir.
+    await localidad(page).focus();
+    await page.getByLabel("Nombre *").click();
+    await localidad(page).press("ArrowDown");
+    await expect(page.getByRole("listbox")).toBeVisible();
+  });
+
+  test("Escape cierra la lista sin cerrar el formulario, y un segundo Escape cierra el modal", async ({ page }) => {
+    await page.getByLabel("Nombre *").fill("Lácteos Norte");
+    await localidad(page).fill("rio cuar");
+    await localidad(page).press("Enter");
+    await localidad(page).fill("algo a medio escribir");
+    await expect(page.getByRole("listbox")).toBeVisible();
+
+    await localidad(page).press("Escape");
+
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await expect(localidad(page)).toHaveValue("RIO CUARTO");
+    await expect(page.getByRole("heading", { name: "Nueva empresa" })).toBeVisible();
+    await expect(page.getByLabel("Nombre *")).toHaveValue("Lácteos Norte");
+
+    // Con la lista ya cerrada, Escape vuelve a cerrar el modal como siempre.
+    await localidad(page).press("Escape");
+    await expect(page.getByRole("heading", { name: "Nueva empresa" })).toHaveCount(0);
+  });
+
+  test("borrar todo el texto deja la localidad vacía", async ({ page }) => {
+    const cuerpos = await capturarAlta(page);
+    await page.getByLabel("Nombre *").fill("Lácteos Norte");
+    await localidad(page).fill("jesus maria");
+    await localidad(page).press("Enter");
+    await localidad(page).fill("");
+
+    await page.getByRole("button", { name: "Crear empresa" }).click();
+    await expect.poll(() => cuerpos.length).toBe(1);
+    expect("direccion" in cuerpos[0]).toBe(false);
   });
 });

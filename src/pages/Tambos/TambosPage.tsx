@@ -4,11 +4,12 @@ import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
 import { useTambosCatalogo } from "../../hooks/useTambos";
-import { useAuth } from "../../hooks/useAuth";
+import { usePermisos } from "../../hooks/usePermisos";
 import { proveedoresService } from "../../services/proveedores.service";
 import { extraerMensajeError } from "../../services/tambo.service";
 import type { Proveedor } from "../../types/proveedor.types";
 import type { Tambo } from "../../types/tambo.types";
+import type { ModuloPermiso } from "../../types/permisos.types";
 import { TamboFormModal } from "./TamboFormModal";
 
 // Universo suficiente para poblar el selector de proveedores del formulario
@@ -30,28 +31,30 @@ const ESTADO_DOT: Record<"activo" | "inactivo", string> = {
 export default function TambosPage() {
   const { tambos, isLoading, error, refetch, createTambo, isCreating, updateTambo, isUpdating, activarTambo, darDeBajaTambo, cambiandoEstadoId } =
     useTambosCatalogo();
-  const { user } = useAuth();
+  const { puede } = usePermisos();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [filtroProveedorId, setFiltroProveedorId] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tamboEnEdicion, setTamboEnEdicion] = useState<Tambo | null>(null);
   const [errorEstado, setErrorEstado] = useState("");
 
-  const rol = (user?.rolNombre ?? "").trim().toLowerCase();
-  // POST /tambos (backend, tambo.controller.ts): @Roles(OPERARIO_LINEA, GERENTE)
-  // — a propósito no incluye Administrador ni Responsable de Calidad.
-  const puedeCrearTambo = rol === "operario de línea" || rol === "gerente";
-  // PATCH /tambos/:id, PATCH /tambos/:id/activar y DELETE /tambos/:id:
-  // @Roles(GERENTE, ADMINISTRADOR) en los tres. Mismo set para editar y
-  // para cambiar el estado (activar/dar de baja).
-  const puedeEditarTambo = rol === "gerente" || rol === "administrador";
+  // tambo.controller.ts: todos los endpoints aceptan recepcion o trazabilidad.
+  const TAMBO: ModuloPermiso[] = ["recepcion", "trazabilidad"];
+  const puedeCrearTambo = puede(TAMBO, "crear"); // POST /tambos
+  // PATCH /tambos/:id y PATCH /tambos/:id/activar
+  const puedeEditarTambo = puede(TAMBO, "editar");
+  // DELETE /tambos/:id (dar de baja)
+  const puedeDarDeBajaTambo = puede(TAMBO, "eliminar");
 
   useEffect(() => {
+    // GET /proveedores exige recepcion:ver; sin eso el filtro y la columna
+    // de proveedor quedan sin razón social, sin 403.
+    if (!puede("recepcion", "ver")) return;
     proveedoresService
       .getAll({ page: 1, limit: PROVEEDORES_SELECT_LIMIT, estado: "activa" })
       .then((result) => setProveedores(result.data))
       .catch(() => setProveedores([]));
-  }, []);
+  }, [puede]);
 
   const proveedorMap = useMemo(
     () => new Map(proveedores.map((p) => [p.id, p.razonSocial])),
@@ -217,7 +220,7 @@ export default function TambosPage() {
                               <Pencil className="h-4 w-4" />
                             </button>
                           )}
-                          {puedeEditarTambo && (
+                          {(tambo.activo ? puedeDarDeBajaTambo : puedeEditarTambo) && (
                             <button
                               type="button"
                               onClick={() => cambiarEstado(tambo)}
@@ -271,7 +274,7 @@ export default function TambosPage() {
                           <Pencil className="h-4 w-4" />
                         </button>
                       )}
-                      {puedeEditarTambo && (
+                      {(tambo.activo ? puedeDarDeBajaTambo : puedeEditarTambo) && (
                         <button
                           type="button"
                           onClick={() => cambiarEstado(tambo)}

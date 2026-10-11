@@ -1,41 +1,39 @@
-export type ModuloSistema =
-  | "dashboard"
-  | "recepcion"
-  | "destino_productivo_ia"
-  | "monitoreo_alertas"
-  | "sensores_iot"
-  | "trazabilidad"
-  | "reportes_forecast"
-  | "asistente_voz";
+import type { FlagsPermiso, ModuloPermiso } from "./permisos.types";
 
-export interface PermisoType {
-  id:number;
-  modulo: ModuloSistema;
-  canRead: boolean;
-  canWrite: boolean;
+export type { ModuloSistema } from "./permisos.types";
+
+export interface PermisoRol extends FlagsPermiso {
+  modulo: ModuloPermiso;
 }
 
+// GET /roles (rol.service.ts listar en el back): catálogo global + roles
+// propios de la empresa, con la matriz de ESTA empresa.
 export interface RolType {
   id: number;
   nombre: string;
   descripcion: string | null;
-  isActive: boolean;
-  permisos: PermisoType[];
+  // Administrador: acceso total, no se edita ni se elimina.
+  esSistema: boolean;
+  // Rol global del catálogo: no se renombra ni se elimina.
+  esCatalogo: boolean;
+  // Usuarios de esta empresa con el rol asignado.
+  usuarios: number;
+  permisos: PermisoRol[];
 }
 
-export interface UpdatePermisoDto {
-  modulo: ModuloSistema;
-  canRead: boolean;
-  canWrite: boolean;
+export interface GuardarRolDto {
+  nombre: string;
+  descripcion?: string;
+  permisos: PermisoRol[];
 }
 
-export interface PermisoActualizadoType {
+export interface RolGuardadoResponse {
   id: number;
-  modulo: ModuloSistema;
-  canRead: boolean;
-  canWrite: boolean;
-  rol: {
-    id: number;
-    nombre: string;
-  };
+  nombre: string;
+}
+
+export interface AsignarRolResponse {
+  usuarioId: number;
+  rolAnterior: string | null;
+  rolNuevo: string;
 }

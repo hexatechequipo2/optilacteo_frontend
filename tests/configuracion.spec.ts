@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsGerente, loginAsResponsableCalidad } from "./fixtures/mockAuth.ts";
+import { loginAsGerente, loginAsResponsableCalidad, quitarPermisos } from "./fixtures/mockAuth.ts";
 
 // ---------------------------------------------------------------------------
 // Datos de prueba
@@ -10,8 +10,10 @@ const PH_CONFIG_LECHE = {
   empresaId: 10,
   parametro: "ph",
   tipoMateriaPrima: "leche_cruda",
+  umbralAlertaMin: 5.5,
   umbralMin: 6.0,
   umbralMax: 7.5,
+  umbralAlertaMax: 8.0,
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-01T00:00:00.000Z",
 };
@@ -110,13 +112,27 @@ test.describe("ConfiguracionPage", () => {
   });
 
   test.describe("UmbralesCalidadTab", () => {
-    test.beforeEach(async ({ page }) => {
-      await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "Umbrales de calidad" }).click();
-      await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
-    });
+    const pHCardDe = (page: Page) => page.locator("xpath=//h3[normalize-space()='pH']/..");
 
-    test("muestra los umbrales guardados de la empresa en los inputs", async ({ page }) => {
+    // HU-40: los 4 umbrales en el orden de la cadena del backend.
+    async function completarUmbrales(
+      page: Page,
+      valores: { alertaMin: string; min: string; max: string; alertaMax: string },
+    ) {
+      const card = pHCardDe(page);
+      await card.getByLabel("Alerta mín", { exact: true }).fill(valores.alertaMin);
+      await card.getByLabel("Mín", { exact: true }).fill(valores.min);
+      await card.getByLabel("Máx", { exact: true }).fill(valores.max);
+      await card.getByLabel("Alerta máx", { exact: true }).fill(valores.alertaMax);
+      await card.getByLabel("Alerta máx", { exact: true }).blur();
+    }
+
+    async function guardarYConfirmar(page: Page) {
+      await pHCardDe(page).getByRole("button", { name: "Guardar" }).click();
+      await page.getByRole("alertdialog").getByRole("button", { name: "Guardar" }).click();
+    }
+
+    async function abrirConConfigGuardada(page: Page) {
       // LIFO: devuelve una config guardada para pH leche cruda
       await page.route("**/config-parametros*", async (route) => {
         const rt = route.request().resourceType();
@@ -129,135 +145,165 @@ test.describe("ConfiguracionPage", () => {
         });
       });
       await page.goto("/configuracion");
+      await page.waitForLoadState("networkidle");
       await page.getByRole("button", { name: "Umbrales de calidad" }).click();
       await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
+    }
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await expect(pHCard.locator("input").nth(0)).toHaveValue("6");
-      await expect(pHCard.locator("input").nth(1)).toHaveValue("7.5");
+    test.beforeEach(async ({ page }) => {
+      await page.waitForLoadState("networkidle");
+      await page.getByRole("button", { name: "Umbrales de calidad" }).click();
+      await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
+    });
+
+    test("muestra los 4 umbrales guardados y las zonas del semáforo", async ({ page }) => {
+      await abrirConConfigGuardada(page);
+
+      const pHCard = pHCardDe(page);
+      await expect(pHCard.getByLabel("Alerta mín", { exact: true })).toHaveValue("5.5");
+      await expect(pHCard.getByLabel("Mín", { exact: true })).toHaveValue("6");
+      await expect(pHCard.getByLabel("Máx", { exact: true })).toHaveValue("7.5");
+      await expect(pHCard.getByLabel("Alerta máx", { exact: true })).toHaveValue("8");
+
+      await expect(pHCard.getByText("Normal: 6 a 7.5")).toBeVisible();
+      await expect(pHCard.getByText("En límite: 5.5 a 6 · 7.5 a 8")).toBeVisible();
+      await expect(pHCard.getByText("Fuera de rango: < 5.5 · > 8")).toBeVisible();
+      // Sin cambios no hay nada para guardar.
+      await expect(pHCard.getByRole("button", { name: "Guardar" })).toBeDisabled();
     });
 
     test("muestra error al ingresar un valor fuera del rango físico del parámetro", async ({ page }) => {
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await pHCard.locator("input").nth(0).fill("-1"); // pH negativo: fuera del rango físico 0–14
-      await pHCard.locator("input").nth(1).fill("7");
-      await pHCard.locator("input").nth(1).blur();
+      // pH negativo: fuera del rango físico 0–14
+      await completarUmbrales(page, { alertaMin: "-1", min: "6", max: "7", alertaMax: "8" });
 
-      await expect(
-        pHCard.getByText("Los valores deben estar entre 0 y 14"),
-      ).toBeVisible();
+      await expect(pHCardDe(page).getByText("Debe estar entre 0 y 14")).toBeVisible();
     });
 
     test("muestra error cuando el umbral mínimo es mayor o igual al máximo", async ({ page }) => {
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await pHCard.locator("input").nth(0).fill("8");
-      await pHCard.locator("input").nth(1).fill("6");
-      await pHCard.locator("input").nth(1).blur();
+      await completarUmbrales(page, { alertaMin: "5", min: "8", max: "6", alertaMax: "9" });
 
-      await expect(
-        pHCard.getByText("El mínimo debe ser menor al máximo"),
-      ).toBeVisible();
+      await expect(pHCardDe(page).getByText("Debe ser mayor al mínimo")).toBeVisible();
     });
 
-    test("guarda los umbrales válidos al completar los campos y salir del input", async ({ page }) => {
+    test("muestra error en las bandas de alerta que invaden el rango normal", async ({ page }) => {
+      await completarUmbrales(page, { alertaMin: "6.5", min: "6", max: "7.5", alertaMax: "7" });
+
+      const pHCard = pHCardDe(page);
+      await expect(pHCard.getByText("Debe ser menor o igual al mínimo")).toBeVisible();
+      await expect(pHCard.getByText("Debe ser mayor o igual al máximo")).toBeVisible();
+    });
+
+    test("con errores de validación no abre el aviso ni envía nada", async ({ page }) => {
+      let posted = false;
+      await page.route("**/config-parametros*", async (route) => {
+        if (route.request().method() === "POST") posted = true;
+        return route.fallback();
+      });
+
+      await completarUmbrales(page, { alertaMin: "5", min: "8", max: "6", alertaMax: "9" });
+      await pHCardDe(page).getByRole("button", { name: "Guardar" }).click();
+
+      await expect(page.getByRole("alertdialog")).not.toBeVisible();
+      expect(posted).toBe(false);
+    });
+
+    test("crea la config con los 4 umbrales tras confirmar el aviso (POST)", async ({ page }) => {
+      let postBody: unknown;
       await page.route("**/config-parametros*", async (route) => {
         const rt = route.request().resourceType();
         if (rt !== "fetch" && rt !== "xhr") return route.continue();
         if (route.request().method() !== "POST") return route.continue();
+        postBody = route.request().postDataJSON();
         await route.fulfill({
           status: 201,
           contentType: "application/json",
-          body: JSON.stringify({
-            id: 99, empresaId: 10, parametro: "ph", tipoMateriaPrima: "leche_cruda",
-            umbralMin: 6.0, umbralMax: 7.5,
-            createdAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z",
-          }),
+          body: JSON.stringify({ ...PH_CONFIG_LECHE, id: 99 }),
         });
       });
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await pHCard.locator("input").nth(0).fill("6");
-      await pHCard.locator("input").nth(1).fill("7.5");
-      await pHCard.locator("input").nth(1).blur();
+      await completarUmbrales(page, { alertaMin: "5.5", min: "6", max: "7.5", alertaMax: "8" });
+      await pHCardDe(page).getByRole("button", { name: "Guardar" }).click();
 
-      // El input se deshabilita mientras isSaving es true (ver
-      // ParametroCard.tsx) — esperar a que vuelva a habilitarse fuerza que
-      // saveConfig (configParametroService.create + setConfigs) termine de
-      // resolver, a diferencia de solo esperar el request de red.
-      await expect(pHCard.locator("input").nth(1)).toBeEnabled();
+      const aviso = page.getByRole("alertdialog");
+      await expect(aviso.getByText("afecta el semáforo de todos los lotes de leche cruda")).toBeVisible();
+      await aviso.getByRole("button", { name: "Guardar" }).click();
 
+      await expect(aviso).not.toBeVisible();
+      expect(postBody).toEqual({
+        parametro: "ph",
+        tipoMateriaPrima: "leche_cruda",
+        umbralAlertaMin: 5.5,
+        umbralMin: 6,
+        umbralMax: 7.5,
+        umbralAlertaMax: 8,
+      });
       await expect(
-        pHCard.getByText("No se pudo guardar. Intentá nuevamente."),
+        pHCardDe(page).getByText("No se pudo guardar. Intentá nuevamente."),
       ).not.toBeVisible();
     });
 
-    test("edita un umbral existente (configParametroService.update)", async ({ page }) => {
-      // A diferencia del test anterior, acá YA existe una config guardada
+    test("cancelar el aviso no envía nada", async ({ page }) => {
+      let posted = false;
+      await page.route("**/config-parametros*", async (route) => {
+        if (route.request().method() === "POST") posted = true;
+        return route.fallback();
+      });
+
+      await completarUmbrales(page, { alertaMin: "5.5", min: "6", max: "7.5", alertaMax: "8" });
+      await pHCardDe(page).getByRole("button", { name: "Guardar" }).click();
+      await page.getByRole("alertdialog").getByRole("button", { name: "Cancelar" }).click();
+
+      await expect(page.getByRole("alertdialog")).not.toBeVisible();
+      expect(posted).toBe(false);
+    });
+
+    test("edita una config existente mandando los 4 umbrales (PUT)", async ({ page }) => {
+      // A diferencia del test de creación, acá YA existe una config guardada
       // (con id) para pH/leche_cruda: saveConfig() toma la rama update()
       // (PUT), no create() (POST) — ver useConfigParametros.saveConfig.
-      await page.route("**/config-parametros*", async (route) => {
-        const rt = route.request().resourceType();
-        if (rt !== "fetch" && rt !== "xhr") return route.continue();
-        if (route.request().method() !== "GET") return route.continue();
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify([PH_CONFIG_LECHE]),
-        });
-      });
-      await page.goto("/configuracion");
-      await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "Umbrales de calidad" }).click();
-      await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
+      await abrirConConfigGuardada(page);
 
-      let updateUrl: string | undefined;
+      let putBody: unknown;
       await page.route("**/config-parametros/1", async (route) => {
         const rt = route.request().resourceType();
         if (rt !== "fetch" && rt !== "xhr") return route.continue();
         if (route.request().method() !== "PUT") return route.continue();
-        updateUrl = route.request().url();
+        putBody = route.request().postDataJSON();
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ ...PH_CONFIG_LECHE, umbralMax: 7.8 }),
+          body: JSON.stringify({ ...PH_CONFIG_LECHE, umbralAlertaMax: 8.5 }),
         });
       });
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await expect(pHCard.locator("input").nth(1)).toHaveValue("7.5");
-      await pHCard.locator("input").nth(1).fill("7.8");
-      await pHCard.locator("input").nth(1).blur();
+      const pHCard = pHCardDe(page);
+      await pHCard.getByLabel("Alerta máx", { exact: true }).fill("8.5");
+      await guardarYConfirmar(page);
 
-      await expect(pHCard.locator("input").nth(1)).toBeEnabled();
-      expect(updateUrl).toContain("/config-parametros/1");
+      await expect(page.getByRole("alertdialog")).not.toBeVisible();
+      expect(putBody).toEqual({
+        umbralAlertaMin: 5.5,
+        umbralMin: 6,
+        umbralMax: 7.5,
+        umbralAlertaMax: 8.5,
+      });
+      await expect(pHCard.getByLabel("Alerta máx", { exact: true })).toHaveValue("8.5");
     });
 
     test("los umbrales de distintos tipos de materia prima son independientes", async ({ page }) => {
-      // LIFO: solo hay config para leche cruda
-      await page.route("**/config-parametros*", async (route) => {
-        const rt = route.request().resourceType();
-        if (rt !== "fetch" && rt !== "xhr") return route.continue();
-        if (route.request().method() !== "GET") return route.continue();
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify([PH_CONFIG_LECHE]),
-        });
-      });
-      await page.goto("/configuracion");
-      await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "Umbrales de calidad" }).click();
-      await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
+      // Solo hay config para leche cruda
+      await abrirConConfigGuardada(page);
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
+      const pHCard = pHCardDe(page);
       // Leche cruda: inputs con valores guardados
-      await expect(pHCard.locator("input").nth(0)).toHaveValue("6");
-      await expect(pHCard.locator("input").nth(1)).toHaveValue("7.5");
+      await expect(pHCard.getByLabel("Mín", { exact: true })).toHaveValue("6");
+      await expect(pHCard.getByLabel("Alerta máx", { exact: true })).toHaveValue("8");
 
       // Cambiar a Crema de leche: inputs vacíos (sin config para ese tipo)
       await page.getByRole("button", { name: "Crema de leche" }).click();
-      await expect(pHCard.locator("input").nth(0)).toHaveValue("");
-      await expect(pHCard.locator("input").nth(1)).toHaveValue("");
+      for (const label of ["Alerta mín", "Mín", "Máx", "Alerta máx"]) {
+        await expect(pHCard.getByLabel(label, { exact: true })).toHaveValue("");
+      }
     });
 
     test("muestra error del servidor al fallar el guardado", async ({ page }) => {
@@ -268,17 +314,15 @@ test.describe("ConfiguracionPage", () => {
         await route.fulfill({ status: 500, body: "" });
       });
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await pHCard.locator("input").nth(0).fill("6");
-      await pHCard.locator("input").nth(1).fill("7.5");
-      await pHCard.locator("input").nth(1).blur();
+      await completarUmbrales(page, { alertaMin: "5.5", min: "6", max: "7.5", alertaMax: "8" });
+      await guardarYConfirmar(page);
 
       await expect(
-        pHCard.getByText("No se pudo guardar. Intentá nuevamente."),
+        pHCardDe(page).getByText("No se pudo guardar. Intentá nuevamente."),
       ).toBeVisible();
     });
 
-    test("muestra el mensaje del backend cuando el guardado falla con un mensaje explícito", async ({ page }) => {
+    test("muestra los mensajes del backend cuando el guardado falla con 400", async ({ page }) => {
       await page.route("**/config-parametros*", async (route) => {
         const rt = route.request().resourceType();
         if (rt !== "fetch" && rt !== "xhr") return route.continue();
@@ -286,19 +330,26 @@ test.describe("ConfiguracionPage", () => {
         await route.fulfill({
           status: 400,
           contentType: "application/json",
-          body: JSON.stringify({ message: "El umbral máximo supera el límite permitido para pH" }),
+          // Mismo formato que ConfigParametroService.validarUmbrales: string[].
+          body: JSON.stringify({
+            statusCode: 400,
+            error: "Bad Request",
+            message: [
+              "umbralAlertaMin debe ser <= umbralMin y umbralAlertaMax debe ser >= umbralMax",
+            ],
+          }),
         });
       });
 
-      const pHCard = page.locator("xpath=//h3[normalize-space()='pH']/..");
-      await pHCard.locator("input").nth(0).fill("6");
-      await pHCard.locator("input").nth(1).fill("7.5");
-      await pHCard.locator("input").nth(1).blur();
+      await completarUmbrales(page, { alertaMin: "5.5", min: "6", max: "7.5", alertaMax: "8" });
+      await guardarYConfirmar(page);
 
       // Con response.data.message presente, configParametroService.
       // extraerMensajeError() devuelve el mensaje real en vez del fallback.
       await expect(
-        pHCard.getByText("El umbral máximo supera el límite permitido para pH"),
+        pHCardDe(page).getByText(
+          "umbralAlertaMin debe ser <= umbralMin y umbralAlertaMax debe ser >= umbralMax",
+        ),
       ).toBeVisible();
     });
   });
@@ -529,6 +580,37 @@ test.describe("ConfiguracionPage", () => {
     await expect(page.getByText("0 de 0 activos")).toBeVisible();
   });
 
+  test("marca los horarios activos que se superponen, incluso cruzando medianoche y de sábado a domingo", async ({ page }) => {
+    const horario = (id: string, nombre: string, horaInicio: string, horaFin: string, dias: string[], activo = true) => ({
+      id, nombre, horaInicio, horaFin, dias, activo, creadoEn: "2026-09-16T00:00:00.000Z",
+    });
+    await page.evaluate((horarios) => {
+      localStorage.setItem("optilacteo:horarios-silencio", JSON.stringify(horarios));
+    }, [
+      horario("1", "Noche del sábado", "22:00", "06:00", ["sab"]),
+      horario("2", "Madrugada del domingo", "05:00", "07:00", ["dom"]),
+      horario("3", "Mañana del lunes", "08:00", "12:00", ["lun"]),
+      horario("4", "Mediodía del lunes", "11:00", "13:00", ["lun"]),
+      // Se tocan en el borde (12:00 / 14:00) pero no se superponen.
+      horario("5", "Martes temprano", "12:00", "14:00", ["mar"]),
+      horario("6", "Martes tarde", "14:00", "15:00", ["mar"]),
+      // Inactivo: aunque se cruce con otros, no cuenta.
+      horario("7", "Domingo inactivo", "04:00", "08:00", ["dom"], false),
+    ]);
+    await page.reload();
+    await page.getByRole("button", { name: "Horarios de silencio" }).click();
+
+    const aviso = (nombre: string) => page.locator("li").filter({ hasText: nombre }).getByText("Se superpone");
+    await expect(aviso("Noche del sábado")).toHaveAttribute("title", "Se superpone con: Madrugada del domingo");
+    await expect(aviso("Madrugada del domingo")).toHaveAttribute("title", "Se superpone con: Noche del sábado");
+    await expect(aviso("Mañana del lunes")).toHaveAttribute("title", "Se superpone con: Mediodía del lunes");
+    await expect(aviso("Mediodía del lunes")).toHaveAttribute("title", "Se superpone con: Mañana del lunes");
+    await expect(aviso("Martes temprano")).toHaveCount(0);
+    await expect(aviso("Martes tarde")).toHaveCount(0);
+    await expect(aviso("Domingo inactivo")).toHaveCount(0);
+    await expect(page.locator("li").filter({ hasText: "Noche del sábado" })).toContainText("CRUZA MEDIANOCHE");
+  });
+
   test("crear un horario nuevo lo agrega a la lista", async ({ page }) => {
     await page.getByRole("button", { name: "+ Nuevo horario de silencio" }).click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
@@ -681,6 +763,290 @@ test.describe("DestinosProductivosConfigTab", () => {
 });
 });
 
+  // HU-48: política y registros en localStorage (retencion.service.ts, mock
+  // funcional — ver el TODO(backend) ahí). Cada test que necesita registros
+  // propios arma fechas relativas a "hoy" con fechaHaceMeses, nunca fechas
+  // fijas: sumarMeses/diasRestantes (utils/retencion.ts) dependen de la
+  // fecha real de ejecución.
+  test.describe("RetencionDatosTab", () => {
+    const STORAGE_POLITICA = "optilacteo:retencion:politica";
+    const STORAGE_REGISTROS = "optilacteo:retencion:registros";
+
+    test.beforeEach(async ({ page }) => {
+      await page.evaluate(
+        ([k1, k2]) => {
+          localStorage.removeItem(k1);
+          localStorage.removeItem(k2);
+        },
+        [STORAGE_POLITICA, STORAGE_REGISTROS],
+      );
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await page.getByRole("button", { name: "Retención de datos" }).click();
+    });
+
+    // Mediodía para no cruzar el borde de huso horario; diasAjuste mueve el
+    // resultado unos días para quedar vencido (negativo) o por vencer
+    // (positivo) respecto del piso normativo de 24 meses.
+    function fechaHaceMeses(page: Page, meses: number, diasAjuste = 0) {
+      return page.evaluate(
+        ([meses, diasAjuste]) => {
+          const d = new Date();
+          d.setHours(12, 0, 0, 0);
+          d.setMonth(d.getMonth() - meses);
+          d.setDate(d.getDate() + diasAjuste);
+          return d.toISOString();
+        },
+        [meses, diasAjuste],
+      );
+    }
+
+    async function sembrarRegistros(page: Page, registros: unknown[]) {
+      await page.evaluate(
+        ([key, registros]) => localStorage.setItem(key as string, JSON.stringify(registros)),
+        [STORAGE_REGISTROS, registros],
+      );
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await page.getByRole("button", { name: "Retención de datos" }).click();
+    }
+
+    test("muestra la política vigente con el mínimo normativo de 24 meses", async ({ page }) => {
+      await expect(page.locator("#retencion-periodo")).toHaveValue("24");
+      await expect(page.getByText("Mínimo 24 meses (SENASA / CAA).")).toBeVisible();
+      await expect(
+        page.getByText(/resoluciones del SENASA y la normativa del CAA el mínimo es de 24/),
+      ).toBeVisible();
+    });
+
+    test("rechaza un período menor a 24 meses y deja el botón de guardar deshabilitado", async ({
+      page,
+    }) => {
+      await page.locator("#retencion-periodo").fill("12");
+      await expect(
+        page.getByText(/No se puede configurar un período menor a 24 meses/),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Guardar política" })).toBeDisabled();
+    });
+
+    test("guardar una política válida actualiza el período y muestra el mensaje de éxito", async ({
+      page,
+    }) => {
+      await page.locator("#retencion-periodo").fill("30");
+      await page.getByRole("button", { name: "Guardar política" }).click();
+
+      await expect(page.getByText("La política de retención se guardó correctamente.")).toBeVisible();
+      await expect(page.locator("#retencion-periodo")).toHaveValue("30");
+    });
+
+    test("cambiar la acción al vencer actualiza su descripción y queda guardada", async ({ page }) => {
+      await page.getByLabel("Conservar activo").check();
+      await expect(
+        page.getByText("El registro sigue activo y editable aunque se haya cumplido el período. Ninguna opción elimina registros."),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Guardar política" }).click();
+      await expect(page.getByText("La política de retención se guardó correctamente.")).toBeVisible();
+
+      await page.reload();
+      await page.getByRole("button", { name: "Retención de datos" }).click();
+      await expect(page.getByLabel("Conservar activo")).toBeChecked();
+    });
+
+    test("desactivar el aviso anticipado se guarda y persiste", async ({ page }) => {
+      const aviso = page.getByRole("checkbox", { name: /Avisar \d+ días antes del vencimiento/ });
+      await expect(aviso).toBeChecked();
+      await aviso.uncheck();
+      await page.getByRole("button", { name: "Guardar política" }).click();
+      await expect(page.getByText("La política de retención se guardó correctamente.")).toBeVisible();
+
+      await page.reload();
+      await page.getByRole("button", { name: "Retención de datos" }).click();
+      await expect(page.getByRole("checkbox", { name: /Avisar \d+ días antes del vencimiento/ })).not.toBeChecked();
+    });
+
+    test("sin cambios no deja guardar, y volver al valor original lo deshabilita otra vez", async ({ page }) => {
+      const guardar = page.getByRole("button", { name: "Guardar política" });
+      await expect(guardar).toBeDisabled();
+
+      await page.locator("#retencion-periodo").fill("36");
+      await expect(guardar).toBeEnabled();
+      await page.locator("#retencion-periodo").fill("24");
+      await expect(guardar).toBeDisabled();
+    });
+
+    test("Enter con un período inválido no guarda nada", async ({ page }) => {
+      await page.locator("#retencion-periodo").fill("23");
+      await page.locator("#retencion-periodo").press("Enter");
+
+      await expect(page.getByText("La política de retención se guardó correctamente.")).toHaveCount(0);
+      await page.reload();
+      await page.getByRole("button", { name: "Retención de datos" }).click();
+      await expect(page.locator("#retencion-periodo")).toHaveValue("24");
+    });
+
+    test("si no se puede guardar muestra el error y editar lo limpia", async ({ page }) => {
+      // La política vive en localStorage (mock): se simula el almacenamiento lleno.
+      await page.evaluate((key) => {
+        const original = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (k: string, v: string) {
+          if (k === key) throw new DOMException("No queda espacio de almacenamiento.", "QuotaExceededError");
+          return original.call(this, k, v);
+        };
+      }, STORAGE_POLITICA);
+
+      await page.locator("#retencion-periodo").fill("30");
+      await page.getByRole("button", { name: "Guardar política" }).click();
+      // El mock muestra el mensaje del error tal cual (igual que sus validaciones).
+      await expect(page.getByText("No queda espacio de almacenamiento.")).toBeVisible();
+      await expect(page.getByText("La política de retención se guardó correctamente.")).toHaveCount(0);
+
+      await page.locator("#retencion-periodo").fill("31");
+      await expect(page.getByText("No queda espacio de almacenamiento.")).toHaveCount(0);
+    });
+
+    test("muestra los contadores y solo lista los registros no protegidos", async ({ page }) => {
+      await sembrarRegistros(page, [
+        {
+          id: 1,
+          entidad: "lote",
+          referencia: "Lote L-9001",
+          fechaCreacion: await fechaHaceMeses(page, 24, -10),
+          estado: "activo",
+        }, // vencido hace 10 días
+        {
+          id: 2,
+          entidad: "medicion",
+          referencia: "Medición #9002",
+          fechaCreacion: await fechaHaceMeses(page, 24, 30),
+          estado: "activo",
+        }, // vence en 30 días
+        {
+          id: 3,
+          entidad: "lote",
+          referencia: "Lote L-9003",
+          fechaCreacion: await fechaHaceMeses(page, 1),
+          estado: "activo",
+        }, // protegido, recién creado
+      ]);
+
+      // La tabla (xl:block) y las cards (xl:hidden) coexisten en el DOM —
+      // se escopea a la tabla para no chocar con "strict mode".
+      const tabla = page.getByRole("table");
+      await expect(tabla.getByText("Lote L-9001")).toBeVisible();
+      await expect(tabla.getByText("Medición #9002")).toBeVisible();
+      // Protegido: no aparece en la tabla de próximos a vencer.
+      await expect(tabla.getByText("Lote L-9003")).not.toBeVisible();
+
+      const contadorValor = (label: string) =>
+        page.locator("p", { hasText: label }).locator("xpath=preceding-sibling::p[1]");
+      await expect(contadorValor("Protegidos")).toHaveText("1");
+      await expect(contadorValor("Próximos a vencer")).toHaveText("1");
+    });
+
+    test("un registro vencido se archiva y después ofrece dar de baja lógica", async ({ page }) => {
+      await sembrarRegistros(page, [
+        {
+          id: 1,
+          entidad: "lote",
+          referencia: "Lote L-9001",
+          fechaCreacion: await fechaHaceMeses(page, 24, -10),
+          estado: "activo",
+        },
+      ]);
+
+      const fila = page.locator("tr").filter({ hasText: "Lote L-9001" });
+      await fila.getByRole("button", { name: "Archivar" }).click();
+
+      await expect(fila.getByText("Archivado")).toBeVisible();
+      await expect(fila.getByRole("button", { name: "Archivar" })).not.toBeVisible();
+      await expect(fila.getByRole("button", { name: "Dar de baja (lógica)" })).toBeEnabled();
+    });
+
+    test("dar de baja lógica pide confirmación y deja el registro en 'Baja lógica'", async ({
+      page,
+    }) => {
+      await sembrarRegistros(page, [
+        {
+          id: 1,
+          entidad: "lote",
+          referencia: "Lote L-9001",
+          fechaCreacion: await fechaHaceMeses(page, 24, -10),
+          estado: "archivado",
+        },
+      ]);
+
+      const fila = page.locator("tr").filter({ hasText: "Lote L-9001" });
+      await fila.getByRole("button", { name: "Dar de baja (lógica)" }).click();
+
+      const dialog = page.getByRole("alertdialog");
+      await expect(dialog.getByText("¿Dar de baja lógica este registro?")).toBeVisible();
+      await expect(dialog.getByText("Lote L-9001 queda inactivo", { exact: false })).toBeVisible();
+      await dialog.getByRole("button", { name: "Dar de baja" }).click();
+
+      await expect(dialog).not.toBeVisible();
+      await expect(fila.getByText("Baja lógica")).toBeVisible();
+    });
+
+    test("un registro con menos de 24 meses de antigüedad no ofrece ninguna acción", async ({
+      page,
+    }) => {
+      await sembrarRegistros(page, [
+        {
+          id: 1,
+          entidad: "medicion",
+          referencia: "Medición #9002",
+          fechaCreacion: await fechaHaceMeses(page, 24, 30),
+          estado: "activo",
+        },
+      ]);
+
+      const fila = page.locator("tr").filter({ hasText: "Medición #9002" });
+      const boton = fila.getByRole("button", { name: "Archivar" });
+      await expect(boton).toBeDisabled();
+      await expect(
+        page.getByText(/tiene menos de 24 meses de antigüedad/).first(),
+      ).toBeVisible();
+    });
+
+    test("un registro ya dado de baja lógica no ofrece ninguna acción", async ({ page }) => {
+      await sembrarRegistros(page, [
+        {
+          id: 1,
+          entidad: "lote",
+          referencia: "Lote L-9004",
+          fechaCreacion: await fechaHaceMeses(page, 25),
+          estado: "baja_logica",
+        },
+      ]);
+
+      const fila = page.locator("tr").filter({ hasText: "Lote L-9004" });
+      await expect(fila.getByText("Baja lógica")).toBeVisible();
+      await expect(fila.getByText("Sin acciones")).toBeVisible();
+    });
+  });
+
+});
+
+test("ConfiguracionPage - un Responsable de calidad ve la pestaña de Retención de datos en modo solo lectura", async ({
+  page,
+}) => {
+  await mockConfiguracionDeps(page);
+  await loginAsResponsableCalidad(page);
+  // localStorage no es accesible antes de la primera navegación real
+  // (SecurityError en about:blank) — se limpia recién acá, después del login.
+  await page.evaluate(() => {
+    localStorage.removeItem("optilacteo:retencion:politica");
+    localStorage.removeItem("optilacteo:retencion:registros");
+  });
+  await page.goto("/configuracion");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Retención de datos" }).click();
+
+  await expect(page.locator("#retencion-periodo")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Guardar política" })).not.toBeAttached();
+  await expect(
+    page.getByText("Solo lectura: tu rol no puede modificar la política de retención."),
+  ).toBeVisible();
 });
 
 test("ConfiguracionPage - un Responsable de calidad ve los inputs de Comparación histórica deshabilitados", async ({ page }) => {
@@ -688,6 +1054,7 @@ test("ConfiguracionPage - un Responsable de calidad ve los inputs de Comparació
   await loginAsResponsableCalidad(page);
   await page.goto("/configuracion");
   await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Comparación histórica" }).click();
 
   await expect(page.locator("#comparacion-historica-desvio")).toHaveValue("10");
   await expect(page.locator("#comparacion-historica-desvio")).toBeDisabled();
@@ -695,9 +1062,12 @@ test("ConfiguracionPage - un Responsable de calidad ve los inputs de Comparació
   await expect(page.getByRole("button", { name: "Guardar" })).not.toBeAttached();
 });
 
-test("ConfiguracionPage - un Responsable de calidad no ve la pestaña de Umbrales de calidad", async ({ page }) => {
+// HU-72: con la matriz por defecto Calidad tiene configuracion_empresa:ver,
+// así que ve Umbrales (en solo lectura); sin el módulo no la ve.
+test("ConfiguracionPage - un Responsable de calidad sin configuracion_empresa no ve la pestaña de Umbrales de calidad", async ({ page }) => {
   await mockConfiguracionDeps(page);
   await loginAsResponsableCalidad(page);
+  await quitarPermisos(page, "Responsable de calidad", ["configuracion_empresa"]);
   await page.goto("/configuracion");
   await page.waitForLoadState("networkidle");
 
@@ -706,5 +1076,5 @@ test("ConfiguracionPage - un Responsable de calidad no ve la pestaña de Umbrale
   ).not.toBeVisible();
   await expect(
     page.getByRole("button", { name: "Comparación histórica" }),
-  ).toBeVisible();
+  ).not.toBeVisible();
 });

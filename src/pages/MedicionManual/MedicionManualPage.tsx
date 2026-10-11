@@ -6,6 +6,7 @@ import { LoteActivoSelector } from "../../components/LoteActivoSelector";
 import { useLotes } from "../../hooks/useLotes";
 import { useLoteContexto } from "../../hooks/useLoteContexto";
 import { useSensores } from "../../hooks/useSensores";
+import { usePermisos } from "../../hooks/usePermisos";
 import { EstadoLote } from "../../types/lote.types";
 import { RegistrarMedicionManualTab } from "../Lotes/components/RegistrarMedicionManualTab";
 import { HistorialMedicionesManualesTab } from "../Lotes/components/HistorialMedicionesManualesTab";
@@ -19,8 +20,15 @@ const TABS: { value: TabMedicionManual; label: string }[] = [
 ];
 
 export default function MedicionManualPage() {
+  // La ruta ya exige monitoreo_alertas:crear (registrar e historial quedan
+  // cubiertos); el dictado además parsea con asistente_voz:ver.
+  const { puede } = usePermisos();
+  const puedeDictar = puede("asistente_voz", "ver");
   const { lotes, isLoading, error, refetch } = useLotes();
-  const { sensores } = useSensores();
+  // Sin sensores_iot:ver no se puede saber qué lote tiene sensor: no se pide
+  // (evita el 403) y, si se carga una medición HU-20 sobre un lote con
+  // sensor, el back la rechaza con su propio mensaje.
+  const { sensores } = useSensores({}, { habilitado: puede("sensores_iot", "ver") });
   const { setLoteEnContexto } = useLoteContexto();
   const [loteSeleccionadoId, setLoteSeleccionadoId] = useState<number | null>(
     null,
@@ -97,21 +105,23 @@ export default function MedicionManualPage() {
         </p>
       </div>
 
-      <div className="mb-6 flex flex-col items-start gap-2">
-        <button
-          type="button"
-          onClick={() => setDictadoVozAbierto(true)}
-          disabled={!loteSeleccionado}
-          className="flex items-center gap-2 rounded-xl bg-[#3d6fcf] px-6 py-3 text-base font-semibold text-white shadow-md transition hover:bg-[#3460b5] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Mic className="h-5 w-5" /> Dictar valores
-        </button>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {loteSeleccionado
-            ? "Modo alternativo, con las manos ocupadas. El formulario de abajo sigue disponible para cargar a mano."
-            : "Elegí un lote de la lista de abajo para poder dictar sus valores."}
-        </p>
-      </div>
+      {puedeDictar && (
+        <div className="mb-6 flex flex-col items-start gap-2">
+          <button
+            type="button"
+            onClick={() => setDictadoVozAbierto(true)}
+            disabled={!loteSeleccionado}
+            className="flex items-center gap-2 rounded-xl bg-[#3d6fcf] px-6 py-3 text-base font-semibold text-white shadow-md transition hover:bg-[#3460b5] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Mic className="h-5 w-5" /> Dictar valores
+          </button>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {loteSeleccionado
+              ? "Modo alternativo, con las manos ocupadas. El formulario de abajo sigue disponible para cargar a mano."
+              : "Elegí un lote de la lista de abajo para poder dictar sus valores."}
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
@@ -167,12 +177,14 @@ export default function MedicionManualPage() {
         </div>
       )}
 
-      <DictadoVozFlow
-        isOpen={dictadoVozAbierto}
-        lotes={lotesElegibles}
-        loteInicial={loteSeleccionado}
-        onClose={() => setDictadoVozAbierto(false)}
-      />
+      {puedeDictar && (
+        <DictadoVozFlow
+          isOpen={dictadoVozAbierto}
+          lotes={lotesElegibles}
+          loteInicial={loteSeleccionado}
+          onClose={() => setDictadoVozAbierto(false)}
+        />
+      )}
     </Layout>
   );
 }

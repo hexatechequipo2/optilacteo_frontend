@@ -10,6 +10,9 @@ interface UmbralDesconexionCardProps {
   isLoading: boolean;
   isSaving: boolean;
   onActualizar: (umbralMinutos: number) => Promise<void>;
+  // PATCH /notificaciones/configuracion-alerta-desconexion:
+  // configuracion_empresa:editar.
+  puedeEditar: boolean;
 }
 
 // HU-31: umbral de desconexión (X minutos) a nivel empresa — mismo criterio
@@ -22,6 +25,7 @@ export function UmbralDesconexionCard({
   isLoading,
   isSaving,
   onActualizar,
+  puedeEditar,
 }: UmbralDesconexionCardProps) {
   const [valor, setValor] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +44,11 @@ export function UmbralDesconexionCard({
     setGuardado(false);
 
     const umbralMinutos = Number(valor);
-    if (valor.trim() === "" || Number.isNaN(umbralMinutos) || !Number.isInteger(umbralMinutos)) {
+    if (
+      valor.trim() === "" ||
+      Number.isNaN(umbralMinutos) ||
+      !Number.isInteger(umbralMinutos)
+    ) {
       setError("Ingresá un número entero de minutos.");
       return;
     }
@@ -66,15 +74,22 @@ export function UmbralDesconexionCard({
         </h2>
       </div>
       <p className="text-sm text-slate-500 dark:text-slate-400">
-        Si un sensor no envía datos por más de este tiempo, se genera una alerta crítica
-        automáticamente. Un sensor puntual puede tener su propio umbral (se configura en Sensores
-        → editar sensor), que pisa este valor por defecto de la empresa.
+        Si un sensor no envía datos por más de este tiempo, se genera una alerta
+        crítica automáticamente. Un sensor puntual puede tener su propio umbral
+        (se configura en Sensores → editar sensor), que pisa este valor por
+        defecto de la empresa.
       </p>
 
       {isLoading ? (
-        <p className="text-sm text-slate-400 dark:text-slate-500">Cargando...</p>
+        <p className="text-sm text-slate-400 dark:text-slate-500">
+          Cargando...
+        </p>
       ) : (
-        <form onSubmit={handleSubmit} noValidate className="flex flex-wrap items-end gap-3">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex flex-wrap items-end gap-3"
+        >
           <div className="w-32">
             <Input
               id="umbral-desconexion-minutos"
@@ -83,15 +98,22 @@ export function UmbralDesconexionCard({
               min={1}
               label="Minutos"
               value={valor}
+              disabled={!puedeEditar}
               onChange={(e) => {
                 setValor(e.target.value);
                 setGuardado(false);
               }}
             />
           </div>
-          <Button type="submit" isLoading={isSaving} className="!w-auto px-6">
-            Guardar
-          </Button>
+          {puedeEditar ? (
+            <Button type="submit" isLoading={isSaving} className="!w-auto px-6">
+              Guardar
+            </Button>
+          ) : (
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Solo lectura: tu rol no puede modificar este umbral.
+            </span>
+          )}
           {guardado && !isSaving && (
             <span className="text-sm font-medium text-green-600 dark:text-green-400">
               Umbral actualizado

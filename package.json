@@ -9,7 +9,11 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "coverage:clean": "node -e \"for (const d of ['.nyc_output','coverage']) require('fs').rmSync(d,{recursive:true,force:true})\"",
+    "coverage:report": "nyc report --reporter=text-summary --reporter=text --reporter=html --reporter=lcov",
+    "test:coverage": "npm run coverage:clean && playwright test --config=playwright.coverage.config.ts && npm run coverage:report",
+    "test:sin-backend": "node tests/fixtures/fake401.cjs"
   },
   "dependencies": {
     "axios": "^1.18.1",

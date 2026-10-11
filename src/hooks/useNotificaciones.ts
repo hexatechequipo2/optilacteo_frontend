@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { createSocket } from "../services/socket";
 import { notificacionService } from "../services/notificacion.service";
 import type { Notificacion } from "../types/notificacion.types";
+import { usePermisos } from "./usePermisos";
+import { RETENCION_AVISOS_MOCK } from "../constants/retencion";
+import { esAvisoRetencionMock, useAvisosRetencionMock } from "./useAvisosRetencionMock";
 
 interface UseNotificacionesResult {
   notificaciones: Notificacion[];
@@ -19,6 +22,13 @@ export function useNotificaciones(): UseNotificacionesResult {
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // HU-48 (AC4): avisos de retención mock, para quien puede actuar sobre la
+  // política y los registros próximos a vencer (configuracion_empresa:editar).
+  // Ver constants/retencion.ts para apagarlo cuando el backend los emita.
+  const { puede, esSistema } = usePermisos();
+  const avisosRetencion = useAvisosRetencionMock(
+    RETENCION_AVISOS_MOCK && !esSistema && puede("configuracion_empresa", "editar"),
+  );
 
   useEffect(() => {
     let cancelado = false;
@@ -60,6 +70,11 @@ export function useNotificaciones(): UseNotificacionesResult {
   // endpoint ni parámetro para el sentido inverso) — por eso no hay un
   // marcarNoLeida acá. Agregar cuando el backend lo soporte.
   const marcarLeida = async (id: number) => {
+    // HU-48: aviso mock (id negativo) → se resuelve local, sin request.
+    if (esAvisoRetencionMock(id)) {
+      avisosRetencion.marcarLeida(id);
+      return;
+    }
     // Optimista: la campana no debería tildarse de vuelta si el PATCH falla
     // por un problema de red pasajero, así que revertimos ante error.
     setNotificaciones((prev) => prev.map((n) => (n.id === id ? { ...n, leida: true } : n)));
@@ -70,10 +85,17 @@ export function useNotificaciones(): UseNotificacionesResult {
     }
   };
 
-  const noLeidasCount = useMemo(
-    () => notificaciones.filter((n) => !n.leida).length,
-    [notificaciones],
+  const todas = useMemo(
+    () =>
+      avisosRetencion.avisos.length === 0
+        ? notificaciones
+        : [...notificaciones, ...avisosRetencion.avisos].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          ),
+    [notificaciones, avisosRetencion.avisos],
   );
 
-  return { notificaciones, noLeidasCount, isLoading, error, marcarLeida };
+  const noLeidasCount = useMemo(() => todas.filter((n) => !n.leida).length, [todas]);
+
+  return { notificaciones: todas, noLeidasCount, isLoading, error, marcarLeida };
 }
