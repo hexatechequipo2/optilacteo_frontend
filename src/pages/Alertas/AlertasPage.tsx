@@ -109,12 +109,10 @@ export default function AlertasPage() {
       if (estadoFiltro !== "todas" && alerta.estado !== estadoFiltro) return false;
 
       const fecha = new Date(alerta.createdAt);
-      if (fechaDesde && fecha < new Date(fechaDesde)) return false;
-      if (fechaHasta) {
-        const limite = new Date(fechaHasta);
-        limite.setHours(23, 59, 59, 999);
-        if (fecha > limite) return false;
-      }
+      // Los <input type="date"> dan yyyy-MM-dd en hora local: se comparan
+      // inicio y fin del día local (sin hora, new Date() usaría UTC).
+      if (fechaDesde && fecha < new Date(`${fechaDesde}T00:00:00`)) return false;
+      if (fechaHasta && fecha > new Date(`${fechaHasta}T23:59:59.999`)) return false;
       return true;
     });
   }, [

@@ -306,8 +306,9 @@ test.describe("DashboardProduccionPage (HU-38) › Reporte PDF", () => {
     const reporte = page.locator("div.print\\:block");
     await expect(reporte.getByText(/^Lácteos del Sur S\.A\. · /)).toBeVisible();
     await expect(reporte.getByText(/^Generado el /)).toBeVisible();
-    // Los paneles de pantalla se ocultan al imprimir. (El botón "Exportar PDF"
-    // no: Button ignora su className — ver hallazgos.)
+    // Los paneles de pantalla y el propio botón (print:hidden vía className
+    // de Button) se ocultan al imprimir.
+    await expect(page.getByRole("button", { name: "Exportar PDF" })).toBeHidden();
     await expect(page.getByText("Línea de calidad", { exact: true })).toBeHidden();
     await expect(puntosGrafico(page).first()).toBeHidden();
 
@@ -331,5 +332,40 @@ test.describe("DashboardProduccionPage (HU-38) › Reporte PDF", () => {
 
     await expect(page.getByRole("heading", { name: "Reporte de Producción" })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Lotes procesados · últimos/ })).toHaveCount(0);
+  });
+});
+
+// Las fechas del histórico llegan como yyyy-MM-dd. En Argentina (UTC-3)
+// tienen que mostrarse como ese mismo día, no como el anterior.
+test.describe("DashboardProduccionPage (HU-38) › Fechas del histórico en hora local", () => {
+  test.use({ timezoneId: "America/Argentina/Cordoba", locale: "es-AR" });
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.print = () => {};
+    });
+    await mockDashboardProduccionDeps(page);
+    await loginAsResponsableProduccion(page);
+    await mockHistorico(page, HISTORICO_SEMANA);
+    await page.goto("/dashboard-produccion");
+  });
+
+  test("el gráfico rotula cada punto con su propio día", async ({ page }) => {
+    // 2026-10-05 es lunes.
+    const etiquetas = page.locator("div.pl-8 span");
+    await expect(etiquetas).toHaveText(["lun", "mar", "mié"]);
+
+    await puntosGrafico(page).nth(0).focus();
+    // "05 oct" o "05-oct" según el ICU del navegador.
+    await expect(page.getByText(/^05[ -]oct\.?$/)).toBeVisible();
+  });
+
+  test("el reporte PDF lista cada día con su fecha", async ({ page }) => {
+    await page.emulateMedia({ media: "print" });
+
+    const filas = page.locator("table").last().locator("tbody tr");
+    // El separador depende del ICU del navegador ("05/10" o "05-10").
+    await expect(filas.nth(0)).toContainText(/lunes,? 05[/-]10/i);
+    await expect(filas.nth(2)).toContainText(/miércoles,? 07[/-]10/i);
   });
 });

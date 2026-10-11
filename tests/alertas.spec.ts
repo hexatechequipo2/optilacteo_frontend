@@ -765,8 +765,7 @@ test.describe("AlertasPage (HU-25) › Filtros por lote y fecha", () => {
   });
 
   test("filtra por rango de fechas", async ({ page }) => {
-    // Alertas del 1/8 (dos) y del 5/8. Rango elegido lejos de los bordes de
-    // día: el filtro interpreta las fechas en UTC (ver hallazgos).
+    // Alertas del 1/8 (dos) y del 5/8.
     await page.getByLabel("Desde", { exact: true }).fill("2026-08-03");
     await expect(cardDe(page, "LOT-2026-003")).toBeVisible();
     await expect(cardDe(page, "LOT-2026-001")).toHaveCount(0);
@@ -779,5 +778,41 @@ test.describe("AlertasPage (HU-25) › Filtros por lote y fecha", () => {
 
     await page.getByLabel("Desde", { exact: true }).fill("2026-08-02");
     await expect(page.getByText("No hay alertas no leídas para los filtros seleccionados.")).toBeVisible();
+  });
+});
+
+// Los filtros Desde/Hasta son días calendario en hora local: una alerta de
+// las 23:30 del 1/8 en Córdoba (02:30Z del 2/8) pertenece al 1/8.
+test.describe("AlertasPage (HU-25) › Filtro de fechas en hora local", () => {
+  test.use({ timezoneId: "America/Argentina/Cordoba", locale: "es-AR" });
+
+  const DIA1_MANANA = { ...ALERTA_CRITICA, createdAt: "2026-08-01T08:00:00.000Z" }; // 05:00 del 1/8
+  const DIA1_NOCHE = {
+    ...ALERTA_INFORMATIVA,
+    createdAt: "2026-08-02T02:30:00.000Z", // 23:30 del 1/8
+  };
+  const DIA2 = { ...ALERTA_ADVERTENCIA_PH, createdAt: "2026-08-02T15:00:00.000Z" }; // 12:00 del 2/8
+
+  test.beforeEach(async ({ page }) => {
+    await mockAlertasDeps(page, [DIA1_MANANA, DIA1_NOCHE, DIA2]);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+    await expect(cardDe(page, "LOT-2026-003")).toBeVisible();
+  });
+
+  test("'Hasta' incluye todo ese día local, hasta las 23:59", async ({ page }) => {
+    await page.getByLabel("Hasta", { exact: true }).fill("2026-08-01");
+
+    await expect(cardDe(page, "LOT-2026-001")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-002")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-003")).toHaveCount(0);
+  });
+
+  test("'Desde' arranca a las 00:00 locales de ese día", async ({ page }) => {
+    await page.getByLabel("Desde", { exact: true }).fill("2026-08-02");
+
+    await expect(cardDe(page, "LOT-2026-003")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-002")).toHaveCount(0);
+    await expect(cardDe(page, "LOT-2026-001")).toHaveCount(0);
   });
 });

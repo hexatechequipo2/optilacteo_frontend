@@ -11,8 +11,9 @@ function signo(variacion: number): string {
   return variacion > 0 ? "+" : "";
 }
 
+// yyyy-MM-dd → fecha local (ver LotesProcesadosChart).
 const formatFechaHistorico = (fecha: string) =>
-  new Date(fecha).toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit" });
+  new Date(`${fecha}T00:00:00`).toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "2-digit" });
 
 // Vista exclusiva para impresión/PDF (HU-38): no es un espejo 1:1 de la
 // pantalla — cambia tarjetas/gráfico por tablas planas en blanco y negro,
