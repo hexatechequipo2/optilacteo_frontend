@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OptiLácteo · Vos sos el sensor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+  :root{
+    --blue:#0B63E5; --blue-dark:#00489E; --blue-pale:#EFF5FF; --blue-border:#C7DBFB; --blue-text:#1E3A8A;
+    --green:#16A34A; --green-text:#15803D; --green-pale:#E7F7EE;
+    --red:#DC2626; --red-text:#B91C1C; --red-pale:#FEF2F2; --red-chip:#FEE2E2; --red-border:#FECACA;
+    --ink:#0F172A; --ink-2:#334155; --muted:#64748B; --line:#E2E8F0; --line-2:#CBD5E1; --bg:#F4F6F9;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);font-family:'Inter',system-ui,-apple-system,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+  .phone{width:100%;max-width:480px;min-height:100vh;min-height:100dvh;margin:0 auto;background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
+  .screen{display:none;flex:1;flex-direction:column}
+  .screen.on{display:flex}
+  button{font-family:inherit;cursor:pointer}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px}
+  .label{font-size:11px;font-weight:700;letter-spacing:.8px;color:var(--muted);text-transform:uppercase}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700}
+  .chip.ok{background:var(--green-pale);color:var(--green-text)}
+  .chip.bad{background:var(--red-chip);color:var(--red-text)}
+  .chip.warn{background:#FEF3C7;color:#B45309}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .topbar{height:60px;flex-shrink:0;padding:0 18px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .topbar .t1{font-size:15px;font-weight:700}
+  .topbar .t2{font-size:12px;font-weight:500;color:var(--muted)}
+  .btn-primary{width:100%;height:54px;border:none;border-radius:10px;background:var(--blue);color:#fff;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:10px}
+  .btn-primary:active{background:#0848AA}
+  .btn-secondary{width:100%;height:52px;border:1px solid var(--line-2);border-radius:10px;background:#fff;color:var(--ink);font-size:16px;font-weight:700}
+  .bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+  .bar>div{height:6px;border-radius:3px;transition:width .4s linear}
+  input[type=range]{width:100%;height:36px;margin:0;accent-color:var(--blue)}
+  .step{display:flex;align-items:center;gap:12px;padding:12px 14px}
+  .step .ic{width:38px;height:38px;flex-shrink:0;border-radius:10px;display:flex;align-items:center;justify-content:center}
+  .step span{font-size:14px;font-weight:500;line-height:1.35;color:var(--ink-2)}
+  .step strong{color:var(--ink)}
+  .ev{display:flex;align-items:center;gap:12px}
+  .ev .tm{width:40px;flex-shrink:0;font-size:12px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+  .ev .pt{width:9px;height:9px;flex-shrink:0;border-radius:50%}
+  .ev .tx{font-size:13px;font-weight:500;line-height:1.3}
+  .msg{height:64px;border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:12px}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <!-- PANTALLA 1 -->
+  <section class="screen on" id="s-intro">
+    <div style="padding:22px 22px 22px;min-height:280px;background:linear-gradient(160deg,#2B8CEB 0%,#0B63E5 45%,#00489E 100%);display:flex;flex-direction:column;justify-content:space-between;gap:24px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:40px;height:40px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center">
+          <svg width="26" height="26" viewBox="0 0 1024 1024" aria-hidden="true"><defs><linearGradient id="r1" gradientUnits="userSpaceOnUse" x1="440" y1="40" x2="440" y2="810"><stop offset="0" stop-color="#0A77FF"/><stop offset="1" stop-color="#0042AE"/></linearGradient><linearGradient id="l1" gradientUnits="userSpaceOnUse" x1="560" y1="430" x2="980" y2="980"><stop offset="0" stop-color="#0340B8"/><stop offset="1" stop-color="#02B4B4"/></linearGradient></defs><path d="M475 808 A385 385 0 1 1 772 620 L705 700 L705 425 A265 265 0 1 0 475 688 Z" fill="url(#r1)"/><path d="M527 547 L653 425 L653 858 L962 858 C972 858 980 866 980 876 L980 962 C980 972 972 980 962 980 L545 980 C535 980 527 972 527 962 Z" fill="url(#l1)"/></svg>
+        </div>
+        <span style="font-size:19px;font-weight:800;letter-spacing:-.3px;color:#fff">OptiLácteo</span>
+        <span style="margin-left:auto;padding:5px 10px;border-radius:999px;background:#fff;font-size:11px;font-weight:700;letter-spacing:.8px;color:var(--blue)">DEMO EN VIVO</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <span style="align-self:flex-start;padding:5px 10px;border-radius:6px;background:var(--blue-dark);font-size:12px;font-weight:700;letter-spacing:.8px;color:#fff" id="v-badge">SENSOR · LOTE</span>
+        <h1 style="margin:0;font-size:34px;font-weight:800;letter-spacing:-1.1px;line-height:1.02;color:#fff">Sos el sensor de este lote.</h1>
+        <p style="margin:0;font-size:14px;font-weight:500;line-height:1.45;color:#fff">Tu celular reemplaza al sensor del tanque de recepción. Cada lectura entra al sistema y se ve en la pantalla grande, con tu nombre.</p>
+      </div>
+    </div>
+    <div style="flex:1;padding:16px 18px 20px;display:flex;flex-direction:column;gap:8px">
+      <span class="label" style="font-size:12px">Cómo se juega</span>
+      <div class="card step">
+        <div class="ic" style="background:var(--blue-pale)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0B63E5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0z"/></svg></div>
+        <span>Mantené el tanque entre <strong>2 y 6 °C</strong> durante 15 segundos.</span>
+      </div>
+      <div class="card step">
+        <div class="ic" style="background:var(--red-pale)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4L2.5 20h19z"/><path d="M12 10v4.5"/><path d="M12 17.5v.01"/></svg></div>
+        <span>En la planta van a pasar <strong>imprevistos</strong>. Reaccioná rápido.</span>
+      </div>
+      <div class="card step">
+        <div class="ic" style="background:var(--blue-pale)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0B63E5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg></div>
+        <span>Al final, la IA sugiere el <strong>destino productivo</strong> de tu lote.</span>
+      </div>
+      <div style="margin-top:auto;padding-top:10px;display:flex;flex-direction:column;gap:10px;align-items:center">
+        <div style="width:100%;display:flex;flex-direction:column;gap:6px">
+          <label for="name" style="font-size:14px;font-weight:600;color:var(--ink)">¿Cómo te llamás?</label>
+          <input id="name" type="text" maxlength="18" autocomplete="off" autocapitalize="words" placeholder="Tu nombre" style="width:100%;height:50px;padding:0 14px;border:1px solid var(--line-2);border-radius:10px;background:#fff;font-family:inherit;font-size:16px;font-weight:500;color:var(--ink);outline-color:var(--blue)">
+          <span style="font-size:12px;font-weight:500;color:var(--muted)">Así aparecés en el monitoreo de sensores de la pantalla grande.</span>
+        </div>
+        <button class="btn-primary" id="btn-start" type="button" disabled style="opacity:.45;cursor:not-allowed">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5v15l12-7.5z"/></svg>
+          <span id="btn-start-tx">Empezar turno</span>
+        </button>
+        <div id="v-start-err" style="display:none;flex-direction:column;align-items:center;gap:2px">
+          <span id="v-start-err-tx" style="font-size:13px;font-weight:600;color:var(--red-text);text-align:center"></span>
+          <button id="btn-retry" type="button" style="border:none;background:none;padding:4px 8px;font-size:13px;font-weight:700;color:var(--blue);text-decoration:underline">Reintentar</button>
+        </div>
+        <span style="font-size:12px;font-weight:500;color:var(--muted)">Sin usuario ni contraseña</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- PANTALLA 2 -->
+  <section class="screen" id="s-play">
+    <div class="topbar">
+      <svg width="26" height="26" viewBox="0 0 1024 1024" aria-hidden="true"><defs><linearGradient id="r2" gradientUnits="userSpaceOnUse" x1="440" y1="40" x2="440" y2="810"><stop offset="0" stop-color="#0A77FF"/><stop offset="1" stop-color="#0042AE"/></linearGradient><linearGradient id="l2" gradientUnits="userSpaceOnUse" x1="560" y1="430" x2="980" y2="980"><stop offset="0" stop-color="#0340B8"/><stop offset="1" stop-color="#02B4B4"/></linearGradient></defs><path d="M475 808 A385 385 0 1 1 772 620 L705 700 L705 425 A265 265 0 1 0 475 688 Z" fill="url(#r2)"/><path d="M527 547 L653 425 L653 858 L962 858 C972 858 980 866 980 876 L980 962 C980 972 972 980 962 980 L545 980 C535 980 527 972 527 962 Z" fill="url(#l2)"/></svg>
+      <div style="display:flex;flex-direction:column;gap:1px"><span class="t1">Lote de <span class="v-name"></span></span><span class="t2"><span class="v-sensor">Sensor</span> · Tanque de recepción</span></div>
+      <span class="chip ok" style="margin-left:auto;font-size:11px;letter-spacing:.6px"><span class="dot"></span>EN VIVO</span>
+    </div>
+    <div style="flex:1;padding:14px 16px 16px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+          <span class="label">Tiempo restante</span>
+          <span style="font-size:24px;font-weight:800;letter-spacing:-.5px;line-height:1"><span id="v-remaining">15</span> s</span>
+          <div class="bar"><div id="v-progress" style="width:0%;background:var(--blue)"></div></div>
+        </div>
+        <div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+          <span class="label">Calidad del lote</span>
+          <span style="font-size:24px;font-weight:800;letter-spacing:-.5px;line-height:1"><span id="v-quality">100</span> %</span>
+          <div class="bar"><div id="v-qbar" style="width:100%;background:var(--green)"></div></div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:14px 16px 10px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="label">Temperatura · tanque</span>
+          <span class="chip ok" id="chip-ok"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Apto</span>
+          <span class="chip warn" id="chip-warn" style="display:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v6"/><path d="M12 17h.01"/></svg>En límite</span>
+          <span class="chip bad" id="chip-bad" style="display:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#B91C1C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10M17 7L7 17"/></svg>No apto</span>
+        </div>
+        <span style="font-size:56px;font-weight:800;letter-spacing:-2px;line-height:1"><span id="v-temp">4,0</span><span style="font-size:26px;font-weight:700;letter-spacing:-.5px;color:var(--muted)"> °C</span></span>
+        <svg width="100%" height="92" viewBox="0 0 300 100" preserveAspectRatio="none" role="img" aria-label="Gráfico en vivo de la temperatura" style="display:block">
+          <rect x="0" y="50" width="300" height="33.3" fill="#E7F7EE"/>
+          <line x1="0" y1="25" x2="300" y2="25" stroke="#EEF2F6" stroke-width="1"/>
+          <line x1="0" y1="50" x2="300" y2="50" stroke="#16A34A" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>
+          <line x1="0" y1="83.3" x2="300" y2="83.3" stroke="#16A34A" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>
+          <polyline id="v-chart" points="0,66.7" fill="none" stroke="#0B63E5" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:600;color:var(--muted)">
+          <span>últimos 15 s</span><span style="color:var(--green-text)">umbral apto 2–6 °C</span>
+        </div>
+      </div>
+
+      <div id="m-tip" class="msg" style="background:var(--blue-pale)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0B63E5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        <span id="v-tip" style="font-size:13px;font-weight:500;line-height:1.35;color:var(--blue-text)">Todo en rango. El tanque se calienta solo: enfrialo antes de que se pase.</span>
+      </div>
+      <div id="m-incident" class="msg" style="display:none;background:var(--red-pale);border:1px solid var(--red-border)">
+        <div style="width:36px;height:36px;flex-shrink:0;border-radius:50%;background:var(--red-chip);display:flex;align-items:center;justify-content:center">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span id="v-inc-title" style="font-size:14px;font-weight:700;color:var(--red-text)"></span>
+          <span id="v-inc-desc" style="font-size:12px;font-weight:500;color:var(--red-text)"></span>
+        </div>
+      </div>
+      <div id="m-alert" class="msg card" style="display:none">
+        <div style="position:relative;width:36px;height:36px;flex-shrink:0;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F172A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span style="position:absolute;top:-3px;right:-3px;width:12px;height:12px;border-radius:50%;background:var(--red);border:2px solid #fff"></span>
+        </div>
+        <span style="font-size:13px;font-weight:600;line-height:1.35;color:var(--ink-2)">Alerta enviada al <strong style="color:var(--ink)">Responsable de calidad</strong>. ¡Mirá la pantalla grande!</span>
+      </div>
+
+      <div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+        <label for="dial" class="label">Ajustar temperatura</label>
+        <input id="dial" type="range" min="0" max="12" step="0.1" value="4">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <button id="btn-cool" type="button" style="height:50px;border-radius:10px;border:none;background:var(--blue);font-size:15px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M4.9 6l14.2 12M4.9 18L19.1 6"/></svg>Enfriar −0,5
+          </button>
+          <button id="btn-heat" type="button" style="height:50px;border-radius:10px;border:1px solid var(--line-2);background:#fff;font-size:15px;font-weight:700;color:var(--ink);display:flex;align-items:center;justify-content:center;gap:8px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F172A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3 5 5.5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-4 2.5-5.5C10 9 11 11 12 11c0-3-1-5 0-8z"/></svg>Calentar +0,5
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-top:auto;display:flex;justify-content:space-between;font-size:12px;font-weight:600;color:var(--muted)">
+        <span>Lecturas enviadas: <span id="v-sent">0</span></span>
+        <span>Desvíos: <span id="v-dev">0</span></span>
+      </div>
+      <span id="v-offline" style="display:none;align-self:center;font-size:11px;font-weight:600;color:var(--muted)">Modo sin conexión</span>
+    </div>
+  </section>
+
+  <!-- PANTALLA 3 -->
+  <section class="screen" id="s-result">
+    <div class="topbar">
+      <svg width="26" height="26" viewBox="0 0 1024 1024" aria-hidden="true"><defs><linearGradient id="r3" gradientUnits="userSpaceOnUse" x1="440" y1="40" x2="440" y2="810"><stop offset="0" stop-color="#0A77FF"/><stop offset="1" stop-color="#0042AE"/></linearGradient><linearGradient id="l3" gradientUnits="userSpaceOnUse" x1="560" y1="430" x2="980" y2="980"><stop offset="0" stop-color="#0340B8"/><stop offset="1" stop-color="#02B4B4"/></linearGradient></defs><path d="M475 808 A385 385 0 1 1 772 620 L705 700 L705 425 A265 265 0 1 0 475 688 Z" fill="url(#r3)"/><path d="M527 547 L653 425 L653 858 L962 858 C972 858 980 866 980 876 L980 962 C980 972 972 980 962 980 L545 980 C535 980 527 972 527 962 Z" fill="url(#l3)"/></svg>
+      <div style="display:flex;flex-direction:column;gap:1px"><span class="t1">Lote de <span class="v-name"></span> · Resultado</span><span class="t2">Clasificación automática por umbral</span></div>
+    </div>
+    <div style="flex:1;padding:14px 16px 18px;display:flex;flex-direction:column;gap:12px">
+      <div id="r-ok" class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="width:40px;height:40px;border-radius:50%;border:2px solid var(--green);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+          <span style="width:9px;height:9px;border-radius:50%;background:var(--green)"></span>
+        </div>
+        <span class="label" style="font-size:12px">Apto</span>
+        <span style="font-size:28px;font-weight:800;letter-spacing:-.8px;line-height:1.05">¡Bien, <span class="v-name"></span>! Tu lote quedó apto</span>
+        <span style="font-size:14px;font-weight:500;color:var(--green-text)">Calidad <span class="v-q2"></span> % · <span class="v-dt"></span> · destino producción</span>
+      </div>
+      <div id="r-bad" style="display:none;padding:16px;border-radius:12px;background:var(--red-pale);border:1px solid var(--red-border);flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="width:40px;height:40px;border-radius:50%;border:2px solid var(--red);display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10M17 7L7 17"/></svg></div>
+          <span style="width:9px;height:9px;border-radius:50%;background:var(--red)"></span>
+        </div>
+        <span class="label" style="font-size:12px;color:var(--red-text)">No apto</span>
+        <span style="font-size:28px;font-weight:800;letter-spacing:-.8px;line-height:1.05"><span class="v-name"></span>, tu lote quedó no apto</span>
+        <span style="font-size:14px;font-weight:500;color:var(--red-text)">Calidad <span class="v-q2"></span> % · <span class="v-dt"></span> · el sistema alertó en cada uno</span>
+      </div>
+
+      <div id="r-ia" style="border-radius:12px;background:var(--blue-pale);border:1px solid var(--blue-border);padding:14px 16px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0B63E5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/></svg>
+          <span class="label" style="color:var(--blue)">IA · destino sugerido</span>
+        </div>
+        <span id="v-dest" style="font-size:26px;font-weight:800;letter-spacing:-.6px;line-height:1.05"></span>
+        <span id="v-dest-m" style="font-size:13px;font-weight:500;color:var(--blue-text)"></span>
+      </div>
+
+      <div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+        <span class="label">Trazabilidad del lote</span>
+        <div id="v-timeline" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+
+      <div style="border-radius:12px;background:#fff;border:1px dashed var(--line-2);padding:12px 14px;display:flex;align-items:center;gap:12px">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0B63E5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+        <span id="v-sticker" style="font-size:13px;font-weight:500;line-height:1.35;color:var(--ink-2)"></span>
+      </div>
+
+      <button class="btn-secondary" id="btn-reset" type="button" style="margin-top:auto">Pasarle el turno al siguiente</button>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  // Backend de producción (Railway). Para probar en local:
+  // demo.html?sensor=1&api=http://localhost:3000
+  var API_PROD = 'https://optilacteo-backend-production.up.railway.app';
+  var params = new URLSearchParams(location.search);
+  var API = (params.get('api') || API_PROD).replace(/\/+$/, '');
+  // Con ?sensor= se fuerza ese sensor (pruebas); sin él, el backend
+  // asigna el disponible de menor N al empezar el turno.
+  var SENSOR_ID = parseInt(params.get('sensor'), 10);
+  // POST /demo/turno puede tardar hasta 3 s si la IA no responde.
+  var TIMEOUT_TURNO_MS = 6000, TIMEOUT_FIN_MS = 10000, TIMEOUT_TABLERO_MS = 4000;
+  var MSG_OCUPADO = 'Este sensor está en uso, esperá unos segundos';
+  var MSG_TODOS_OCUPADOS = 'Todos los sensores están en uso, esperá unos segundos';
+  var MSG_MUCHA_GENTE = 'Mucha gente jugando, probá en unos segundos';
+  // El backend acepta 10 lecturas/s por lote: el slider se agrupa.
+  var LECTURA_MIN_MS = 150;
+
+  var TICKS = 30, TICK_MS = 500;
+  var $ = function(id){ return document.getElementById(id); };
+  var st, timer = null, nombre = '', conectando = false;
+  // "Sensor N" sale del tablero; si no responde, queda "Sensor" sin número.
+  var sensorLabel = 'Sensor';
+  var TIP = $('v-tip').textContent;
+  // Turno en el backend; null = modo sin conexión (todo local, como antes).
+  var turno = null;
+  // Se incrementa al empezar y al reiniciar: descarta respuestas viejas.
+  var sesion = 0;
+
+  function api(metodo, ruta, cuerpo, timeoutMs){
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var to = ctrl && timeoutMs ? setTimeout(function(){ ctrl.abort(); }, timeoutMs) : null;
+    return fetch(API + ruta, {
+      method: metodo,
+      headers: cuerpo ? {'Content-Type':'application/json'} : undefined,
+      body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function(r){
+      if (to) clearTimeout(to);
+      if (!r.ok){ var e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
+      return r.json();
+    }, function(err){ if (to) clearTimeout(to); throw err; });
+  }
+
+  function nuevoTurno(loteId, sensorId){
+    return {loteId:loteId, sensorId:sensorId, seq:0, seqAplicada:0, ultimoEnvio:0, pendiente:null, espera:null, estado:null, cerrado:false};
+  }
+
+  // Manda la lectura sin bloquear el juego: como mucho una cada
+  // LECTURA_MIN_MS, y siempre la última. Si falla, se ignora.
+  function enviarLectura(valor){
+    var t = turno;
+    if (!t || t.cerrado) return;
+    t.pendiente = valor;
+    if (t.espera) return;
+    var falta = t.ultimoEnvio + LECTURA_MIN_MS - Date.now();
+    if (falta > 0) t.espera = setTimeout(function(){ t.espera = null; despacharLectura(t); }, falta);
+    else despacharLectura(t);
+  }
+  function despacharLectura(t){
+    if (t.cerrado || t.pendiente === null) return;
+    var valor = t.pendiente, seq = ++t.seq;
+    t.pendiente = null; t.ultimoEnvio = Date.now();
+    api('POST', '/demo/lecturas', {loteId:t.loteId, sensorId:t.sensorId, valor:valor}).then(function(l){
+      // Las respuestas pueden llegar desordenadas: vale la de la última lectura.
+      if (t !== turno || seq <= t.seqAplicada || !l) return;
+      if (l.estado !== 'NORMAL' && l.estado !== 'EN_LIMITE' && l.estado !== 'FUERA_DE_RANGO') return;
+      t.seqAplicada = seq; t.estado = l.estado;
+      if (timer) renderChip();
+    }, function(){});
+  }
+
+  // Solo letras, espacios y guiones; colapsa espacios y capitaliza.
+  function limpiarNombre(v){
+    v = (v || '').replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]/g, '').replace(/\s+/g, ' ').trim().slice(0, 18);
+    return v.replace(/(^|\s)(\S)/g, function(m, a, b){ return a + b.toUpperCase(); });
+  }
+  function pintarNombre(){
+    Array.prototype.forEach.call(document.querySelectorAll('.v-name'), function(e){ e.textContent = nombre; });
+  }
+  function validarNombre(){
+    var ok = !conectando && limpiarNombre($('name').value).length >= 2;
+    $('btn-start').disabled = !ok;
+    $('btn-start').style.opacity = ok ? '1' : '.45';
+    $('btn-start').style.cursor = ok ? 'pointer' : 'not-allowed';
+  }
+  function setConectando(on){
+    conectando = on;
+    $('btn-start-tx').textContent = on ? 'Conectando sensor…' : 'Empezar turno';
+    validarNombre();
+  }
+  function errorInicio(msg){
+    $('v-start-err-tx').textContent = msg || '';
+    $('v-start-err').style.display = msg ? 'flex' : 'none';
+  }
+
+  // numero = N de "Sensor N", o null si todavía no se sabe. Sin ?sensor=,
+  // el cartel dice "DEMO EN VIVO" hasta que el backend asigna uno.
+  function pintarSensor(numero){
+    var n = parseInt(numero, 10);
+    sensorLabel = n > 0 ? 'Sensor ' + n : 'Sensor';
+    Array.prototype.forEach.call(document.querySelectorAll('.v-sensor'), function(e){ e.textContent = sensorLabel; });
+    // Sensor 1 → LOTE A, 2 → B, …; sin letra posible queda "LOTE".
+    var lote = n >= 1 && n <= 26 ? 'LOTE ' + String.fromCharCode(64 + n) : 'LOTE';
+    $('v-badge').textContent = n > 0 || SENSOR_ID > 0 ? sensorLabel.toUpperCase() + ' · ' + lote : 'DEMO EN VIVO';
+  }
+
+  // GET /demo/tablero: número del sensor y si ya está ocupado. Si falla,
+  // el flujo sigue igual (el POST /demo/turno decide igual con su 409).
+  function consultarTablero(){
+    if (!(SENSOR_ID > 0)) return;
+    var mia = sesion;
+    $('btn-retry').disabled = true;
+    api('GET', '/demo/tablero', null, TIMEOUT_TABLERO_MS).then(function(r){
+      var s = r && r.sensores ? r.sensores.filter(function(x){ return x.id === SENSOR_ID; })[0] : null;
+      var m = s && /^Sensor (\d+)/.exec(s.nombre || '');
+      if (m) pintarSensor(m[1]);
+      return !!(s && s.ocupado);
+    }, function(){ return false; }).then(function(ocupado){
+      $('btn-retry').disabled = false;
+      // Ya empezó un turno (o se reinició) mientras se consultaba: no pisar.
+      if (mia !== sesion || conectando) return;
+      errorInicio(ocupado ? MSG_OCUPADO : '');
+    });
+  }
+
+  function fmt(n){ return n.toFixed(1).replace('.', ','); }
+  function pad(n){ return n < 10 ? '0' + n : '' + n; }
+  function clock(t){ var s = Math.floor(t/2); return pad(Math.floor(s/60)) + ':' + pad(s % 60); }
+
+  function pickIncidents(){
+    var pool = [
+      {title:'Falla en el equipo de frío', desc:'La temperatura sube de golpe', delta:2.2},
+      {title:'Ingresó un camión caliente', desc:'Mezcla con un lote a 9 °C', delta:1.8},
+      {title:'Puerta de cámara abierta', desc:'Entra aire caliente al tanque', delta:1.5},
+      {title:'Corte de luz en planta', desc:'El frío se detuvo unos segundos', delta:2.0}
+    ].sort(function(){ return Math.random() - .5; });
+    pool[0].at = 5 + Math.floor(Math.random()*2);
+    pool[1].at = 13 + Math.floor(Math.random()*3);
+    pool[2].at = 21 + Math.floor(Math.random()*3);
+    return pool.slice(0,3);
+  }
+
+  function reset(){
+    st = {
+      temp:4.0, elapsed:0, desvios:0, enviadas:1, inSecs:0, inRange:true,
+      history:[4.0], incident:null, incidents:pickIncidents(),
+      events:[{t:0, text:nombre + ' conectó el ' + sensorLabel + ' · 4,0 °C', color:'#0B63E5'}]
+    };
+  }
+
+  function setTemp(t){
+    var temp = Math.max(0, Math.min(12, Math.round(t*10)/10));
+    var inRange = temp >= 2 && temp <= 6;
+    if (st.inRange && !inRange){
+      st.desvios++;
+      st.events.push({t:st.elapsed, text:'Desvío a ' + fmt(temp) + ' °C · alerta enviada', color:'#DC2626'});
+    } else if (!st.inRange && inRange){
+      st.events.push({t:st.elapsed, text:'Lote de nuevo en rango', color:'#16A34A'});
+    }
+    st.temp = temp; st.inRange = inRange; st.enviadas++;
+    enviarLectura(temp);
+  }
+
+  function quality(){ return st.elapsed === 0 ? 100 : Math.round(st.inSecs / st.elapsed * 100); }
+
+  function show(id){
+    ['s-intro','s-play','s-result'].forEach(function(s){ $(s).classList.toggle('on', s === id); });
+  }
+
+  // Con conexión manda el estado del backend; sin él (o antes de la
+  // primera respuesta), el rango local.
+  function renderChip(){
+    var e = st.inRange ? 'ok' : 'bad';
+    if (turno && turno.estado) e = turno.estado === 'NORMAL' ? 'ok' : (turno.estado === 'EN_LIMITE' ? 'warn' : 'bad');
+    $('chip-ok').style.display = e === 'ok' ? 'inline-flex' : 'none';
+    $('chip-warn').style.display = e === 'warn' ? 'inline-flex' : 'none';
+    $('chip-bad').style.display = e === 'bad' ? 'inline-flex' : 'none';
+  }
+
+  function renderPlay(){
+    var q = quality();
+    $('v-temp').textContent = fmt(st.temp);
+    $('v-remaining').textContent = Math.max(0, Math.ceil((TICKS - st.elapsed)/2));
+    $('v-progress').style.width = (st.elapsed / TICKS * 100) + '%';
+    $('v-quality').textContent = q;
+    $('v-qbar').style.width = q + '%';
+    $('v-sent').textContent = st.enviadas;
+    $('v-dev').textContent = st.desvios;
+    renderChip();
+    $('dial').value = st.temp;
+    $('v-chart').setAttribute('points', st.history.map(function(v,i){
+      return ((i/TICKS)*300).toFixed(1) + ',' + (100 - (v/12)*100).toFixed(1);
+    }).join(' '));
+    var incOn = !!(st.incident && st.elapsed < st.incident.until);
+    var alertOn = !incOn && !st.inRange;
+    $('m-incident').style.display = incOn ? 'flex' : 'none';
+    $('m-alert').style.display = alertOn ? 'flex' : 'none';
+    $('m-tip').style.display = (!incOn && !alertOn) ? 'flex' : 'none';
+    if (incOn){ $('v-inc-title').textContent = st.incident.title; $('v-inc-desc').textContent = st.incident.desc; }
+  }
+
+  function plural(n, uno, varios, ninguno){ return n === 0 ? ninguno : (n === 1 ? '1 ' + uno : n + ' ' + varios); }
+  function capitalizar(s){ s = String(s || '').replace(/_/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // Eventos de trazabilidad del backend (vienen ordenados por fecha) al
+  // formato del timeline: t en medios segundos desde el primero.
+  function eventosBackend(r){
+    var lista = r.eventos || [];
+    var base = lista.length ? new Date(lista[0].fecha).getTime() : 0;
+    return lista.map(function(e){
+      var ms = new Date(e.fecha).getTime() - base;
+      var color = '#0B63E5';
+      if (e.tipo === 'CLASIFICACION') color = r.estado === 'NO_APTO' ? '#DC2626' : '#16A34A';
+      return {t: isFinite(ms) && ms > 0 ? Math.round(ms / 500) : 0, text:e.descripcion, color:color};
+    });
+  }
+
+  // r = resumen del backend, o null en modo sin conexión (o si /fin falló).
+  // El puntaje de calidad siempre es local.
+  function renderResult(r){
+    var q = quality();
+    var ok = r && r.estado ? r.estado === 'APTO' : q >= 80;
+    var desvios = r ? r.desvios : st.desvios;
+    var dt = plural(desvios, 'desvío', 'desvíos', 'sin desvíos');
+    if (r) dt += ' · ' + plural(r.alertas, 'alerta', 'alertas', 'sin alertas');
+    $('r-ok').style.display = ok ? 'flex' : 'none';
+    $('r-bad').style.display = ok ? 'none' : 'flex';
+    Array.prototype.forEach.call(document.querySelectorAll('.v-q2'), function(e){ e.textContent = q; });
+    Array.prototype.forEach.call(document.querySelectorAll('.v-dt'), function(e){ e.textContent = dt; });
+    if (r){
+      var dest = r.destinoSugerido;
+      $('r-ia').style.display = dest ? 'flex' : 'none';
+      if (dest){
+        var c = Number(dest.confianza);
+        $('v-dest').textContent = capitalizar(dest.nombre);
+        $('v-dest-m').textContent = isFinite(c) ? 'Confianza ' + Math.round(c <= 1 ? c * 100 : c) + ' %' : '';
+      }
+    } else {
+      var d = 'Quesos', m = 'Calidad excelente: apta para maduración.';
+      if (q < 90){ d = 'Yogur'; m = 'Buena calidad: apta para fermentados.'; }
+      if (q < 80){ d = 'Dulce de leche'; m = 'Requiere tratamiento térmico intenso.'; }
+      if (q < 50){ d = 'Descarte / reanálisis'; m = 'Demasiado tiempo fuera de rango.'; }
+      $('r-ia').style.display = 'flex';
+      $('v-dest').textContent = d;
+      $('v-dest-m').textContent = m;
+    }
+    $('v-sticker').textContent = ok ? 'Retirá tu sticker APTO en la mesa del stand.' : 'Retirá tu sticker NO APTO en la mesa del stand.';
+    var tl = $('v-timeline'); tl.innerHTML = '';
+    (r ? eventosBackend(r) : st.events).slice(-6).forEach(function(e){
+      var row = document.createElement('div'); row.className = 'ev';
+      var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = clock(e.t);
+      var pt = document.createElement('span'); pt.className = 'pt'; pt.style.background = e.color;
+      var tx = document.createElement('span'); tx.className = 'tx'; tx.textContent = e.text;
+      row.appendChild(tm); row.appendChild(pt); row.appendChild(tx); tl.appendChild(row);
+    });
+  }
+
+  function terminar(){
+    var t = turno;
+    if (!t){ renderResult(null); show('s-result'); return; }
+    t.cerrado = true;
+    if (t.espera){ clearTimeout(t.espera); t.espera = null; }
+    renderPlay();
+    $('m-incident').style.display = 'none';
+    $('m-alert').style.display = 'none';
+    $('m-tip').style.display = 'flex';
+    $('v-tip').textContent = 'Clasificando el lote…';
+    var mia = sesion;
+    api('POST', '/demo/turno/' + t.loteId + '/fin', null, TIMEOUT_FIN_MS).then(function(r){
+      if (mia !== sesion) return;
+      renderResult(r); show('s-result');
+    }, function(){
+      if (mia !== sesion) return;
+      renderResult(null); show('s-result');
+    });
+  }
+
+  function tick(){
+    st.elapsed++;
+    var delta = 0.08 + Math.random()*0.14;
+    var hit = st.incidents.filter(function(i){ return i.at === st.elapsed; })[0];
+    if (hit){
+      delta += hit.delta;
+      st.incident = {title:hit.title, desc:hit.desc, until:st.elapsed + 5};
+      st.events.push({t:st.elapsed, text:'Imprevisto: ' + hit.title.toLowerCase(), color:'#F59E0B'});
+      if (navigator.vibrate) navigator.vibrate(200);
+    }
+    setTemp(st.temp + delta);
+    if (st.inRange) st.inSecs++;
+    st.history.push(st.temp);
+    if (st.history.length > TICKS + 1) st.history.shift();
+    if (st.elapsed >= TICKS){
+      clearInterval(timer); timer = null;
+      st.events.push({t:TICKS, text:'Clasificación final del lote', color:'#0B63E5'});
+      terminar(); return;
+    }
+    renderPlay();
+  }
+
+  function nudge(d){
+    if (!timer) return;
+    setTemp(st.temp + d);
+    st.history[st.history.length - 1] = st.temp;
+    renderPlay();
+  }
+
+  function arrancar(t){
+    turno = t;
+    $('v-offline').style.display = t ? 'none' : 'block';
+    $('v-tip').textContent = TIP;
+    pintarNombre();
+    if (timer) clearInterval(timer);
+    reset(); renderPlay(); show('s-play');
+    timer = setInterval(tick, TICK_MS);
+  }
+
+  $('name').addEventListener('input', validarNombre);
+  $('name').addEventListener('keydown', function(e){ if (e.key === 'Enter' && !$('btn-start').disabled) $('btn-start').click(); });
+
+  function empezar(){
+    if (conectando) return;
+    nombre = limpiarNombre($('name').value);
+    if (nombre.length < 2) return;
+    $('name').blur();
+    errorInicio('');
+    var mia = ++sesion;
+    setConectando(true);
+    var cuerpo = SENSOR_ID > 0 ? {sensorId:SENSOR_ID, nombre:nombre} : {nombre:nombre};
+    api('POST', '/demo/turno', cuerpo, TIMEOUT_TURNO_MS).then(function(r){
+      var sensorId = r && r.sensorId > 0 ? r.sensorId : SENSOR_ID;
+      if (!(r && r.loteId && sensorId > 0)) return null;
+      if (r.numero > 0) pintarSensor(r.numero);
+      return nuevoTurno(r.loteId, sensorId);
+    }, function(err){
+      if (err && (err.status === 409 || err.status === 429)) throw err;
+      return null; // backend caído, timeout u otro error: modo sin conexión
+    }).then(function(t){
+      if (mia !== sesion) return;
+      setConectando(false);
+      arrancar(t);
+    }, function(err){
+      if (mia !== sesion) return;
+      setConectando(false);
+      errorInicio(err.status === 429 ? MSG_MUCHA_GENTE : (SENSOR_ID > 0 ? MSG_OCUPADO : MSG_TODOS_OCUPADOS));
+    });
+  }
+
+  $('btn-start').addEventListener('click', empezar);
+  // Con ?sensor= vuelve a mirar el tablero; sin él, reintenta tomar un sensor.
+  $('btn-retry').addEventListener('click', function(){
+    if (SENSOR_ID > 0) consultarTablero(); else empezar();
+  });
+  $('btn-cool').addEventListener('click', function(){ nudge(-0.5); });
+  $('btn-heat').addEventListener('click', function(){ nudge(0.5); });
+  $('dial').addEventListener('input', function(e){
+    if (!timer) return;
+    setTemp(parseFloat(e.target.value));
+    st.history[st.history.length - 1] = st.temp;
+    renderPlay();
+  });
+  // El /fin ya se llamó al terminar: solo vuelve al inicio.
+  $('btn-reset').addEventListener('click', function(){
+    sesion++; turno = null;
+    // Sin ?sensor= el próximo visitante puede recibir otro sensor.
+    if (!(SENSOR_ID > 0)) pintarSensor(null);
+    nombre = ''; $('name').value = ''; errorInicio(''); validarNombre(); show('s-intro');
+  });
+
+  if (SENSOR_ID > 0) consultarTablero(); else pintarSensor(null);
+})();
+</script>
+</body>
+</html>

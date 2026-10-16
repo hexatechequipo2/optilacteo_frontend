@@ -20,6 +20,14 @@ const PARAMETRO_ICON: Record<Parametro, LucideIcon> = {
   [Parametro.CONDUCTIVIDAD]: Radar,
 };
 
+// Nombre y lote asociado cambian sin recargar (ej. la demo renombra el
+// sensor a "Sensor N · {visitante}" al tomar un turno).
+const REFRESCO_METADATOS_MS = 3000;
+
+// Orden natural: "Sensor 2" antes que "Sensor 10". El id desempata para que
+// el orden sea estable con nombres iguales.
+const ordenNatural = new Intl.Collator("es", { numeric: true, sensitivity: "base" });
+
 const CARD_CLASS: Record<EstadoSensor, string> = {
   [EstadoSensor.ACTIVO]: "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900",
   [EstadoSensor.INACTIVO]: "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900",
@@ -36,7 +44,9 @@ function formatearHace(timestamp: string | null | undefined, ahora: number): str
 }
 
 export function EstadoDiagnosticoTab() {
-  const { sensores, lecturas, isLoading, error, isRealtimeConnected } = useSensoresRealtime();
+  const { sensores, lecturas, isLoading, error, isRealtimeConnected } = useSensoresRealtime({
+    refrescoMetadatosMs: REFRESCO_METADATOS_MS,
+  });
   const { puede } = usePermisos();
 
   // HU-15: fallback manual por sensor (POST /sensores/lecturas/manual).
@@ -56,6 +66,11 @@ export function EstadoDiagnosticoTab() {
     const inactivos = sensores.filter((s) => s.estado === EstadoSensor.INACTIVO).length;
     return { activos, conFalla, inactivos, conectados: activos + conFalla };
   }, [sensores]);
+
+  const sensoresOrdenados = useMemo(
+    () => [...sensores].sort((a, b) => ordenNatural.compare(a.nombre, b.nombre) || a.id - b.id),
+    [sensores],
+  );
 
   if (isLoading) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando sensores...</p>;
@@ -110,7 +125,7 @@ export function EstadoDiagnosticoTab() {
         <p className="text-sm text-slate-500 dark:text-slate-400">No hay sensores registrados.</p>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {sensores.map((sensor) => {
+          {sensoresOrdenados.map((sensor) => {
             const Icon = PARAMETRO_ICON[sensor.parametro];
             const lectura = lecturas[sensor.id];
             const unidad = UNIDAD_POR_PARAMETRO[sensor.parametro];
