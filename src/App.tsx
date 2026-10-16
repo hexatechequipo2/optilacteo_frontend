@@ -20,6 +20,8 @@ import ProveedoresPage from "./pages/Proveedores/ProveedoresPage";
 import TambosPage from "./pages/Tambos/TambosPage";
 import LotesPage from "./pages/Lotes/LotesPage";
 import RevisionLotesPage from "./pages/Lotes/RevisionLotesPage";
+import ConsultaLotesPage from "./pages/Lotes/ConsultaLotesPage";
+import LoteConsultaDetallePage from "./pages/Lotes/LoteConsultaDetallePage";
 import MedicionManualPage from "./pages/MedicionManual/MedicionManualPage";
 import SensoresPage from "./pages/Sensores/SensoresPage";
 import DestinatariosAlertasPage from "./pages/Alertas/DestinatariosAlertasPage";
@@ -167,6 +169,22 @@ function App() {
                   element={
                     <ProtectedRoute ruta="/lotes/revision">
                       <RevisionLotesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/lotes/consulta"
+                  element={
+                    <ProtectedRoute ruta="/lotes/consulta">
+                      <ConsultaLotesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/lotes/consulta/:codigo"
+                  element={
+                    <ProtectedRoute ruta="/lotes/consulta">
+                      <LoteConsultaDetallePage />
                     </ProtectedRoute>
                   }
                 />
