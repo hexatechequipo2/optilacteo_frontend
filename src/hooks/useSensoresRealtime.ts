@@ -27,11 +27,40 @@ interface UseSensoresRealtimeResult {
   isRealtimeConnected: boolean;
 }
 
+interface UseSensoresRealtimeOptions {
+  // Si se pasa, vuelve a pedir GET /sensores cada tantos ms (solo con la
+  // pestaña visible) para tomar nombre y lote asociado, y altas o bajas de
+  // sensores. Estado y lecturas siguen viniendo del WS.
+  refrescoMetadatosMs?: number;
+}
+
+// Del REST se toman solo nombre y lote asociado: el estado lo maneja el WS
+// (sensor:falla / sensor:recuperado) y un refresco no lo debe pisar. Los
+// sensores nuevos entran tal cual vienen. Si nada cambió devuelve `prev`,
+// así el polling no re-renderiza la pantalla cada vez.
+function fusionarMetadatos(prev: Sensor[], recibidos: Sensor[]): Sensor[] {
+  const previos = new Map(prev.map((s) => [s.id, s]));
+  let cambio = prev.length !== recibidos.length;
+  const next = recibidos.map((r) => {
+    const p = previos.get(r.id);
+    if (!p) {
+      cambio = true;
+      return r;
+    }
+    if (p.nombre === r.nombre && (p.loteActualId ?? null) === (r.loteActualId ?? null)) return p;
+    cambio = true;
+    return { ...p, nombre: r.nombre, loteActualId: r.loteActualId };
+  });
+  return cambio ? next : prev;
+}
+
 // Carga inicial por REST (GET /sensores) + suscripción al WS /sensores
 // (HU-13) para la pestaña "Estado y diagnóstico". Las lecturas en vivo se
 // guardan aparte de `sensores` porque el backend no las modela como parte
 // del sensor (solo llegan por WS, nunca por REST).
-export function useSensoresRealtime(): UseSensoresRealtimeResult {
+export function useSensoresRealtime({
+  refrescoMetadatosMs,
+}: UseSensoresRealtimeOptions = {}): UseSensoresRealtimeResult {
   const [sensores, setSensores] = useState<Sensor[]>([]);
   const [lecturas, setLecturas] = useState<Record<number, LecturaRuntime>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -64,6 +93,54 @@ export function useSensoresRealtime(): UseSensoresRealtimeResult {
       cancelado = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!refrescoMetadatosMs || isLoading || error) return;
+
+    let cancelado = false;
+    let enCurso = false;
+    let intervalo: ReturnType<typeof setInterval> | null = null;
+
+    const refrescar = async () => {
+      if (enCurso) return;
+      enCurso = true;
+      try {
+        const result = await sensorService.getAll();
+        if (!cancelado) setSensores((prev) => fusionarMetadatos(prev, result));
+      } catch {
+        // Un refresco fallido se ignora: queda lo último que se tenía.
+      } finally {
+        enCurso = false;
+      }
+    };
+    const iniciar = () => {
+      if (intervalo === null) intervalo = setInterval(refrescar, refrescoMetadatosMs);
+    };
+    const detener = () => {
+      if (intervalo !== null) {
+        clearInterval(intervalo);
+        intervalo = null;
+      }
+    };
+    // Con la pestaña oculta no se consulta; al volver, refresca enseguida.
+    const onVisibilidad = () => {
+      if (document.visibilityState === "visible") {
+        void refrescar();
+        iniciar();
+      } else {
+        detener();
+      }
+    };
+
+    if (document.visibilityState === "visible") iniciar();
+    document.addEventListener("visibilitychange", onVisibilidad);
+
+    return () => {
+      cancelado = true;
+      detener();
+      document.removeEventListener("visibilitychange", onVisibilidad);
+    };
+  }, [refrescoMetadatosMs, isLoading, error]);
 
   useEffect(() => {
     // Espera a que termine la carga inicial para evitar procesar eventos
