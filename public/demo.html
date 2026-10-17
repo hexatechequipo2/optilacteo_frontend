@@ -243,10 +243,11 @@
   // asigna el disponible de menor N al empezar el turno.
   var SENSOR_ID = parseInt(params.get('sensor'), 10);
   // POST /demo/turno puede tardar hasta 3 s si la IA no responde.
-  var TIMEOUT_TURNO_MS = 6000, TIMEOUT_FIN_MS = 10000, TIMEOUT_TABLERO_MS = 4000;
+  var TIMEOUT_TURNO_MS = 15000, TIMEOUT_FIN_MS = 10000, TIMEOUT_TABLERO_MS = 4000;
   var MSG_OCUPADO = 'Este sensor está en uso, esperá unos segundos';
   var MSG_TODOS_OCUPADOS = 'Todos los sensores están en uso, esperá unos segundos';
   var MSG_MUCHA_GENTE = 'Mucha gente jugando, probá en unos segundos';
+  var MSG_SIN_CONEXION = 'No se pudo conectar el sensor, reintentá en unos segundos';
   // El backend acepta 10 lecturas/s por lote: el slider se agrupa.
   var LECTURA_MIN_MS = 150;
 
@@ -567,8 +568,11 @@
       if (r.numero > 0) pintarSensor(r.numero);
       return nuevoTurno(r.loteId, sensorId);
     }, function(err){
-      if (err && (err.status === 409 || err.status === 429)) throw err;
-      return null; // backend caído, timeout u otro error: modo sin conexión
+      // Con respuesta HTTP o corte por timeout el pedido llegó al backend y
+      // pudo haber tomado el sensor: no se juega sin conexión, se pide
+      // reintentar (si quedó tomado, el backend lo libera solo al minuto).
+      if (err && (err.status || err.name === 'AbortError')) throw err;
+      return null; // backend inalcanzable (sin red / caído): modo sin conexión
     }).then(function(t){
       if (mia !== sesion) return;
       setConectando(false);
@@ -576,7 +580,11 @@
     }, function(err){
       if (mia !== sesion) return;
       setConectando(false);
-      errorInicio(err.status === 429 ? MSG_MUCHA_GENTE : (SENSOR_ID > 0 ? MSG_OCUPADO : MSG_TODOS_OCUPADOS));
+      errorInicio(
+        err.status === 429 ? MSG_MUCHA_GENTE :
+        err.status === 409 ? (SENSOR_ID > 0 ? MSG_OCUPADO : MSG_TODOS_OCUPADOS) :
+        MSG_SIN_CONEXION
+      );
     });
   }
 
@@ -599,6 +607,15 @@
     // Sin ?sensor= el próximo visitante puede recibir otro sensor.
     if (!(SENSOR_ID > 0)) pintarSensor(null);
     nombre = ''; $('name').value = ''; errorInicio(''); validarNombre(); show('s-intro');
+  });
+
+  // Si el visitante cierra o sale a mitad del juego, se avisa el fin para
+  // que el sensor quede libre al toque (sin esperar el minuto).
+  window.addEventListener('pagehide', function(){
+    var t = turno;
+    if (!t || t.cerrado || !navigator.sendBeacon) return;
+    t.cerrado = true;
+    navigator.sendBeacon(API + '/demo/turno/' + t.loteId + '/fin');
   });
 
   if (SENSOR_ID > 0) consultarTablero(); else pintarSensor(null);
