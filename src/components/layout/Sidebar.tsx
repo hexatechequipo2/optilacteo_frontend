@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   X,
   KeyRound,
+  Sparkles,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
@@ -65,6 +66,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const puedeVerTambos = entra("/tambos");
   const puedeVerLotes = entra("/lotes");
   const puedeVerRevisionCalidad = entra("/lotes/revision");
+  const puedeVerDestinoSugerido = entra("/lotes/destino-sugerido");
   const puedeVerMedicionManual = entra("/mediciones-manuales");
   const puedeVerIngresoCamara = entra("/ingreso-camara");
   const puedeVerSensores = entra("/sensores");
@@ -198,6 +200,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             icon: ClipboardCheck,
             count: counts.revisionCalidad,
             path: "/lotes/revision",
+          },
+        ]
+      : []),
+    ...(puedeVerDestinoSugerido
+      ? [
+          {
+            label: "Destino sugerido (IA)",
+            icon: Sparkles,
+            path: "/lotes/L-2026-0412/destino-sugerido",
           },
         ]
       : []),
