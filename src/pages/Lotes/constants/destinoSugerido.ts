@@ -4,23 +4,35 @@
 // estrategia alternativa, falta de datos, sin histórico suficiente y error
 // del servicio) para poder recorrerlos con el botón "Recalcular".
 
-export interface LoteDestinoSugeridoRef {
-  codigo: string;
-  proveedorNombre: string;
-}
-
-export const LOTES_DESTINO_SUGERIDO_MOCK: LoteDestinoSugeridoRef[] = [
-  { codigo: "L-2026-0412", proveedorNombre: "Tambo San José" },
-  { codigo: "L-2026-0405", proveedorNombre: "Cooperativa Unión Popular" },
-  { codigo: "L-2026-0398", proveedorNombre: "Establecimiento La Victoria" },
-];
-
 export type EstadoSugerenciaDestino =
   | "exito_exacta"
   | "exito_alternativa"
   | "falta_datos"
   | "sin_historico"
   | "error_servicio";
+
+export interface LoteDestinoSugeridoRef {
+  codigo: string;
+  proveedorNombre: string;
+  // Resultado con el que arranca este lote al elegirlo en el selector —
+  // distinto por lote para que el cambio se note (y de paso se puedan ver
+  // varios de los 5 resultados posibles sin depender solo de "Recalcular").
+  estadoInicial: EstadoSugerenciaDestino;
+}
+
+export const LOTES_DESTINO_SUGERIDO_MOCK: LoteDestinoSugeridoRef[] = [
+  { codigo: "L-2026-0412", proveedorNombre: "Tambo San José", estadoInicial: "exito_exacta" },
+  {
+    codigo: "L-2026-0405",
+    proveedorNombre: "Cooperativa Unión Popular",
+    estadoInicial: "exito_alternativa",
+  },
+  {
+    codigo: "L-2026-0398",
+    proveedorNombre: "Establecimiento La Victoria",
+    estadoInicial: "sin_historico",
+  },
+];
 
 export interface SugerenciaDestinoMock {
   estado: EstadoSugerenciaDestino;

@@ -47,11 +47,26 @@ export default function DestinoSugeridoPage() {
     LOTES_DESTINO_SUGERIDO_MOCK.find((l) => l.codigo === codigo) ??
     LOTES_DESTINO_SUGERIDO_MOCK[0];
 
-  const [estado, setEstado] = useState<EstadoSugerenciaDestino>("exito_exacta");
+  const [estado, setEstado] = useState<EstadoSugerenciaDestino>(loteActual.estadoInicial);
   const [calculadoEn, setCalculadoEn] = useState(() => new Date());
   const [calculando, setCalculando] = useState(false);
   const [destinoAceptado, setDestinoAceptado] = useState(false);
   const timeoutRef = useRef<number | null>(null);
+
+  // Al cambiar de lote (selector de arriba) había que ver el resultado de
+  // ESE lote, no arrastrar el estado — "Destino aceptado" y la hora de
+  // cálculo del lote anterior quedaban pisando al nuevo.
+  useEffect(() => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setEstado(loteActual.estadoInicial);
+    setCalculadoEn(new Date());
+    setCalculando(false);
+    setDestinoAceptado(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loteActual.codigo]);
 
   useEffect(() => {
     return () => {
@@ -79,9 +94,6 @@ export default function DestinoSugeridoPage() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             Sugerencia de destino productivo
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Mock de la HU-78 — no está conectado al modelo de IA real.
-          </p>
         </div>
         <div className="w-full sm:w-64">
           <Select
