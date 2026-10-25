@@ -102,7 +102,8 @@ export default function LoteConsultaDetallePage() {
               <Campo label="Destino asignado" valor={lote.destinoAsignado} />
             </div>
 
-            {puedeVerDestinoSugerido && (
+            {/* D-08: los lotes No Apto no reciben sugerencia de destino por IA. */}
+            {puedeVerDestinoSugerido && lote.estado !== ClasificacionLote.NO_APTO && (
               <Button
                 type="button"
                 onClick={() => navigate(`/lotes/${lote.codigo}/destino-sugerido`)}

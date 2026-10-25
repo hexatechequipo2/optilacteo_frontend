@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
+  Ban,
   CheckCircle2,
   Clock,
   FileWarning,
@@ -15,6 +16,8 @@ import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
 import { LOTES_DATOS_ILUSTRATIVOS } from "../../constants/lotes";
+import { usePermisos } from "../../hooks/usePermisos";
+import { puedeEntrarA } from "../../utils/accesoRutas";
 import {
   LOTES_DESTINO_SUGERIDO_MOCK,
   construirSugerencia,
@@ -26,7 +29,9 @@ import {
 // botón "Recalcular" recorre los 5 resultados posibles que describe la HU
 // (éxito con coincidencia exacta, éxito con estrategia alternativa, falta
 // de datos, sin histórico suficiente y error del servicio) para poder
-// probar cada rama manualmente. Debajo del resultado va la grilla de
+// probar cada rama manualmente. Los lotes No Apto quedan en "no_aplica"
+// (D-08): sin sugerencia ni acciones, solo el aviso y el enlace a la
+// revisión de calidad. Debajo del resultado va la grilla de
 // referencia de los 4 estados en los que no se genera sugerencia, tal como
 // la muestra el prototipo (Figura 3).
 const DURACION_RECALCULO_MS = 1400;
@@ -46,6 +51,8 @@ function formatearFechaHora(fecha: Date): string {
 export default function DestinoSugeridoPage() {
   const { codigo } = useParams<{ codigo: string }>();
   const navigate = useNavigate();
+  const permisos = usePermisos();
+  const puedeVerRevisionCalidad = puedeEntrarA("/lotes/revision", permisos);
   // Sin fallback: un código que no está en el mock no debe mostrar la
   // sugerencia de otro lote como si fuera la suya.
   const loteActual = LOTES_DESTINO_SUGERIDO_MOCK.find((l) => l.codigo === codigo) ?? null;
@@ -132,14 +139,38 @@ export default function DestinoSugeridoPage() {
             onChange={(e) => navigate(`/lotes/${e.target.value}/destino-sugerido`)}
             options={LOTES_DESTINO_SUGERIDO_MOCK.map((l) => ({
               value: l.codigo,
-              label: `${l.codigo} — ${l.proveedorNombre}`,
+              label:
+                l.estadoInicial === "no_aplica"
+                  ? `${l.codigo} — No Apto (sin sugerencia)`
+                  : `${l.codigo} — ${l.proveedorNombre}`,
+              disabled: l.estadoInicial === "no_aplica",
             }))}
           />
         </div>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        {calculando ? (
+        {estado === "no_aplica" ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+              <Ban className="h-5 w-5" />
+              <h2 className="text-sm font-semibold uppercase tracking-wide">No aplica</h2>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Este lote está clasificado como No Apto. Su destino se define en la revisión de
+              calidad, no mediante sugerencias de IA.
+            </p>
+            {puedeVerRevisionCalidad && (
+              <button
+                type="button"
+                onClick={() => navigate("/lotes/revision")}
+                className="mt-1 inline-flex w-fit items-center gap-1.5 self-start text-sm font-medium text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                Ir a la revisión de calidad
+              </button>
+            )}
+          </div>
+        ) : calculando ? (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 animate-pulse text-blue-600 dark:text-blue-400" />
@@ -273,7 +304,18 @@ export default function DestinoSugeridoPage() {
         <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
           Estados en los que no se genera sugerencia
         </h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+              No aplica — lote No Apto
+            </p>
+            <p className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
+              El destino lo define la revisión de calidad
+            </p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Los lotes clasificados como No Apto no reciben sugerencia de destino por IA.
+            </p>
+          </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
               Falta de datos
@@ -307,13 +349,16 @@ export default function DestinoSugeridoPage() {
               El servicio de IA no respondió. No se muestra el resultado anterior como si fuera
               nuevo.
             </p>
-            <button
-              type="button"
-              onClick={handleRecalcular}
-              className="mt-2 rounded-md border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-            >
-              Reintentar
-            </button>
+            {/* En "no_aplica" no hay nada que recalcular: pisaría el estado del lote No Apto. */}
+            {estado !== "no_aplica" && (
+              <button
+                type="button"
+                onClick={handleRecalcular}
+                className="mt-2 rounded-md border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+              >
+                Reintentar
+              </button>
+            )}
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">

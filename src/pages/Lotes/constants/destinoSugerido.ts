@@ -4,12 +4,18 @@
 // estrategia alternativa, falta de datos, sin histórico suficiente y error
 // del servicio) para poder recorrerlos con el botón "Recalcular".
 
+import { ClasificacionLote } from "../../../types/lote.types";
+import { construirLotesConsultaMock } from "./consultaLotes";
+
 export type EstadoSugerenciaDestino =
   | "exito_exacta"
   | "exito_alternativa"
   | "falta_datos"
   | "sin_historico"
-  | "error_servicio";
+  | "error_servicio"
+  // D-08: lote No Apto — no se genera sugerencia, el destino lo define la
+  // revisión de calidad (HU-22). Es el estado que va a devolver el back.
+  | "no_aplica";
 
 export interface LoteDestinoSugeridoRef {
   codigo: string;
@@ -20,14 +26,27 @@ export interface LoteDestinoSugeridoRef {
   estadoInicial: EstadoSugerenciaDestino;
 }
 
-export const LOTES_DESTINO_SUGERIDO_MOCK: LoteDestinoSugeridoRef[] = [
-  { codigo: "L-2026-0412", proveedorNombre: "Agropecuaria San Martín", estadoInicial: "exito_exacta" },
-  { codigo: "L-2026-0411", proveedorNombre: "Lácteos del Valle", estadoInicial: "falta_datos" },
-  { codigo: "L-2026-0410", proveedorNombre: "Agropecuaria San Martín", estadoInicial: "exito_alternativa" },
-  { codigo: "L-2026-0409", proveedorNombre: "Tambos Unidos SRL", estadoInicial: "sin_historico" },
-  { codigo: "L-2026-0408", proveedorNombre: "Lácteos del Valle", estadoInicial: "exito_exacta" },
-  { codigo: "L-2026-0407", proveedorNombre: "Tambos Unidos SRL", estadoInicial: "error_servicio" },
-];
+// Solo lotes aptos: 4 lotes para 5 resultados. "error_servicio" se alcanza
+// con un "Recalcular" desde L-2026-0409 (sin_historico → error_servicio).
+const ESTADO_INICIAL_APTOS: Record<string, EstadoSugerenciaDestino> = {
+  "L-2026-0412": "exito_exacta",
+  "L-2026-0410": "exito_alternativa",
+  "L-2026-0409": "sin_historico",
+  "L-2026-0408": "falta_datos",
+};
+
+// Clasificación y proveedor salen del mock de HU-77 (única fuente); los No
+// Apto quedan en "no_aplica" por D-08.
+export const LOTES_DESTINO_SUGERIDO_MOCK: LoteDestinoSugeridoRef[] = construirLotesConsultaMock().map(
+  (l) => ({
+    codigo: l.codigo,
+    proveedorNombre: l.proveedor,
+    estadoInicial:
+      l.estado === ClasificacionLote.NO_APTO
+        ? "no_aplica"
+        : (ESTADO_INICIAL_APTOS[l.codigo] ?? "exito_exacta"),
+  }),
+);
 
 export interface SugerenciaDestinoMock {
   estado: EstadoSugerenciaDestino;
