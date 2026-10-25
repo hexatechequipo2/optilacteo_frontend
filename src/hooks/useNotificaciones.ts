@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createSocket } from "../services/socket";
 import { notificacionService } from "../services/notificacion.service";
 import type { Notificacion } from "../types/notificacion.types";
@@ -11,6 +11,7 @@ interface UseNotificacionesResult {
   noLeidasCount: number;
   isLoading: boolean;
   error: string | null;
+  refetch: () => Promise<void>;
   marcarLeida: (id: number) => Promise<void>;
 }
 
@@ -30,24 +31,22 @@ export function useNotificaciones(): UseNotificacionesResult {
     RETENCION_AVISOS_MOCK && !esSistema && puede("configuracion_empresa", "editar"),
   );
 
-  useEffect(() => {
-    let cancelado = false;
-
-    (async () => {
-      try {
-        const result = await notificacionService.getAll();
-        if (!cancelado) setNotificaciones(result);
-      } catch {
-        if (!cancelado) setError("No se pudieron cargar las notificaciones.");
-      } finally {
-        if (!cancelado) setIsLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelado = true;
-    };
+  const cargarNotificaciones = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await notificacionService.getAll();
+      setNotificaciones(result);
+    } catch {
+      setError("No se pudieron cargar las notificaciones.");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void cargarNotificaciones();
+  }, [cargarNotificaciones]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -97,5 +96,12 @@ export function useNotificaciones(): UseNotificacionesResult {
 
   const noLeidasCount = useMemo(() => todas.filter((n) => !n.leida).length, [todas]);
 
-  return { notificaciones: todas, noLeidasCount, isLoading, error, marcarLeida };
+  return {
+    notificaciones: todas,
+    noLeidasCount,
+    isLoading,
+    error,
+    refetch: cargarNotificaciones,
+    marcarLeida,
+  };
 }

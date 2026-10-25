@@ -816,3 +816,35 @@ test.describe("AlertasPage (HU-25) › Filtro de fechas en hora local", () => {
     await expect(cardDe(page, "LOT-2026-001")).toHaveCount(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// HU-79 — Estado de error identificable al fallar la consulta de alertas
+// ---------------------------------------------------------------------------
+
+test("AlertasPage (HU-79) - con un 503 muestra el error con Reintentar y al reintentar carga la lista", async ({
+  page,
+}) => {
+  await mockAlertasDeps(page, [ALERTA_CRITICA]);
+  let fallar = true;
+  await page.route("**/notificacion*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET" || !fallar) return route.fallback();
+    return route.fulfill({ status: 503 });
+  });
+  await loginAsResponsableProduccion(page);
+  await page.goto("/alertas");
+
+  await expect(page.getByText("No se pudieron cargar las alertas.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reintentar" })).toBeVisible();
+  // "Informativas" solo existe en ContadoresAlertas (la tab dice "Info").
+  await expect(page.getByText("Informativas", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/No hay alertas .*para los filtros seleccionados/)).toHaveCount(0);
+
+  fallar = false;
+  await page.getByRole("button", { name: "Reintentar" }).click();
+
+  await expect(cardDe(page, "LOT-2026-001")).toBeVisible();
+  await expect(page.getByText("Informativas", { exact: true })).toBeVisible();
+  await expect(page.getByText("No se pudieron cargar las alertas.")).toHaveCount(0);
+});
