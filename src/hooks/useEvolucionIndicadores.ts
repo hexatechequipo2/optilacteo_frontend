@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  esErrorValidacion,
   evolucionIndicadoresService,
   extraerMensajeError,
 } from "../services/evolucionIndicadores.service";
+import { esRangoInvertido } from "../utils/fechaCalendario";
 import type {
   EvolucionIndicadoresQuery,
   GranularidadEvolucion,
@@ -12,9 +14,25 @@ import type {
   SerieIndicadorEvolucion,
 } from "../types/indicadorEvolucion.types";
 
+// "desde"/"hasta" son fechas calendario "YYYY-MM-DD" tal cual las eligió
+// el usuario en el <input type="date"> — viajan así al backend, sin pasar
+// por Date/toISOString (ver utils/fechaCalendario.ts).
 export interface RangoPersonalizado {
   desde: string;
   hasta: string;
+}
+
+// Mismo texto que el 400 del backend para este caso, así el usuario ve el
+// mismo mensaje se valide de este lado o del otro.
+export const MENSAJE_RANGO_INVERTIDO =
+  'La fecha "desde" no puede ser posterior a la fecha "hasta".';
+
+// "validacion": 400 del backend, se muestra su mensaje y no se ofrece
+// reintentar. "consulta": red caída, 5xx, etc. — se ofrece reintentar.
+// Ninguno de los dos se muestra nunca como "sin datos".
+export interface ErrorEvolucion {
+  tipo: "validacion" | "consulta";
+  mensaje: string;
 }
 
 interface UseEvolucionIndicadoresParams {
@@ -28,7 +46,8 @@ interface ResultadoEvolucion {
   granularidad: GranularidadEvolucion;
   agregado: boolean;
   isLoading: boolean;
-  error: string | null;
+  error: ErrorEvolucion | null;
+  errorRango: string | null;
   estaVacio: boolean;
   sinIndicadores: boolean;
   refetch: () => Promise<void>;
@@ -116,17 +135,21 @@ export function useEvolucionIndicadores({
   const [agregado, setAgregado] = useState(false);
   const [estaVacio, setEstaVacio] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorEvolucion | null>(null);
 
   const sinIndicadores = indicadoresSeleccionados.length === 0;
   // "rango" necesita las dos fechas completas antes de disparar el
   // request — evita pegarle al backend mientras el usuario todavía está
-  // eligiendo. Si están completas pero son inválidas (hasta < desde), NO se
-  // frena acá: se manda igual y el 400 real del backend es el mensaje que
-  // termina viendo el usuario (criterio de prueba de HU-39 — antes esto se
-  // validaba client-side con un mensaje fijo, sin llegar a pegarle al back).
+  // eligiendo. HU-75: si están completas pero desde > hasta, tampoco se
+  // consulta — el error se muestra junto al selector. Cualquier otra
+  // invalidez (formato) sí llega al backend y se muestra su 400.
   const rangoIncompleto =
     periodo === "rango" && (!rangoPersonalizado.desde || !rangoPersonalizado.hasta);
+  const errorRango =
+    periodo === "rango" &&
+    esRangoInvertido(rangoPersonalizado.desde, rangoPersonalizado.hasta)
+      ? MENSAJE_RANGO_INVERTIDO
+      : null;
 
   // Descarta respuestas que llegan tarde y fuera de orden (p.ej. el usuario
   // cambia de período dos veces seguido y la primera request, más lenta,
@@ -138,7 +161,7 @@ export function useEvolucionIndicadores({
   const cargar = useCallback(async () => {
     const requestId = ++ultimaRequestIdRef.current;
 
-    if (sinIndicadores || rangoIncompleto) {
+    if (sinIndicadores || rangoIncompleto || errorRango) {
       setPuntos([]);
       setEstaVacio(false);
       setError(null);
@@ -182,11 +205,18 @@ export function useEvolucionIndicadores({
       if (ultimaRequestIdRef.current !== requestId) return;
       setPuntos([]);
       setEstaVacio(false);
-      setError(extraerMensajeError(err, "No se pudo cargar la evolución de indicadores."));
+      setError(
+        esErrorValidacion(err)
+          ? {
+              tipo: "validacion",
+              mensaje: extraerMensajeError(err, "La consulta no es válida."),
+            }
+          : { tipo: "consulta", mensaje: "No se pudo cargar la evolución de indicadores." },
+      );
     } finally {
       if (ultimaRequestIdRef.current === requestId) setIsLoading(false);
     }
-  }, [periodo, indicadoresSeleccionados, rangoPersonalizado, sinIndicadores, rangoIncompleto]);
+  }, [periodo, indicadoresSeleccionados, rangoPersonalizado, sinIndicadores, rangoIncompleto, errorRango]);
 
   useEffect(() => {
     void cargar();
@@ -198,6 +228,7 @@ export function useEvolucionIndicadores({
     agregado,
     isLoading,
     error,
+    errorRango,
     estaVacio,
     sinIndicadores,
     refetch: cargar,
