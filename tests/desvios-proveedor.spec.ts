@@ -160,7 +160,9 @@ test.describe("DesviosProveedorModal", () => {
     await abrirModalDesvios(page, "Tambo El Roble");
 
     await expect(
-      page.getByRole("dialog").getByText("Este proveedor todavía no tiene lotes con remito cargado."),
+      page
+        .getByRole("dialog")
+        .getByText("Este proveedor todavía no tiene lotes con remito cargado", { exact: true }),
     ).toBeVisible();
   });
 
@@ -192,10 +194,40 @@ test.describe("DesviosProveedorModal", () => {
     await abrirModalDesvios(page, "Tambo El Roble");
 
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("Error interno")).toBeVisible();
+    await expect(
+      dialog.getByText("No se pudo recuperar el historial de desvíos. Intentá nuevamente."),
+    ).toBeVisible();
 
     await dialog.getByRole("button", { name: "Reintentar" }).click();
     await expect(dialog.getByText("LOT-2026-001")).toBeVisible();
+  });
+
+  test("ante un 500 muestra un mensaje amigable y no el texto técnico del backend", async ({
+    page,
+  }) => {
+    await mockProveedoresDeps(page);
+    await page.route(/\/lotes\/proveedor\/\d+\/desvios/, async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ statusCode: 500, message: "Internal server error" }),
+      });
+    });
+
+    await loginAsAdministrador(page);
+    await page.goto("/proveedores");
+
+    await abrirModalDesvios(page, "Tambo El Roble");
+
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByText("No se pudo recuperar el historial de desvíos. Intentá nuevamente."),
+    ).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Reintentar" })).toBeVisible();
+    await expect(dialog.getByText("Internal server error")).toHaveCount(0);
   });
 
   // HU-74: la respuesta de A llega después de la de B y no debe pisarla.

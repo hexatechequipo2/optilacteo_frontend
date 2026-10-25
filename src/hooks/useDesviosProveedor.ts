@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import axios from "axios";
 import { extraerMensajeError, loteService } from "../services/lote.service";
 import type { DesvioProveedorLote } from "../types/desvioProveedor.types";
 
@@ -22,6 +23,17 @@ const ESTADO_VACIO: EstadoDesvios = {
   isLoading: false,
   error: null,
 };
+
+const ERROR_RECUPERACION = "No se pudo recuperar el historial de desvíos. Intentá nuevamente.";
+
+// HU-74: ante 5xx o error de red (sin response) no se expone el mensaje
+// técnico del backend ("Internal server error"). Los 4xx (p. ej. 404 de
+// proveedor inexistente o de otra empresa) mantienen el mensaje del backend.
+function mensajeErrorDesvios(err: unknown): string {
+  const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+  if (status === undefined || status >= 500) return ERROR_RECUPERACION;
+  return extraerMensajeError(err, ERROR_RECUPERACION);
+}
 
 // HU-66: GET /lotes/proveedor/:proveedorId/desvios. Solo se dispara cuando
 // proveedorId no es null, mismo criterio que useComparacionHistoricaLote
@@ -55,7 +67,7 @@ export function useDesviosProveedor(proveedorId: number | null): UseDesviosProve
         proveedorId,
         desvios: null,
         isLoading: false,
-        error: extraerMensajeError(err, "No se pudo cargar el historial de desvíos."),
+        error: mensajeErrorDesvios(err),
       });
     }
   }, [proveedorId]);
