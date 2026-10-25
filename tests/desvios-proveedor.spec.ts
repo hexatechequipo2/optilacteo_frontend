@@ -197,6 +197,87 @@ test.describe("DesviosProveedorModal", () => {
     await dialog.getByRole("button", { name: "Reintentar" }).click();
     await expect(dialog.getByText("LOT-2026-001")).toBeVisible();
   });
+
+  // HU-74: la respuesta de A llega después de la de B y no debe pisarla.
+  test("si se cambia de proveedor antes de que responda el anterior, solo muestra los datos del nuevo", async ({
+    page,
+  }) => {
+    await mockProveedoresDeps(page);
+    await page.route("**/proveedores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            PROVEEDORES_MOCK.data[0],
+            {
+              ...PROVEEDORES_MOCK.data[0],
+              id: 2,
+              razonSocial: "Tambo La Esperanza",
+              cuit: "30-22222222-2",
+            },
+          ],
+          meta: { page: 1, limit: 3, total: 2, totalPages: 1 },
+        }),
+      });
+    });
+
+    let liberarA!: () => void;
+    const aLiberado = new Promise<void>((resolve) => (liberarA = resolve));
+    let marcarRespuestaA!: () => void;
+    const respuestaA = new Promise<void>((resolve) => (marcarRespuestaA = resolve));
+
+    await page.route(/\/lotes\/proveedor\/\d+\/desvios/, async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      if (route.request().url().includes("/lotes/proveedor/1/")) {
+        await aLiberado;
+        try {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(DESVIOS_MOCK),
+          });
+        } catch {
+          // El pedido de A ya fue cancelado por el frontend.
+        } finally {
+          marcarRespuestaA();
+        }
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ ...DESVIOS_MOCK[0], loteId: 2, codigo: "LOT-2026-002" }]),
+      });
+    });
+
+    await loginAsAdministrador(page);
+    await page.goto("/proveedores");
+
+    const dialog = page.getByRole("dialog");
+    await abrirModalDesvios(page, "Tambo El Roble");
+    await expect(dialog.getByText("Cargando historial de desvíos...")).toBeVisible();
+    await dialog.getByRole("button", { name: "Cerrar" }).click();
+
+    await abrirModalDesvios(page, "Tambo La Esperanza");
+    await expect(
+      dialog.getByText("Tambo La Esperanza — comprometido según remito vs. recibido"),
+    ).toBeVisible();
+    await expect(dialog.getByText("LOT-2026-002")).toBeVisible();
+
+    liberarA();
+    await respuestaA;
+    // Margen para que una respuesta tardía de A llegue a renderizarse si no se descartó.
+    await page.waitForTimeout(500);
+
+    await expect(dialog.getByText("LOT-2026-001")).toHaveCount(0);
+    await expect(dialog.getByText("LOT-2026-002")).toBeVisible();
+  });
 });
 
 // ---------------------------------------------------------------------------

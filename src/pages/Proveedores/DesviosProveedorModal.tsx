@@ -49,7 +49,11 @@ export function DesviosProveedorModal({ isOpen, proveedor, onClose }: DesviosPro
       onClose={onClose}
     >
       <div className="flex flex-col gap-6">
-        {error && (
+        {isLoading ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Cargando historial de desvíos...
+          </p>
+        ) : error ? (
           <div className="flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
             <span>{error}</span>
             <button
@@ -60,12 +64,6 @@ export function DesviosProveedorModal({ isOpen, proveedor, onClose }: DesviosPro
               Reintentar
             </button>
           </div>
-        )}
-
-        {isLoading ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Cargando historial de desvíos...
-          </p>
         ) : !desvios ? null : desvios.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Este proveedor todavía no tiene lotes con remito cargado.
