@@ -6,6 +6,26 @@ import { useNotificaciones } from "../../hooks/useNotificaciones";
 import { Bell, Moon, Sun, Menu } from "lucide-react";
 import { FloatingDictadoVozButton } from "../FloatingDictadoVozButton";
 
+const SIDEBAR_COLAPSADO_KEY = "sidebar-colapsado";
+
+// Si el storage no está disponible (modo privado, bloqueado), el menú
+// arranca expandido y el estado vive solo en memoria.
+function leerSidebarColapsado(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLAPSADO_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function guardarSidebarColapsado(colapsado: boolean) {
+  try {
+    localStorage.setItem(SIDEBAR_COLAPSADO_KEY, String(colapsado));
+  } catch {
+    // Sin persistencia: se pierde al recargar, pero el toggle sigue andando.
+  }
+}
+
 interface LayoutProps {
   breadcrumb: string;
   children: ReactNode;
@@ -16,13 +36,24 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
   const { theme, toggleTheme } = useTheme();
   const { notificaciones, noLeidasCount, isLoading, error, refetch, marcarLeida } = useNotificaciones();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarColapsado, setIsSidebarColapsado] = useState(leerSidebarColapsado);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   const breadcrumbs = breadcrumb.split(" > ");
 
+  const toggleSidebarColapsado = () => {
+    const next = !isSidebarColapsado;
+    setIsSidebarColapsado(next);
+    guardarSidebarColapsado(next);
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950">
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        isCollapsed={isSidebarColapsado}
+      />
 
       {isSidebarOpen && (
         <div
@@ -35,9 +66,24 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
         <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 print:hidden dark:border-slate-800 dark:bg-slate-900 sm:px-6 sm:py-4 lg:px-8">
           {/* Breadcrumb y menú */}
           <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+            {/* Mismo ícono, dos acciones según el breakpoint (sin JS): en
+                mobile abre el drawer, en escritorio colapsa o expande. */}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              aria-label="Abrir menú lateral"
+              aria-expanded={isSidebarOpen}
               className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 lg:hidden"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+
+            <button
+              onClick={toggleSidebarColapsado}
+              aria-label={isSidebarColapsado ? "Expandir menú lateral" : "Colapsar menú lateral"}
+              aria-expanded={!isSidebarColapsado}
+              aria-controls="sidebar-principal"
+              title={isSidebarColapsado ? "Expandir menú lateral" : "Colapsar menú lateral"}
+              className="hidden rounded-md p-2 text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 lg:flex"
             >
               <Menu className="h-5 w-5" />
             </button>
