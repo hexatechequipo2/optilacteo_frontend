@@ -20,6 +20,7 @@ import ProveedoresPage from "./pages/Proveedores/ProveedoresPage";
 import TambosPage from "./pages/Tambos/TambosPage";
 import LotesPage from "./pages/Lotes/LotesPage";
 import RevisionLotesPage from "./pages/Lotes/RevisionLotesPage";
+import DestinoSugeridoPage from "./pages/Lotes/DestinoSugeridoPage";
 import ConsultaLotesPage from "./pages/Lotes/ConsultaLotesPage";
 import LoteConsultaDetallePage from "./pages/Lotes/LoteConsultaDetallePage";
 import MedicionManualPage from "./pages/MedicionManual/MedicionManualPage";
@@ -185,6 +186,14 @@ function App() {
                   element={
                     <ProtectedRoute ruta="/lotes/consulta">
                       <LoteConsultaDetallePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/lotes/:codigo/destino-sugerido"
+                  element={
+                    <ProtectedRoute ruta="/lotes/destino-sugerido">
+                      <DestinoSugeridoPage />
                     </ProtectedRoute>
                   }
                 />
