@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Download, Loader2, TrendingUp } from "lucide-react";
 import { Input } from "../../../components/ui/Input";
+import { FieldError } from "../../../components/ui/FieldError";
 import {
   useEvolucionIndicadores,
   type RangoPersonalizado,
 } from "../../../hooks/useEvolucionIndicadores";
 import { INDICADORES_EVOLUCION } from "../constants/indicadoresEvolucion";
 import { exportarGraficoEvolucionPng } from "../../../utils/exportarGraficoEvolucionPng";
+import { formatearFechaCalendario } from "../../../utils/fechaCalendario";
 import { Parametro } from "../../../types/configParametro.types";
 import type {
   IndicadorEvolucionId,
@@ -14,11 +16,6 @@ import type {
   TipoGraficoEvolucion,
 } from "../../../types/indicadorEvolucion.types";
 import { EvolucionIndicadoresChart } from "./EvolucionIndicadoresChart";
-
-function formatFecha(iso: string): string {
-  const [anio, mes, dia] = iso.split("-");
-  return `${dia}/${mes}/${anio}`;
-}
 
 const PERIODOS: { value: PeriodoEvolucion; label: string }[] = [
   { value: "dia", label: "Día" },
@@ -87,6 +84,7 @@ export function EvolucionIndicadoresPanel() {
     granularidad,
     isLoading,
     error,
+    errorRango,
     estaVacio,
     sinIndicadores,
     refetch,
@@ -108,7 +106,7 @@ export function EvolucionIndicadoresPanel() {
 
   const periodoLabel =
     periodo === "rango" && rango.desde && rango.hasta
-      ? `Rango personalizado (${formatFecha(rango.desde)} – ${formatFecha(rango.hasta)})`
+      ? `Rango personalizado (${formatearFechaCalendario(rango.desde)} – ${formatearFechaCalendario(rango.hasta)})`
       : (PERIODOS.find((p) => p.value === periodo)?.label ?? "");
 
   const exportarPng = () => {
@@ -123,7 +121,12 @@ export function EvolucionIndicadoresPanel() {
   };
 
   const puedeExportar =
-    !isLoading && !error && !estaVacio && !sinIndicadores && puntos.length > 0;
+    !isLoading &&
+    !error &&
+    !errorRango &&
+    !estaVacio &&
+    !sinIndicadores &&
+    puntos.length > 0;
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -181,23 +184,28 @@ export function EvolucionIndicadoresPanel() {
           </div>
 
           {periodo === "rango" && (
-            <div className="flex items-end gap-3">
-              <Input
-                label="Desde"
-                type="date"
-                value={rango.desde}
-                onChange={(e) =>
-                  setRango((r) => ({ ...r, desde: e.target.value }))
-                }
-              />
-              <Input
-                label="Hasta"
-                type="date"
-                value={rango.hasta}
-                onChange={(e) =>
-                  setRango((r) => ({ ...r, hasta: e.target.value }))
-                }
-              />
+            <div className="flex flex-col gap-1">
+              <div className="flex items-end gap-3">
+                <Input
+                  label="Desde"
+                  type="date"
+                  value={rango.desde}
+                  aria-invalid={!!errorRango}
+                  onChange={(e) =>
+                    setRango((r) => ({ ...r, desde: e.target.value }))
+                  }
+                />
+                <Input
+                  label="Hasta"
+                  type="date"
+                  value={rango.hasta}
+                  aria-invalid={!!errorRango}
+                  onChange={(e) =>
+                    setRango((r) => ({ ...r, hasta: e.target.value }))
+                  }
+                />
+              </div>
+              {errorRango && <FieldError message={errorRango} />}
             </div>
           )}
         </div>
@@ -245,9 +253,23 @@ export function EvolucionIndicadoresPanel() {
               Cargando evolución de indicadores...
             </p>
           </div>
+        ) : errorRango ? (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 py-16 text-center dark:border-slate-700">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Corregí el rango de fechas para ver el gráfico.
+            </p>
+          </div>
+        ) : error?.tipo === "validacion" ? (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-amber-200 bg-amber-50 py-12 text-center dark:border-amber-500/30 dark:bg-amber-500/10">
+            <p className="text-sm text-amber-800 dark:text-amber-400">
+              {error.mensaje}
+            </p>
+          </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-red-200 bg-red-50 py-12 text-center dark:border-red-500/30 dark:bg-red-500/10">
-            <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+            <p className="text-sm text-red-700 dark:text-red-400">
+              {error.mensaje}
+            </p>
             <button
               type="button"
               onClick={() => void refetch()}
@@ -268,7 +290,7 @@ export function EvolucionIndicadoresPanel() {
         ) : estaVacio ? (
           <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 py-16 text-center dark:border-slate-700">
             <p className="text-base font-medium text-slate-700 dark:text-slate-300">
-              No hay mediciones disponibles para el período seleccionado
+              No hay registros para el período seleccionado
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Probá con otro período o ajustá el rango de fechas.

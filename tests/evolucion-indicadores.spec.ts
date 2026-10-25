@@ -158,7 +158,7 @@ async function mockDashboardProduccionDeps(page: Page) {
         status: 400,
         contentType: "application/json",
         body: JSON.stringify({
-          message: "La fecha hasta no puede ser anterior a la fecha desde.",
+          message: 'La fecha "desde" no puede ser posterior a la fecha "hasta".',
         }),
       });
     }
@@ -218,7 +218,7 @@ test.describe("EvolucionIndicadoresPanel (HU-39)", () => {
     await page.waitForLoadState("networkidle");
 
     await expect(
-      page.getByText("La fecha hasta no puede ser anterior a la fecha desde."),
+      page.getByText('La fecha "desde" no puede ser posterior a la fecha "hasta".'),
     ).toBeVisible();
   });
 
@@ -275,7 +275,7 @@ test.describe("EvolucionIndicadoresPanel (HU-39)", () => {
     await page.waitForLoadState("networkidle");
 
     await expect(
-      page.getByText("No hay mediciones disponibles para el período seleccionado"),
+      page.getByText("No hay registros para el período seleccionado"),
     ).toBeVisible();
   });
 
@@ -292,6 +292,72 @@ test.describe("EvolucionIndicadoresPanel (HU-39)", () => {
       page.getByText("No se pudo cargar la evolución de indicadores."),
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "Reintentar" })).toBeVisible();
+  });
+
+  // HU-75: Desde > Hasta se valida en el front y no se consulta.
+  test("rango con Desde > Hasta muestra el error de rango y no consulta", async ({ page }) => {
+    const consultasRango: string[] = [];
+    page.on("request", (req) => {
+      if (
+        req.url().includes("/indicadores/evolucion") &&
+        new URL(req.url()).searchParams.get("periodo") === "rango"
+      ) {
+        consultasRango.push(req.url());
+      }
+    });
+
+    await page.getByRole("button", { name: "Rango personalizado" }).click();
+    const fechas = page.locator('input[type="date"]');
+
+    // Control positivo: con un rango válido el registro sí captura la
+    // consulta, así el "0 requests" de abajo no pasa por un filtro roto.
+    await fechas.nth(0).fill("2026-06-10");
+    await fechas.nth(1).fill("2026-06-15");
+    await expect.poll(() => consultasRango.length).toBeGreaterThan(0);
+    await page.waitForLoadState("networkidle");
+
+    consultasRango.length = 0;
+    await fechas.nth(0).fill("2026-06-20");
+    await page.waitForLoadState("networkidle");
+
+    await expect(
+      page.getByText('La fecha "desde" no puede ser posterior a la fecha "hasta".'),
+    ).toBeVisible();
+    await expect(page.getByText("Corregí el rango de fechas para ver el gráfico.")).toBeVisible();
+    expect(consultasRango).toHaveLength(0);
+  });
+
+  // HU-75: un 400 es error de validación (sin reintentar); un 5xx es error
+  // de consulta (con reintentar). Ninguno se muestra como "sin datos".
+  test("distingue un 400 de validación de un 5xx de consulta", async ({ page }) => {
+    let status = 400;
+    await page.route("**/indicadores/evolucion*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (status === 400) {
+        return route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "El formato de fecha no es válido." }),
+        });
+      }
+      await route.fulfill({ status: 503, body: "" });
+    });
+
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByText("El formato de fecha no es válido.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reintentar" })).toHaveCount(0);
+    await expect(page.getByText("No hay registros para el período seleccionado")).toHaveCount(0);
+
+    status = 503;
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await expect(
+      page.getByText("No se pudo cargar la evolución de indicadores."),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reintentar" })).toBeVisible();
+    await expect(page.getByText("No hay registros para el período seleccionado")).toHaveCount(0);
   });
 
   test("seleccionar múltiples indicadores los compara en el mismo gráfico", async ({ page }) => {
