@@ -32,6 +32,7 @@ const DESVIOS_MOCK = [
     fechaIngreso: "2026-08-01T12:00:00.000Z",
     cantidadComprometidaKg: 1000,
     cantidadReal: 1046,
+    unidadCantidadReal: "kilogramos",
     desvioCantidadPorcentaje: 4.6,
     parametros: [
       { parametro: "ph", valorComprometido: 6.5, valorReal: 6.8, desvioPorcentaje: 4.62 },
@@ -135,12 +136,49 @@ test.describe("DesviosProveedorModal", () => {
       dialog.getByText("Tambo El Roble — comprometido según remito vs. recibido"),
     ).toBeVisible();
     await expect(dialog.getByText("LOT-2026-001")).toBeVisible();
-    await expect(dialog.getByText("Cantidad: 1000 comprometido — 1046 recibido")).toBeVisible();
+    await expect(dialog.getByText("Cantidad: 1000 kg comprometido — 1046 kg recibido")).toBeVisible();
     await expect(dialog.getByText("+4.6%")).toBeVisible();
     await expect(dialog.getByText("pH: 6.5 comprometido — 6.8 recibido")).toBeVisible();
     await expect(dialog.getByText("+4.62%")).toBeVisible();
     await expect(dialog.getByText("Materia grasa: 3.5 % comprometido — 3.3 % recibido")).toBeVisible();
     await expect(dialog.getByText("-5.71%")).toBeVisible();
+  });
+
+  // HU-74 + HU-51: lote en litros → el backend no calcula el desvío de cantidad (null).
+  test("lote en litros: muestra la unidad, 'No comparable' y nunca 'null'", async ({ page }) => {
+    await mockProveedoresDeps(page);
+    await page.route(/\/lotes\/proveedor\/\d+\/desvios/, async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            loteId: 3,
+            codigo: "LOT-2026-003",
+            fechaIngreso: "2026-08-02T12:00:00.000Z",
+            cantidadComprometidaKg: 1000,
+            cantidadReal: 980,
+            unidadCantidadReal: "litros",
+            desvioCantidadPorcentaje: null,
+            parametros: [],
+          },
+        ]),
+      });
+    });
+
+    await loginAsAdministrador(page);
+    await page.goto("/proveedores");
+
+    await abrirModalDesvios(page, "Tambo El Roble");
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("LOT-2026-003")).toBeVisible();
+    await expect(dialog.getByText("Cantidad: 1000 kg comprometido — 980 L recibido")).toBeVisible();
+    await expect(dialog.getByText("No comparable")).toBeVisible();
+    await expect(dialog.getByText(/null/)).toHaveCount(0);
   });
 
   test("muestra mensaje cuando el proveedor todavía no tiene lotes con remito cargado", async ({
