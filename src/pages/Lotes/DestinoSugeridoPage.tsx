@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertTriangle,
+  ArrowLeft,
   CheckCircle2,
   Clock,
   FileWarning,
@@ -43,11 +44,13 @@ function formatearFechaHora(fecha: Date): string {
 export default function DestinoSugeridoPage() {
   const { codigo } = useParams<{ codigo: string }>();
   const navigate = useNavigate();
-  const loteActual =
-    LOTES_DESTINO_SUGERIDO_MOCK.find((l) => l.codigo === codigo) ??
-    LOTES_DESTINO_SUGERIDO_MOCK[0];
+  // Sin fallback: un código que no está en el mock no debe mostrar la
+  // sugerencia de otro lote como si fuera la suya.
+  const loteActual = LOTES_DESTINO_SUGERIDO_MOCK.find((l) => l.codigo === codigo) ?? null;
 
-  const [estado, setEstado] = useState<EstadoSugerenciaDestino>(loteActual.estadoInicial);
+  const [estado, setEstado] = useState<EstadoSugerenciaDestino>(
+    loteActual?.estadoInicial ?? "exito_exacta",
+  );
   const [calculadoEn, setCalculadoEn] = useState(() => new Date());
   const [calculando, setCalculando] = useState(false);
   const [destinoAceptado, setDestinoAceptado] = useState(false);
@@ -57,6 +60,7 @@ export default function DestinoSugeridoPage() {
   // ESE lote, no arrastrar el estado — "Destino aceptado" y la hora de
   // cálculo del lote anterior quedaban pisando al nuevo.
   useEffect(() => {
+    if (!loteActual) return;
     if (timeoutRef.current !== null) {
       window.clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -66,7 +70,7 @@ export default function DestinoSugeridoPage() {
     setCalculando(false);
     setDestinoAceptado(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loteActual.codigo]);
+  }, [loteActual?.codigo]);
 
   useEffect(() => {
     return () => {
@@ -84,8 +88,29 @@ export default function DestinoSugeridoPage() {
     }, DURACION_RECALCULO_MS);
   };
 
+  if (!loteActual) {
+    return (
+      <Layout breadcrumb={`Consola > Lotes > ${codigo ?? ""} > Destino sugerido`}>
+        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-base font-medium text-slate-700 dark:text-slate-300">
+            Lote no encontrado: "{codigo}"
+          </p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            No hay una sugerencia de destino para este código en el entorno de prueba.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("/lotes/consulta")}
+            className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+          >
+            <ArrowLeft className="h-4 w-4" /> Volver a la consulta de lotes
+          </button>
+        </div>
+      </Layout>
+    );
+  }
+
   const sugerencia = construirSugerencia(estado, calculadoEn);
-  const esExito = estado === "exito_exacta" || estado === "exito_alternativa";
 
   return (
     <Layout breadcrumb={`Consola > Lotes > ${loteActual.codigo} > Destino sugerido`}>

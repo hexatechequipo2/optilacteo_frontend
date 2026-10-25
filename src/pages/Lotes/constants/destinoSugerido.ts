@@ -21,17 +21,12 @@ export interface LoteDestinoSugeridoRef {
 }
 
 export const LOTES_DESTINO_SUGERIDO_MOCK: LoteDestinoSugeridoRef[] = [
-  { codigo: "L-2026-0412", proveedorNombre: "Tambo San José", estadoInicial: "exito_exacta" },
-  {
-    codigo: "L-2026-0405",
-    proveedorNombre: "Cooperativa Unión Popular",
-    estadoInicial: "exito_alternativa",
-  },
-  {
-    codigo: "L-2026-0398",
-    proveedorNombre: "Establecimiento La Victoria",
-    estadoInicial: "sin_historico",
-  },
+  { codigo: "L-2026-0412", proveedorNombre: "Agropecuaria San Martín", estadoInicial: "exito_exacta" },
+  { codigo: "L-2026-0411", proveedorNombre: "Lácteos del Valle", estadoInicial: "falta_datos" },
+  { codigo: "L-2026-0410", proveedorNombre: "Agropecuaria San Martín", estadoInicial: "exito_alternativa" },
+  { codigo: "L-2026-0409", proveedorNombre: "Tambos Unidos SRL", estadoInicial: "sin_historico" },
+  { codigo: "L-2026-0408", proveedorNombre: "Lácteos del Valle", estadoInicial: "exito_exacta" },
+  { codigo: "L-2026-0407", proveedorNombre: "Tambos Unidos SRL", estadoInicial: "error_servicio" },
 ];
 
 export interface SugerenciaDestinoMock {

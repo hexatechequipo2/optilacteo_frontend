@@ -9,11 +9,15 @@ import {
   GitBranch,
   HelpCircle,
   PackagePlus,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
+import { Button } from "../../components/ui/Button";
 import { ClasificacionLoteBadge } from "../../components/ClasificacionLoteBadge";
+import { usePermisos } from "../../hooks/usePermisos";
 import { ClasificacionLote } from "../../types/lote.types";
+import { puedeEntrarA } from "../../utils/accesoRutas";
 import { construirEventosLote, construirLotesConsultaMock } from "./constants/consultaLotes";
 
 // HU-77 (mock visual): detalle de un lote + su trazabilidad en línea de
@@ -51,6 +55,8 @@ function Campo({ label, valor }: { label: string; valor: string }) {
 export default function LoteConsultaDetallePage() {
   const { codigo } = useParams<{ codigo: string }>();
   const navigate = useNavigate();
+  const permisos = usePermisos();
+  const puedeVerDestinoSugerido = puedeEntrarA("/lotes/destino-sugerido", permisos);
   const lotes = useMemo(() => construirLotesConsultaMock(), []);
   const lote = lotes.find((l) => l.codigo === codigo) ?? null;
   const eventos = useMemo(() => (lote ? construirEventosLote(lote) : []), [lote]);
@@ -92,6 +98,16 @@ export default function LoteConsultaDetallePage() {
               <Campo label="Tambo" valor={lote.tambo} />
               <Campo label="Destino asignado" valor={lote.destinoAsignado} />
             </div>
+
+            {puedeVerDestinoSugerido && (
+              <Button
+                type="button"
+                onClick={() => navigate(`/lotes/${lote.codigo}/destino-sugerido`)}
+                className="gap-2 self-start text-sm"
+              >
+                <Sparkles className="h-4 w-4" /> Ver destino sugerido (IA)
+              </Button>
+            )}
 
             {lote.estado === ClasificacionLote.NO_APTO && lote.parametroCritico && (
               <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-500/30 dark:bg-red-500/10">
