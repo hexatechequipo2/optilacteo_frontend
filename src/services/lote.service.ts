@@ -96,9 +96,13 @@ export const loteService = {
   // proveedor. El backend filtra solo lotes con cantidadComprometidaKg
   // cargado (array vacío si no hay desvíos, 404 si el proveedor no existe o
   // es de otra empresa — extraerMensajeError ya cubre ese caso).
-  getDesviosPorProveedor: async (proveedorId: number): Promise<DesvioProveedorLote[]> => {
+  getDesviosPorProveedor: async (
+    proveedorId: number,
+    signal?: AbortSignal,
+  ): Promise<DesvioProveedorLote[]> => {
     const { data } = await api.get<DesvioProveedorLote[]>(
       `/lotes/proveedor/${proveedorId}/desvios`,
+      { signal },
     );
     return data;
   },
