@@ -66,7 +66,7 @@ export function DesviosProveedorModal({ isOpen, proveedor, onClose }: DesviosPro
           </div>
         ) : !desvios ? null : desvios.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Este proveedor todavía no tiene lotes con remito cargado.
+            Este proveedor todavía no tiene lotes con remito cargado
           </p>
         ) : (
           <div className="flex flex-col gap-4">
