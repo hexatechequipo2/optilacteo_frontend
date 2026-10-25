@@ -194,12 +194,71 @@ test.describe("Layout › Encabezado y menú", () => {
       const menu = page.getByRole("complementary");
       await expect(menu).not.toBeInViewport();
 
-      await page.locator("header button").first().click();
+      await page.getByRole("button", { name: "Abrir menú lateral" }).click();
       await expect(menu).toBeInViewport();
 
       await page.mouse.click(380, 400);
       await expect(menu).not.toBeInViewport();
     });
+
+    test("no ofrece colapsar y el drawer se ve completo aunque haya quedado colapsado", async ({ page }) => {
+      await page.addInitScript(() => localStorage.setItem("sidebar-colapsado", "true"));
+      await mockLayout(page);
+      await abrirPlanes(page);
+      const menu = page.getByRole("complementary");
+
+      await expect(page.getByRole("button", { name: /^(Colapsar|Expandir) menú lateral$/ })).toBeHidden();
+      const abrir = page.getByRole("button", { name: "Abrir menú lateral" });
+      await expect(abrir).toBeVisible();
+      await expect(abrir).toHaveAttribute("aria-expanded", "false");
+      await abrir.click();
+      await expect(abrir).toHaveAttribute("aria-expanded", "true");
+      await expect(menu).toBeInViewport();
+      await expect(menu.getByText("Usuarios", { exact: true })).toBeVisible();
+    });
+  });
+});
+
+test.describe("Layout › Menú lateral colapsable", () => {
+  const menu = (page: Page) => page.getByRole("complementary");
+  // Botón del header, el que colapsa en escritorio (el de abrir el drawer es lg:hidden).
+  const toggle = (page: Page) => page.locator("header").getByRole("button", { name: /^(Colapsar|Expandir) menú lateral$/ });
+
+  test("colapsar oculta labels y nombre de empresa, y los íconos siguen navegando", async ({ page }) => {
+    await mockLayout(page);
+    await abrirPlanes(page);
+    await expect(page.getByRole("button", { name: "Abrir menú lateral" })).toBeHidden();
+    await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(toggle(page)).toHaveAttribute("aria-controls", "sidebar-principal");
+    await expect(toggle(page)).toHaveAttribute("title", "Colapsar menú lateral");
+    await expect(menu(page).getByRole("heading", { name: "OptiLácteo" })).toBeVisible();
+
+    await toggle(page).click();
+
+    await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
+    await expect(toggle(page)).toHaveAttribute("title", "Expandir menú lateral");
+    await expect(menu(page).getByText("Usuarios", { exact: true })).toBeHidden();
+    await expect(menu(page).getByRole("heading", { name: "OptiLácteo" })).toBeHidden();
+
+    const usuarios = menu(page).getByRole("button", { name: "Usuarios" });
+    await expect(usuarios).toHaveAttribute("title", "Usuarios");
+    await usuarios.click();
+    await expect(page).toHaveURL("/usuarios");
+  });
+
+  test("el estado colapsado se mantiene al recargar", async ({ page }) => {
+    await mockLayout(page);
+    await abrirPlanes(page);
+    await toggle(page).click();
+
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Planes" })).toBeVisible();
+    await expect(toggle(page)).toHaveAccessibleName("Expandir menú lateral");
+    await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
+    await expect(menu(page).getByText("Usuarios", { exact: true })).toBeHidden();
+
+    await toggle(page).click();
+    await expect(menu(page).getByText("Usuarios", { exact: true })).toBeVisible();
   });
 });
 
