@@ -37,8 +37,17 @@ import { ReglasActivasPanel } from "./components/ReglasActivasPanel";
 // real sin recargar): useAlertas ya deja el array actualizado en vivo, así
 // que cualquier filtro/contador acá es puramente derivado con useMemo.
 export default function AlertasPage() {
-  const { alertas, isLoading, error, isRealtimeConnected, marcarLeida, cerrarAlerta, marcarFalsoPositivo } =
-    useAlertas();
+  const {
+    alertas,
+    isLoading,
+    error,
+    refreshError,
+    refetch,
+    isRealtimeConnected,
+    marcarLeida,
+    cerrarAlerta,
+    marcarFalsoPositivo,
+  } = useAlertas();
   const { lotes } = useLotes();
   const { empresa } = useEmpresaActual();
   const { puede } = usePermisos();
@@ -183,9 +192,11 @@ export default function AlertasPage() {
         )}
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
-          {error}
+      {/* HU-79: fallo de un refresco de background con datos ya cargados —
+          no bloquea, la lista de abajo sigue siendo la última conocida. */}
+      {!error && refreshError && (
+        <div className="mb-4 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+          {refreshError}
         </div>
       )}
 
@@ -193,12 +204,16 @@ export default function AlertasPage() {
         <Tabs tabs={TABS_ALERTAS} value={tab} onChange={setTab} />
       </div>
 
-      {/* AC2 + AC3: contadores destacados por nivel. */}
-      <ContadoresAlertas
-        criticas={contadores.criticas}
-        advertencias={contadores.advertencias}
-        informativas={contadores.informativas}
-      />
+      {/* AC2 + AC3: contadores destacados por nivel. HU-79: solo con datos
+          cargados — mientras carga o si falló, un 0 se leería como "no hay
+          anomalías". */}
+      {!isLoading && !error && (
+        <ContadoresAlertas
+          criticas={contadores.criticas}
+          advertencias={contadores.advertencias}
+          informativas={contadores.informativas}
+        />
+      )}
 
       <AlertasFiltros
         loteId={loteId}
@@ -223,6 +238,17 @@ export default function AlertasPage() {
           {isLoading ? (
             <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16 dark:border-slate-800 dark:bg-slate-900">
               <p className="text-sm text-slate-500 dark:text-slate-400">Cargando alertas...</p>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="ml-4 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
+              >
+                Reintentar
+              </button>
             </div>
           ) : listado.length === 0 ? (
             <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white py-16 dark:border-slate-800 dark:bg-slate-900">

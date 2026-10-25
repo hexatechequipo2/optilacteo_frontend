@@ -26,6 +26,10 @@ interface UseAlertasResult {
   alertas: AlertaConCierre[];
   isLoading: boolean;
   error: string | null;
+  // HU-79: fallo de un refresco de background (polling) con datos ya
+  // cargados — no bloquea la lista, solo avisa que puede estar desactualizada.
+  refreshError: string | null;
+  refetch: () => Promise<void>;
   isRealtimeConnected: boolean;
   marcarLeida: (id: number) => Promise<void>;
   cerrarAlerta: (id: number, accionCorrectiva: string) => Promise<void>;
@@ -42,32 +46,30 @@ export function useAlertas(): UseAlertasResult {
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
 
-  useEffect(() => {
-    let cancelado = false;
-
-    (async () => {
-      try {
-        // El estado de cierre (estado/accionCorrectiva/fechaResolucion) ya
-        // viene resuelto en la misma respuesta — NotificacionMapper.toResponse
-        // (backend) lo serializa siempre, no hace falta pedirlo aparte ni
-        // rehidratarlo desde otro lado.
-        const result = await notificacionService.getAll({ limit: 100 });
-        if (!cancelado) {
-          setNotificaciones(result);
-        }
-      } catch {
-        if (!cancelado) setError("No se pudieron cargar las alertas.");
-      } finally {
-        if (!cancelado) setIsLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelado = true;
-    };
+  const cargarAlertas = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // El estado de cierre (estado/accionCorrectiva/fechaResolucion) ya
+      // viene resuelto en la misma respuesta — NotificacionMapper.toResponse
+      // (backend) lo serializa siempre, no hace falta pedirlo aparte ni
+      // rehidratarlo desde otro lado.
+      const result = await notificacionService.getAll({ limit: 100 });
+      setNotificaciones(result);
+      setRefreshError(null);
+    } catch {
+      setError("No se pudieron cargar las alertas.");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void cargarAlertas();
+  }, [cargarAlertas]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -106,10 +108,11 @@ export function useAlertas(): UseAlertasResult {
       try {
         const result = await notificacionService.getAll({ limit: 100 });
         setNotificaciones(result);
+        setRefreshError(null);
       } catch {
-        // Silencioso a propósito: es un refresh de background, no hay
-        // acción del usuario que abortar ni feedback útil que mostrarle
-        // por un fallo puntual — el próximo tick reintenta solo.
+        // HU-79: se conservan los datos anteriores (no se vacía la lista) y
+        // se avisa sin bloquear — el próximo tick reintenta solo.
+        setRefreshError("No se pudo actualizar, mostrando datos anteriores.");
       }
     }, POLLING_RESOLUCION_MS);
 
@@ -217,6 +220,8 @@ export function useAlertas(): UseAlertasResult {
     alertas,
     isLoading,
     error,
+    refreshError,
+    refetch: cargarAlertas,
     isRealtimeConnected,
     marcarLeida,
     cerrarAlerta,

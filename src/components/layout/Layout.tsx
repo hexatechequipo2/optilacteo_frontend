@@ -14,7 +14,7 @@ interface LayoutProps {
 export function Layout({ breadcrumb, children }: LayoutProps) {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { notificaciones, noLeidasCount, marcarLeida } = useNotificaciones();
+  const { notificaciones, noLeidasCount, isLoading, error, refetch, marcarLeida } = useNotificaciones();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
@@ -115,7 +115,22 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
                       </p>
                     </div>
                     <div className="max-h-80 overflow-y-auto">
-                      {notificaciones.length === 0 ? (
+                      {isLoading ? (
+                        <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                          Cargando notificaciones...
+                        </p>
+                      ) : error ? (
+                        <div className="flex flex-col items-center gap-2 px-4 py-6 text-center text-sm text-red-700 dark:text-red-400">
+                          <span>{error}</span>
+                          <button
+                            type="button"
+                            onClick={() => void refetch()}
+                            className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
+                          >
+                            Reintentar
+                          </button>
+                        </div>
+                      ) : notificaciones.length === 0 ? (
                         <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
                           No tenés notificaciones.
                         </p>
