@@ -23,6 +23,7 @@ import {
   X,
   KeyRound,
   Sparkles,
+  Route,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
@@ -49,8 +50,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const permisos = usePermisos();
   const entra = (ruta: RutaApp) => puedeEntrarA(ruta, permisos);
 
-  // Badge abreviado (solo visual, no gatea nada).
-  const esResponsableProduccion = user?.rolNombre === "Responsable de producción";
   // La visibilidad de cada ítem sale de la misma regla que protege la ruta
   // (utils/accesoRutas.ts), así menú y ProtectedRoute no se desalinean.
   const puedeVerDashboard = entra("/dashboard");
@@ -67,6 +66,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const puedeVerLotes = entra("/lotes");
   const puedeVerRevisionCalidad = entra("/lotes/revision");
   const puedeVerDestinoSugerido = entra("/lotes/destino-sugerido");
+  const puedeVerConsultaLotes = entra("/lotes/consulta");
   const puedeVerMedicionManual = entra("/mediciones-manuales");
   const puedeVerIngresoCamara = entra("/ingreso-camara");
   const puedeVerSensores = entra("/sensores");
@@ -187,6 +187,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(puedeVerLotes
       ? [{ label: "Lotes", icon: ClipboardList, count: counts.lotes, path: "/lotes" }]
       : []),
+    ...(puedeVerConsultaLotes
+      ? [{ label: "Consulta de lotes", icon: Route, path: "/lotes/consulta" }]
+      : []),
     ...(puedeVerMedicionManual
       ? [{ label: "Medición manual", icon: FlaskConical, path: "/mediciones-manuales" }]
       : []),
@@ -232,7 +235,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      <div className="flex items-center gap-3 border-b border-slate-200 p-4 dark:border-slate-800">
+      <div className="flex items-start gap-3 border-b border-slate-200 p-4 dark:border-slate-800">
         {isLoadingEmpresa ? (
           <div className="h-10 w-10 flex-shrink-0 animate-pulse rounded-md bg-slate-100 dark:bg-slate-800" />
         ) : (
@@ -243,22 +246,27 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           />
         )}
 
-        <div className="min-w-0 flex-1">
+        {/* HU-81: nombre de empresa y rol en líneas propias, cada uno en su
+            propio renglón, en vez de compartir una fila con truncate — así
+            un rol largo (ej. "Responsable de producción") ya no empuja ni
+            recorta el nombre de la empresa, sea cual sea su longitud. */}
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           {isLoadingEmpresa ? (
             <div className="h-5 w-32 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
           ) : (
-            <h1 className="truncate text-xl font-bold text-slate-900 dark:text-white">
+            <h1 className="break-words text-xl font-bold leading-tight text-slate-900 dark:text-white">
               {empresa?.name ?? "OptiLácteo"}
             </h1>
           )}
-        </div>
 
-        <span className="flex-shrink-0 rounded-md bg-blue-100 px-3 py-1 text-xs font-semibold uppercase text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
-          {/* Badge de rol arriba a la izquierda: para Responsable de
-              producción se abrevia a "Producción" para que no se corte con
-              nombres de empresa largos (el resto de los roles no cambia). */}
-          {esResponsableProduccion ? "Producción" : (user?.rolNombre ?? "Sin rol")}
-        </span>
+          {/* Sin "truncate": si el nombre del rol no entra en una línea
+              (ej. "Responsable de producción"), el pill se achica a lo
+              que ocupa el texto y, si no alcanza, pasa a una segunda
+              línea — nunca lo recorta con "...". */}
+          <span className="self-start rounded-md bg-blue-100 px-3 py-1 text-xs font-semibold uppercase leading-snug text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
+            {user?.rolNombre ?? "Sin rol"}
+          </span>
+        </div>
 
         <button
           type="button"
