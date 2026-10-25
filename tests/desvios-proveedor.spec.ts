@@ -145,7 +145,7 @@ test.describe("DesviosProveedorModal", () => {
   });
 
   // HU-74 + HU-51: lote en litros → el backend no calcula el desvío de cantidad (null).
-  test("lote en litros: muestra la unidad, 'No comparable' y nunca 'null'", async ({ page }) => {
+  test("lote en litros: muestra la unidad, 'No comparable', 'Sin dato' y nunca 'null'", async ({ page }) => {
     await mockProveedoresDeps(page);
     await page.route(/\/lotes\/proveedor\/\d+\/desvios/, async (route) => {
       const rt = route.request().resourceType();
@@ -163,7 +163,9 @@ test.describe("DesviosProveedorModal", () => {
             cantidadReal: 980,
             unidadCantidadReal: "litros",
             desvioCantidadPorcentaje: null,
-            parametros: [],
+            parametros: [
+              { parametro: "grasa", valorComprometido: 3.5, valorReal: null, desvioPorcentaje: null },
+            ],
           },
         ]),
       });
@@ -177,7 +179,9 @@ test.describe("DesviosProveedorModal", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("LOT-2026-003")).toBeVisible();
     await expect(dialog.getByText("Cantidad: 1000 kg comprometido — 980 L recibido")).toBeVisible();
-    await expect(dialog.getByText("No comparable")).toBeVisible();
+    await expect(dialog.getByText("Materia grasa: 3.5 % comprometido — Sin dato recibido")).toBeVisible();
+    // Uno por la cantidad y otro por el parámetro.
+    await expect(dialog.getByText("No comparable")).toHaveCount(2);
     await expect(dialog.getByText(/null/)).toHaveCount(0);
   });
 
