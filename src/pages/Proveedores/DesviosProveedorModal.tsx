@@ -131,8 +131,8 @@ export function DesviosProveedorModal({ isOpen, proveedor, onClose }: DesviosPro
                           >
                             <span className="text-slate-700 dark:text-slate-300">
                               {nombre}: {p.valorComprometido}
-                              {unidad} comprometido — {p.valorReal}
-                              {unidad} recibido
+                              {unidad} comprometido —{" "}
+                              {p.valorReal == null ? "Sin dato" : `${p.valorReal}${unidad}`} recibido
                             </span>
                             <IndicadorDesvio valor={p.desvioPorcentaje} />
                           </li>

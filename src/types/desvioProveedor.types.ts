@@ -11,7 +11,8 @@ export type UnidadCantidadDesvio = "litros" | "kilogramos";
 export interface DesvioProveedorParametro {
   parametro: Parametro;
   valorComprometido: number;
-  valorReal: number;
+  // HU-74: null si no hay medición del parámetro para el lote.
+  valorReal: number | null;
   desvioPorcentaje: number | null;
 }
 
