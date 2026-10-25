@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   X,
   KeyRound,
+  Route,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
@@ -65,6 +66,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const puedeVerTambos = entra("/tambos");
   const puedeVerLotes = entra("/lotes");
   const puedeVerRevisionCalidad = entra("/lotes/revision");
+  const puedeVerConsultaLotes = entra("/lotes/consulta");
   const puedeVerMedicionManual = entra("/mediciones-manuales");
   const puedeVerIngresoCamara = entra("/ingreso-camara");
   const puedeVerSensores = entra("/sensores");
@@ -184,6 +186,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(puedeVerTambos ? [{ label: "Tambos", icon: Droplets, path: "/tambos" }] : []),
     ...(puedeVerLotes
       ? [{ label: "Lotes", icon: ClipboardList, count: counts.lotes, path: "/lotes" }]
+      : []),
+    ...(puedeVerConsultaLotes
+      ? [{ label: "Consulta de lotes", icon: Route, path: "/lotes/consulta" }]
       : []),
     ...(puedeVerMedicionManual
       ? [{ label: "Medición manual", icon: FlaskConical, path: "/mediciones-manuales" }]
