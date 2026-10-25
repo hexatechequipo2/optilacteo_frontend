@@ -16,6 +16,7 @@ import {
   LOCALIDADES_POR_PROVINCIA,
 } from "../../data/localidades-argentina";
 import { Combobox } from "../../components/ui/Combobox";
+import { validarTelefono } from "../../utils/telefono";
 // ─── Datos estáticos ────────────────────────────────────────────────────────
 
 const TIPOS = [
@@ -80,6 +81,7 @@ interface FormValues {
 interface FormErrors {
   razonSocial?: string;
   cuit?: string;
+  telefono?: string;
   empresaId?: string;
 }
 
@@ -124,6 +126,8 @@ function validate(values: FormValues): FormErrors {
     errors.cuit = "El CUIT debe tener el formato XX-XXXXXXXX-X";
   }
   if (!values.empresaId) errors.empresaId = "La empresa es obligatoria";
+  const errorTelefono = validarTelefono(values.telefono);
+  if (errorTelefono) errors.telefono = errorTelefono;
   return errors;
 }
 
@@ -358,6 +362,7 @@ export function ProveedorFormModal({
                   placeholder="Ej: +54 351 1234567"
                   value={values.telefono}
                   onChange={set("telefono")}
+                  error={errors.telefono}
                 />
               </div>
               <Input
