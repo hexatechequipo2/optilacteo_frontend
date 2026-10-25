@@ -13,8 +13,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
+import { AvisoDatosIlustrativos } from "../../components/ui/AvisoDatosIlustrativos";
 import { Button } from "../../components/ui/Button";
 import { ClasificacionLoteBadge } from "../../components/ClasificacionLoteBadge";
+import { LOTES_DATOS_ILUSTRATIVOS } from "../../constants/lotes";
 import { usePermisos } from "../../hooks/usePermisos";
 import { ClasificacionLote } from "../../types/lote.types";
 import { puedeEntrarA } from "../../utils/accesoRutas";
@@ -63,6 +65,7 @@ export default function LoteConsultaDetallePage() {
 
   return (
     <Layout breadcrumb={`Consola > Lotes > ${codigo ?? ""}`}>
+      {LOTES_DATOS_ILUSTRATIVOS && <AvisoDatosIlustrativos className="mb-4" />}
       <button
         type="button"
         onClick={() => navigate("/lotes/consulta")}
