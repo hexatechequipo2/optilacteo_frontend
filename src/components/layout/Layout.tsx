@@ -93,9 +93,10 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
                 onClick={() => setIsNotifOpen((prev) => !prev)}
                 className="relative rounded-full border border-slate-200 p-2 transition hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
                 title="Notificaciones"
+                aria-label={noLeidasCount ? `Notificaciones, ${noLeidasCount} sin leer` : "Notificaciones"}
               >
                 <Bell className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-                {noLeidasCount > 0 && (
+                {noLeidasCount !== null && noLeidasCount > 0 && (
                   <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
                     {noLeidasCount > 9 ? "9+" : noLeidasCount}
                   </span>
