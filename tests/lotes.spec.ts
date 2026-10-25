@@ -1065,6 +1065,9 @@ test.describe("LotesPage › ClasificacionAutomaticaTab", () => {
         }),
       });
     });
+    await page.route("**/notificaciones/no-leidas/count", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ total: 1 }) }),
+    );
     await page.reload();
     // El badge rojo sobre la campana debe mostrar "1"
     await expect(page.getByTitle("Notificaciones")).toContainText("1");

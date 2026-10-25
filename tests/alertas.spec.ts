@@ -142,6 +142,15 @@ async function mockAlertasDeps(
       }),
     });
   });
+
+  // Contador de la campana (HU-79): sale de este endpoint, no de la lista.
+  await page.route("**/notificaciones/no-leidas/count", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ total: (alertas as { leida?: boolean }[]).filter((a) => !a.leida).length }),
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------

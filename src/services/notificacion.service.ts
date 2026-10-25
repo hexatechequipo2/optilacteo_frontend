@@ -30,6 +30,14 @@ export const notificacionService = {
   marcarLeida: async (id: number): Promise<void> => {
     await api.patch(`/notificaciones/${id}/leida`);
   },
+
+  // HU-79: total de no leídas del usuario en la empresa activa, sin paginar
+  // (getAll trae solo las primeras 20, así que no sirve para contar).
+  contarNoLeidas: async (): Promise<number> => {
+    const { data } = await api.get<{ total: number }>("/notificaciones/no-leidas/count");
+    if (typeof data?.total !== "number") throw new Error("Respuesta de conteo inválida");
+    return data.total;
+  },
 };
 
 // HU-26/HU-29: configuración de destinatarios por nivel de alerta, por rol

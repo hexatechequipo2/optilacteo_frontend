@@ -18,10 +18,16 @@ const notificacion = (id: number, mensaje: string, leida = false) => ({
 
 interface Opciones {
   notificaciones?: unknown[];
+  noLeidas?: number;
   inactividad?: { status: number; minutos?: number };
 }
 
-async function mockLayout(page: Page, { notificaciones = [], inactividad }: Opciones = {}) {
+async function mockLayout(page: Page, { notificaciones = [], noLeidas, inactividad }: Opciones = {}) {
+  // Estado del "servidor" para GET /notificaciones/no-leidas/count: los tests
+  // lo ajustan cuando simulan cambios que el backend real reflejaría.
+  const servidor = {
+    noLeidas: noLeidas ?? (notificaciones as { leida: boolean }[]).filter((n) => !n.leida).length,
+  };
   await page.route("**/*", (route) => {
     const rt = route.request().resourceType();
     return rt === "fetch" || rt === "xhr"
@@ -44,6 +50,9 @@ async function mockLayout(page: Page, { notificaciones = [], inactividad }: Opci
         })
       : route.fallback(),
   );
+  await page.route("**/notificaciones/no-leidas/count", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ total: servidor.noLeidas }) }),
+  );
   if (inactividad) {
     await page.route("**/system-config/inactivity-timeout", (route) =>
       inactividad.status === 200
@@ -51,6 +60,7 @@ async function mockLayout(page: Page, { notificaciones = [], inactividad }: Opci
         : route.fulfill({ status: inactividad.status, body: "{}" }),
     );
   }
+  return servidor;
 }
 
 async function abrirPlanes(page: Page) {
@@ -86,6 +96,17 @@ test.describe("Layout › Campana de notificaciones", () => {
     await expect(contador(page)).toHaveText("9+");
   });
 
+  test("con más de 20 sin leer el badge refleja el total del backend, no la página cargada", async ({ page }) => {
+    await mockLayout(page, {
+      notificaciones: Array.from({ length: 20 }, (_, i) => notificacion(i + 1, `Aviso ${i + 1}`)),
+      noLeidas: 25,
+    });
+    await abrirPlanes(page);
+
+    await expect(contador(page)).toHaveText("9+");
+    await expect(campana(page)).toHaveAttribute("aria-label", "Notificaciones, 25 sin leer");
+  });
+
   test("sin notificaciones lo aclara y no muestra contador", async ({ page }) => {
     await mockLayout(page);
     await abrirPlanes(page);
@@ -96,10 +117,11 @@ test.describe("Layout › Campana de notificaciones", () => {
   });
 
   test("marcar como leído baja el contador y manda el PATCH", async ({ page }) => {
-    await mockLayout(page, { notificaciones: [notificacion(1, "pH fuera de umbral en LOT-1")] });
+    const servidor = await mockLayout(page, { notificaciones: [notificacion(1, "pH fuera de umbral en LOT-1")] });
     const marcadas: string[] = [];
     await page.route("**/notificaciones/*/leida", (route) => {
       marcadas.push(new URL(route.request().url()).pathname);
+      servidor.noLeidas--;
       return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
     });
     await abrirPlanes(page);
@@ -125,11 +147,12 @@ test.describe("Layout › Campana de notificaciones", () => {
   });
 
   test("una notificación nueva por WebSocket aparece primera y suma al contador", async ({ page }) => {
-    await mockLayout(page, { notificaciones: [notificacion(1, "Aviso viejo")] });
+    const servidor = await mockLayout(page, { notificaciones: [notificacion(1, "Aviso viejo")] });
     const socket = await mockSocketIo(page);
     await abrirPlanes(page);
     await expect.poll(() => socket.conectados()).toContain("/notificaciones");
 
+    servidor.noLeidas = 2;
     socket.emitir("/notificaciones", "notificacion:nueva", notificacion(7, "Alerta crítica en LOT-9"));
 
     await expect(contador(page)).toHaveText("2");
