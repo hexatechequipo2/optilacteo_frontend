@@ -2,9 +2,11 @@ import { useMemo, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "../../components/layout/Layout";
+import { AvisoDatosIlustrativos } from "../../components/ui/AvisoDatosIlustrativos";
 import { Select } from "../../components/ui/Select";
 import { Input } from "../../components/ui/Input";
 import { ClasificacionLoteBadge } from "../../components/ClasificacionLoteBadge";
+import { LOTES_DATOS_ILUSTRATIVOS } from "../../constants/lotes";
 import { ClasificacionLote } from "../../types/lote.types";
 import { construirLotesConsultaMock, type LoteConsulta } from "./constants/consultaLotes";
 
@@ -94,6 +96,7 @@ export default function ConsultaLotesPage() {
 
   return (
     <Layout breadcrumb="Consola > Lotes">
+      {LOTES_DATOS_ILUSTRATIVOS && <AvisoDatosIlustrativos className="mb-6" />}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -285,7 +288,7 @@ export default function ConsultaLotesPage() {
 
       <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">
         Fechas y horas en hora de Argentina (UTC−3). Se muestran solo los lotes de la empresa del usuario
-        autenticado. Datos ilustrativos.
+        autenticado.
       </p>
     </Layout>
   );

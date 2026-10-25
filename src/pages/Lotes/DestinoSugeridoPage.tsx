@@ -10,9 +10,11 @@ import {
   WifiOff,
 } from "lucide-react";
 import { Layout } from "../../components/layout/Layout";
+import { AvisoDatosIlustrativos } from "../../components/ui/AvisoDatosIlustrativos";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
+import { LOTES_DATOS_ILUSTRATIVOS } from "../../constants/lotes";
 import {
   LOTES_DESTINO_SUGERIDO_MOCK,
   construirSugerencia,
@@ -91,6 +93,7 @@ export default function DestinoSugeridoPage() {
   if (!loteActual) {
     return (
       <Layout breadcrumb={`Consola > Lotes > ${codigo ?? ""} > Destino sugerido`}>
+        {LOTES_DATOS_ILUSTRATIVOS && <AvisoDatosIlustrativos className="mb-6" />}
         <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
           <p className="text-base font-medium text-slate-700 dark:text-slate-300">
             Lote no encontrado: "{codigo}"
@@ -114,6 +117,7 @@ export default function DestinoSugeridoPage() {
 
   return (
     <Layout breadcrumb={`Consola > Lotes > ${loteActual.codigo} > Destino sugerido`}>
+      {LOTES_DATOS_ILUSTRATIVOS && <AvisoDatosIlustrativos className="mb-6" />}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
