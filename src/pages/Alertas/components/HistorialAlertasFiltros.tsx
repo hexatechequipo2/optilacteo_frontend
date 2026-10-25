@@ -26,6 +26,7 @@ const ESTADO_OPTIONS: { value: EstadoFiltro; label: string }[] = [
   { value: "todos", label: "Todos los estados" },
   { value: EstadoAlerta.ABIERTA, label: ESTADO_ALERTA_META[EstadoAlerta.ABIERTA].label },
   { value: EstadoAlerta.CERRADA, label: ESTADO_ALERTA_META[EstadoAlerta.CERRADA].label },
+  { value: EstadoAlerta.FALSO_POSITIVO, label: ESTADO_ALERTA_META[EstadoAlerta.FALSO_POSITIVO].label },
 ];
 
 interface HistorialAlertasFiltrosProps {
