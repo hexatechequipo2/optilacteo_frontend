@@ -1821,7 +1821,7 @@ test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () 
 
     await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("Error del servidor")).toBeVisible();
+    await expect(dialog.getByText("No se pudo cargar la recomendación de destino.")).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Reintentar" })).toBeVisible();
   });
 });
