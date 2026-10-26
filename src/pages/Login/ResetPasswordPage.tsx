@@ -1,11 +1,11 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import axios from "axios";
 import { Eye, EyeOff, CheckCircle } from "lucide-react";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { QLLogo } from "../../components/ui/QLLogo";
 import { authService } from "../../services/auth.service";
+import { mensajeErrorApi } from "../../utils/mensajeErrorApi";
 
 interface FormErrors {
   newPassword?: string;
@@ -112,12 +112,9 @@ export default function ResetPasswordPage() {
       await authService.resetPassword(token, newPassword, confirmPassword);
       setSuccess(true);
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.data?.message) {
-        const msg: unknown = err.response.data.message;
-        setServerError(Array.isArray(msg) ? msg.join(", ") : String(msg));
-      } else {
-        setServerError("No se pudo conectar con el servidor. Intentá nuevamente.");
-      }
+      setServerError(
+        mensajeErrorApi(err, "No se pudo conectar con el servidor. Intentá nuevamente."),
+      );
     } finally {
       setIsSubmitting(false);
     }

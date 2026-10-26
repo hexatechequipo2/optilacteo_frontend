@@ -1,4 +1,5 @@
 import axios from "axios";
+import { mensajeErrorApi } from "../utils/mensajeErrorApi";
 import api from "./api";
 import type {
   EvolucionIndicadoresQuery,
@@ -39,11 +40,7 @@ export const evolucionIndicadoresService = {
 // criterio de prueba de HU-39 ("mostrar el error que devuelve el back, no
 // romper").
 export function extraerMensajeError(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && err.response?.data?.message) {
-    const { message } = err.response.data;
-    return Array.isArray(message) ? message.join(" ") : message;
-  }
-  return fallback;
+  return mensajeErrorApi(err, fallback);
 }
 
 // HU-75: un 400 es un error de validación de la consulta (se muestra el

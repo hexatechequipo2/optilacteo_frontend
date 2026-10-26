@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import { LayoutGrid, Check } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
@@ -8,13 +7,7 @@ import { LogoDropzone } from "../../../components/empresas/LogoDropzone";
 import { usePermisos } from "../../../hooks/usePermisos";
 import { useEmpresaActual } from "../../../hooks/useEmpresaActual";
 import { empresasService } from "../../../services/empresa.service";
-
-function extraerMensajeError(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && err.response?.data?.message) {
-    return err.response.data.message;
-  }
-  return fallback;
-}
+import { mensajeErrorApi } from "../../../utils/mensajeErrorApi";
 
 export function LogoIdentidadTab() {
   const { empresa, isLoading, error, refetch } = useEmpresaActual();
@@ -107,7 +100,7 @@ export function LogoIdentidadTab() {
         setPendingPreviewUrl(null);
       } catch (err) {
         logoOk = false;
-        setLogoError(extraerMensajeError(err, "No se pudo subir el logo. Intentá nuevamente."));
+        setLogoError(mensajeErrorApi(err, "No se pudo subir el logo. Intentá nuevamente."));
       }
     }
 
@@ -117,7 +110,7 @@ export function LogoIdentidadTab() {
       } catch (err) {
         nombreOk = false;
         setNombreServerError(
-          extraerMensajeError(err, "No se pudo guardar el nombre. Intentá nuevamente."),
+          mensajeErrorApi(err, "No se pudo guardar el nombre. Intentá nuevamente."),
         );
       }
     }

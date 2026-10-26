@@ -693,7 +693,7 @@ test.describe("TrazabilidadLoteModal › Generar reporte PDF (HU-45)", () => {
     await page.getByRole("dialog").getByRole("button", { name: "Generar reporte" }).click();
 
     await expect(
-      page.getByRole("dialog").getByText("Error interno"),
+      page.getByRole("dialog").getByText("No se pudo generar el reporte de trazabilidad."),
     ).toBeVisible();
   });
 });

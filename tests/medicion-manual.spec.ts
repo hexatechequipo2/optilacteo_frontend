@@ -544,7 +544,7 @@ test.describe("HU-55 — Registro de parámetros por voz", () => {
     const dialog = page.getByRole("dialog", { name: "Dictando valores" });
     await dialog.getByRole("button", { name: "Revisar y confirmar" }).click();
 
-    await expect(dialog.getByText("Error del servidor")).toBeVisible();
+    await expect(dialog.getByText("No se pudo interpretar el dictado. Intentá nuevamente.")).toBeVisible();
     // El texto dictado sigue disponible para reintentar, no se perdió.
     await expect(dialog.getByText("ph 6.8")).toBeVisible();
   });
