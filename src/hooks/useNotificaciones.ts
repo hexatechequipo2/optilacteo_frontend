@@ -15,6 +15,10 @@ interface UseNotificacionesResult {
   error: string | null;
   refetch: () => Promise<void>;
   marcarLeida: (id: number) => Promise<void>;
+  marcarTodasLeidas: () => Promise<void>;
+  marcandoTodas: boolean;
+  errorMarcarTodas: string | null;
+  limpiarErrorMarcarTodas: () => void;
 }
 
 // Carga inicial por REST (GET /notificaciones, ya vienen ordenadas por el
@@ -30,6 +34,8 @@ export function useNotificaciones(): UseNotificacionesResult {
   // después se resincroniza con el backend.
   const [noLeidasServidor, setNoLeidasServidor] = useState<number | null>(null);
   const conteoSeqRef = useRef(0);
+  const [marcandoTodas, setMarcandoTodas] = useState(false);
+  const [errorMarcarTodas, setErrorMarcarTodas] = useState<string | null>(null);
   // HU-48 (AC4): avisos de retención mock, para quien puede actuar sobre la
   // política y los registros próximos a vencer (configuracion_empresa:editar).
   // Ver constants/retencion.ts para apagarlo cuando el backend los emita.
@@ -115,6 +121,36 @@ export function useNotificaciones(): UseNotificacionesResult {
     void sincronizarConteo();
   };
 
+  // Mismo patrón optimista que marcarLeida. Los avisos mock de retención se
+  // marcan local junto con el resto y se revierten con ellos.
+  const marcarTodasLeidas = async () => {
+    const idsNoLeidas = notificaciones.filter((n) => !n.leida).map((n) => n.id);
+    const idsAvisos = avisosRetencion.avisos.filter((a) => !a.leida).map((a) => a.id);
+    const conteoPrevio = noLeidasServidor;
+    setErrorMarcarTodas(null);
+    setMarcandoTodas(true);
+    setNotificaciones((prev) => prev.map((n) => (n.leida ? n : { ...n, leida: true })));
+    avisosRetencion.actualizarLeidos(idsAvisos, true);
+    conteoSeqRef.current++;
+    setNoLeidasServidor((prev) => (prev === null ? prev : 0));
+    try {
+      await notificacionService.marcarTodasLeidas();
+    } catch {
+      setNotificaciones((prev) =>
+        prev.map((n) => (idsNoLeidas.includes(n.id) ? { ...n, leida: false } : n)),
+      );
+      avisosRetencion.actualizarLeidos(idsAvisos, false);
+      // Suma en vez de pisar: conserva las que hayan llegado por WS mientras tanto.
+      ajustarConteo(conteoPrevio ?? 0);
+      setErrorMarcarTodas("No se pudieron marcar como leídas. Intentá nuevamente.");
+    } finally {
+      setMarcandoTodas(false);
+    }
+    void sincronizarConteo();
+  };
+
+  const limpiarErrorMarcarTodas = useCallback(() => setErrorMarcarTodas(null), []);
+
   const todas = useMemo(
     () =>
       avisosRetencion.avisos.length === 0
@@ -141,5 +177,9 @@ export function useNotificaciones(): UseNotificacionesResult {
     error,
     refetch: cargarNotificaciones,
     marcarLeida,
+    marcarTodasLeidas,
+    marcandoTodas,
+    errorMarcarTodas,
+    limpiarErrorMarcarTodas,
   };
 }

@@ -172,6 +172,82 @@ test.describe("Layout › Campana de notificaciones", () => {
   });
 });
 
+test.describe("Layout › Campana › Marcar todas como leídas", () => {
+  const marcarTodas = (page: Page) => page.getByRole("button", { name: "Marcar todas como leídas" });
+
+  test("con no leídas aparece el botón y al usarlo manda el PATCH y deja todo leído", async ({ page }) => {
+    const servidor = await mockLayout(page, {
+      notificaciones: [notificacion(1, "Aviso 1"), notificacion(2, "Aviso 2"), notificacion(3, "Aviso 3", true)],
+    });
+    const pedidos: string[] = [];
+    await page.route("**/notificaciones/leidas", (route) => {
+      pedidos.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
+      servidor.noLeidas = 0;
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ actualizadas: 2 }) });
+    });
+    await abrirPlanes(page);
+
+    await expect(contador(page)).toHaveText("2");
+    await campana(page).click();
+    await marcarTodas(page).click();
+
+    await expect(contador(page)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Marcar como leído" })).toHaveCount(0);
+    expect(pedidos).toEqual(["PATCH /notificaciones/leidas"]);
+  });
+
+  test("con más de 20 sin leer el contador queda en 0 después del resync", async ({ page }) => {
+    const servidor = await mockLayout(page, {
+      notificaciones: Array.from({ length: 20 }, (_, i) => notificacion(i + 1, `Aviso ${i + 1}`)),
+      noLeidas: 25,
+    });
+    await page.route("**/notificaciones/leidas", (route) => {
+      servidor.noLeidas = 0;
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ actualizadas: 25 }) });
+    });
+    await abrirPlanes(page);
+
+    await expect(campana(page)).toHaveAttribute("aria-label", "Notificaciones, 25 sin leer");
+    await campana(page).click();
+    const resync = page.waitForResponse("**/notificaciones/no-leidas/count");
+    await marcarTodas(page).click();
+    await resync;
+
+    await expect(contador(page)).toHaveCount(0);
+    await expect(campana(page)).toHaveAttribute("aria-label", "Notificaciones");
+  });
+
+  test("si el PATCH falla, vuelve el contador anterior y avisa el error", async ({ page }) => {
+    await mockLayout(page, { notificaciones: [notificacion(1, "Aviso 1"), notificacion(2, "Aviso 2")] });
+    await page.route("**/notificaciones/leidas", (route) => route.fulfill({ status: 500, body: "{}" }));
+    await abrirPlanes(page);
+
+    await campana(page).click();
+    await marcarTodas(page).click();
+
+    await expect(page.getByRole("alert")).toHaveText("No se pudieron marcar como leídas. Intentá nuevamente.");
+    await expect(contador(page)).toHaveText("2");
+    await expect(page.getByRole("button", { name: "Marcar como leído" })).toHaveCount(2);
+    await expect(marcarTodas(page)).toBeEnabled();
+
+    // Cerrar el desplegable (tocando fuera, el fondo tapa la campana) descarta el error.
+    await page.mouse.click(700, 600);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await campana(page).click();
+    await expect(marcarTodas(page)).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  });
+
+  test("sin no leídas no aparece el botón", async ({ page }) => {
+    await mockLayout(page, { notificaciones: [notificacion(1, "Aviso 1", true)] });
+    await abrirPlanes(page);
+
+    await campana(page).click();
+    await expect(page.getByText("Aviso 1")).toBeVisible();
+    await expect(marcarTodas(page)).toHaveCount(0);
+  });
+});
+
 test.describe("Layout › Encabezado y menú", () => {
   test("muestra el breadcrumb y los datos del usuario", async ({ page }) => {
     await mockLayout(page);

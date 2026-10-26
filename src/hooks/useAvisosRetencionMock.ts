@@ -119,13 +119,21 @@ export function useAvisosRetencionMock(habilitado: boolean) {
     [habilitado, politica, registros, leidos],
   );
 
-  const marcarLeida = useCallback((id: number) => {
+  // En bloque y en ambos sentidos: "marcar todas" lo usa para revertir si el
+  // PATCH real falla.
+  const actualizarLeidos = useCallback((ids: number[], leida: boolean) => {
     setLeidos((prev) => {
-      const siguiente = new Set(prev).add(id);
+      const siguiente = new Set(prev);
+      for (const id of ids) {
+        if (leida) siguiente.add(id);
+        else siguiente.delete(id);
+      }
       localStorage.setItem(STORAGE_LEIDOS, JSON.stringify([...siguiente]));
       return siguiente;
     });
   }, []);
 
-  return { avisos, marcarLeida };
+  const marcarLeida = useCallback((id: number) => actualizarLeidos([id], true), [actualizarLeidos]);
+
+  return { avisos, marcarLeida, actualizarLeidos };
 }
