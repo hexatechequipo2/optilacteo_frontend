@@ -225,6 +225,11 @@ export function ProveedorFormModal({
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
+    // Al crear, los opcionales vacíos se omiten. Al editar van como null:
+    // el PATCH ignora los campos ausentes, así que omitirlos no permitiría
+    // vaciar un dato que el proveedor ya tenía cargado.
+    const vacio = isEditing ? null : undefined;
+
     try {
       await onSubmit({
         tipo: values.tipo,
@@ -232,13 +237,11 @@ export function ProveedorFormModal({
         cuit: values.cuit.trim(),
         empresaId: Number(values.empresaId),
         estado: values.estado,
-        ...(values.telefono.trim() && { telefono: values.telefono.trim() }),
-        ...(values.emailContacto.trim() && {
-          emailContacto: values.emailContacto.trim(),
-        }),
-        ...(values.provincia && { provincia: values.provincia }),
-        ...(values.localidad.trim() && { localidad: values.localidad.trim() }),
-        ...(values.capacidad && { capacidad: Number(values.capacidad) }),
+        telefono: values.telefono.trim() || vacio,
+        emailContacto: values.emailContacto.trim() || vacio,
+        provincia: values.provincia || vacio,
+        localidad: values.localidad.trim() || vacio,
+        capacidad: values.capacidad ? Number(values.capacidad) : vacio,
       });
       onClose();
     } catch (error) {
