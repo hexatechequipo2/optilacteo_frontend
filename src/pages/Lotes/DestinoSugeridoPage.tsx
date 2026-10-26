@@ -99,7 +99,7 @@ export default function DestinoSugeridoPage() {
 
   if (!loteActual) {
     return (
-      <Layout breadcrumb={`Consola > Lotes > ${codigo ?? ""} > Destino sugerido`}>
+      <Layout breadcrumb={`Consola > Consulta de lotes > ${codigo ?? ""} > Destino sugerido`}>
         {LOTES_DATOS_ILUSTRATIVOS && <AvisoDatosIlustrativos className="mb-6" />}
         <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
           <p className="text-base font-medium text-slate-700 dark:text-slate-300">
@@ -123,7 +123,7 @@ export default function DestinoSugeridoPage() {
   const sugerencia = construirSugerencia(estado, calculadoEn);
 
   return (
-    <Layout breadcrumb={`Consola > Lotes > ${loteActual.codigo} > Destino sugerido`}>
+    <Layout breadcrumb={`Consola > Consulta de lotes > ${loteActual.codigo} > Destino sugerido`}>
       {LOTES_DATOS_ILUSTRATIVOS && <AvisoDatosIlustrativos className="mb-6" />}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
