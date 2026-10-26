@@ -34,10 +34,29 @@ interface LayoutProps {
 export function Layout({ breadcrumb, children }: LayoutProps) {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { notificaciones, noLeidasCount, isLoading, error, refetch, marcarLeida } = useNotificaciones();
+  const {
+    notificaciones,
+    noLeidasCount,
+    isLoading,
+    error,
+    refetch,
+    marcarLeida,
+    marcarTodasLeidas,
+    marcandoTodas,
+    errorMarcarTodas,
+    limpiarErrorMarcarTodas,
+  } = useNotificaciones();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarColapsado, setIsSidebarColapsado] = useState(leerSidebarColapsado);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  // El conteo puede superar la página cargada (o ser null si falló); la lista cubre ese caso.
+  const hayNoLeidas = (noLeidasCount ?? 0) > 0 || notificaciones.some((n) => !n.leida);
+
+  // El error de "marcar todas" no sobrevive a cerrar el desplegable.
+  const cerrarNotif = () => {
+    setIsNotifOpen(false);
+    limpiarErrorMarcarTodas();
+  };
 
   const breadcrumbs = breadcrumb.split(" > ");
 
@@ -136,7 +155,7 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
 
             <div>
               <button
-                onClick={() => setIsNotifOpen((prev) => !prev)}
+                onClick={() => (isNotifOpen ? cerrarNotif() : setIsNotifOpen(true))}
                 className="relative rounded-full border border-slate-200 p-2 transition hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
                 title="Notificaciones"
                 aria-label={noLeidasCount ? `Notificaciones, ${noLeidasCount} sin leer` : "Notificaciones"}
@@ -153,13 +172,30 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
                 <>
                   <div
                     className="fixed inset-0 z-10"
-                    onClick={() => setIsNotifOpen(false)}
+                    onClick={cerrarNotif}
                   />
                   <div className="absolute right-0 top-full z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
                     <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                        Notificaciones
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                          Notificaciones
+                        </p>
+                        {(hayNoLeidas || marcandoTodas) && (
+                          <button
+                            type="button"
+                            onClick={() => void marcarTodasLeidas()}
+                            disabled={marcandoTodas}
+                            className="shrink-0 text-xs font-medium text-blue-600 transition hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:no-underline dark:text-blue-400"
+                          >
+                            Marcar todas como leídas
+                          </button>
+                        )}
+                      </div>
+                      {errorMarcarTodas && (
+                        <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-400">
+                          {errorMarcarTodas}
+                        </p>
+                      )}
                     </div>
                     <div className="max-h-80 overflow-y-auto">
                       {isLoading ? (

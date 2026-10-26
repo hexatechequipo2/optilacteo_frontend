@@ -31,6 +31,13 @@ export const notificacionService = {
     await api.patch(`/notificaciones/${id}/leida`);
   },
 
+  // Todas las no leídas del usuario en la empresa activa (no solo la página
+  // cargada). Devuelve cuántas cambió el backend.
+  marcarTodasLeidas: async (): Promise<number> => {
+    const { data } = await api.patch<{ actualizadas: number }>("/notificaciones/leidas");
+    return data.actualizadas;
+  },
+
   // HU-79: total de no leídas del usuario en la empresa activa, sin paginar
   // (getAll trae solo las primeras 20, así que no sirve para contar).
   contarNoLeidas: async (): Promise<number> => {
