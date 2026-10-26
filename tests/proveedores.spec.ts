@@ -262,6 +262,38 @@ test.describe("ProveedoresPage", () => {
 
     expect(updatePayload).toMatchObject({ telefono: "3534009999", razonSocial: "Tambo El Roble" });
   });
+
+  test("editar y vaciar teléfono y email los manda como null en el PATCH", async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await loginAsAdministrador(page);
+
+    let updatePayload: Record<string, unknown> | undefined;
+    await page.route("**/proveedores/1", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      updatePayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...PROVEEDORES_MOCK.data[0], ...updatePayload }),
+      });
+    });
+
+    await page.goto("/proveedores");
+
+    await page.getByRole("button", { name: "Editar Tambo El Roble" }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByLabel("Teléfono")).toHaveValue("3534000000");
+    await expect(dialog.getByLabel("Email de contacto")).toHaveValue("contacto@elroble.com");
+
+    await dialog.getByLabel("Teléfono").fill("");
+    await dialog.getByLabel("Email de contacto").fill("");
+    await dialog.getByRole("button", { name: "Guardar cambios" }).click();
+
+    await expect(dialog).not.toBeVisible();
+
+    expect(updatePayload).toMatchObject({ telefono: null, emailContacto: null });
+  });
   test.describe("ProveedorFormModal", () => {
   test.beforeEach(async ({ page }) => {
     await mockProveedoresAndEmpresas(page);
