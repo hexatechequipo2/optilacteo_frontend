@@ -95,7 +95,7 @@ export default function ConsultaLotesPage() {
   };
 
   return (
-    <Layout breadcrumb="Consola > Lotes">
+    <Layout breadcrumb="Consola > Consulta de lotes">
       {LOTES_DATOS_ILUSTRATIVOS && <AvisoDatosIlustrativos className="mb-6" />}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>

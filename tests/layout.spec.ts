@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsAdministrador } from "./fixtures/mockAuth.ts";
+import { loginAsAdministrador, loginAsResponsableCalidad } from "./fixtures/mockAuth.ts";
 import { mockSocketIo } from "./fixtures/socketIoMock.ts";
 
 // Capas transversales del Layout: campana de notificaciones (REST + WS
@@ -259,6 +259,52 @@ test.describe("Layout › Menú lateral colapsable", () => {
 
     await toggle(page).click();
     await expect(menu(page).getByText("Usuarios", { exact: true })).toBeVisible();
+  });
+});
+
+test.describe("Layout › Ítem activo del menú en rutas de lotes", () => {
+  // Prefijo más largo, salvo destino sugerido (HU-78), que pertenece al flujo
+  // de la consulta (HU-77) aunque su URL no cuelgue de /lotes/consulta.
+  const casos = [
+    { url: "/lotes", item: "Lotes" },
+    { url: "/lotes/consulta", item: "Consulta de lotes" },
+    { url: "/lotes/consulta/L-2026-0412", item: "Consulta de lotes" },
+    { url: "/lotes/L-2026-0412/destino-sugerido", item: "Consulta de lotes" },
+    { url: "/lotes/revision", item: "Revisión de calidad" },
+  ];
+  const activo = (page: Page) => page.getByRole("complementary").locator('[aria-current="page"]');
+  // Lotes y Revisión leen GET /lotes y /proveedores paginados; el [] genérico
+  // de mockLayout las rompe.
+  const mockListadosVacios = (page: Page) =>
+    page.route(/\/(lotes|proveedores)\?/, (route) => {
+      const rt = route.request().resourceType();
+      return rt === "fetch" || rt === "xhr"
+        ? route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ data: [], total: 0, page: 1, limit: 100, meta: { page: 1, limit: 100, total: 0, totalPages: 0 } }),
+          })
+        : route.fallback();
+    });
+
+  test("marca un solo ítem, el que corresponde a cada pantalla", async ({ page }) => {
+    await mockLayout(page);
+    await mockListadosVacios(page);
+    await loginAsResponsableCalidad(page);
+    for (const { url, item } of casos) {
+      await page.goto(url);
+      await expect(activo(page), url).toHaveCount(1);
+      await expect(activo(page).getByText(item, { exact: true }), url).toBeVisible();
+    }
+  });
+
+  test("colapsado, destino sugerido sigue marcando Consulta de lotes", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("sidebar-colapsado", "true"));
+    await mockLayout(page);
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/L-2026-0412/destino-sugerido");
+    await expect(activo(page)).toHaveCount(1);
+    await expect(activo(page)).toHaveAttribute("title", "Consulta de lotes");
   });
 });
 

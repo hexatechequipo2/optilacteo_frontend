@@ -219,6 +219,18 @@ export function Sidebar({ isOpen, onClose, isCollapsed }: SidebarProps) {
       : []),
   ];
 
+  // HU-78: destino sugerido se abre desde el detalle de la consulta (HU-77)
+  // pero su URL no cuelga de /lotes/consulta; sin esto activaría "Lotes".
+  const rutaDelMenu = /^\/lotes\/[^/]+\/destino-sugerido$/.test(location.pathname)
+    ? "/lotes/consulta"
+    : location.pathname;
+  // Match por prefijo más largo: /lotes/revision no puede activar
+  // también "Lotes" (/lotes) solo porque comparte el prefijo.
+  const rutaActiva = navItems
+    .map((i) => i.path)
+    .filter((path) => rutaDelMenu === path || rutaDelMenu.startsWith(`${path}/`))
+    .sort((a, b) => b.length - a.length)[0];
+
   // El modo colapsado es solo de escritorio: todo lo que oculta o reacomoda
   // va con prefijo lg:, así el drawer de mobile se ve siempre completo
   // aunque haya quedado guardado "colapsado".
@@ -284,21 +296,14 @@ export function Sidebar({ isOpen, onClose, isCollapsed }: SidebarProps) {
         <ul className="flex flex-col gap-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            // Match por prefijo más largo: /lotes/revision no puede activar
-            // también "Lotes" (/lotes) solo porque comparte el prefijo.
-            const rutaActivaMasEspecifica = navItems
-              .map((i) => i.path)
-              .filter(
-                (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
-              )
-              .sort((a, b) => b.length - a.length)[0];
-            const isActive = item.path === rutaActivaMasEspecifica;
+            const isActive = item.path === rutaActiva;
 
             return (
               <li key={item.label}>
                 <button
                   type="button"
                   onClick={() => navigate(item.path)}
+                  aria-current={isActive ? "page" : undefined}
                   // Colapsado solo queda el ícono: el label pasa al tooltip
                   // nativo y al nombre accesible del botón.
                   title={isCollapsed ? item.label : undefined}

@@ -64,7 +64,7 @@ export default function LoteConsultaDetallePage() {
   const eventos = useMemo(() => (lote ? construirEventosLote(lote) : []), [lote]);
 
   return (
-    <Layout breadcrumb={`Consola > Lotes > ${codigo ?? ""}`}>
+    <Layout breadcrumb={`Consola > Consulta de lotes > ${codigo ?? ""}`}>
       {LOTES_DATOS_ILUSTRATIVOS && <AvisoDatosIlustrativos className="mb-4" />}
       <button
         type="button"
