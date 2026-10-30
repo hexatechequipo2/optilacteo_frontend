@@ -83,3 +83,13 @@ export interface PaginatedResponse<T> {
     totalPages: number;
   };
 }
+
+// 409 de POST /proveedores y PATCH /proveedores/:id. La unicidad de CUIT y
+// razón social es por empresa (no global): el back valida contra la empresa
+// autenticada, o la destino si un Administrador cambia empresaId.
+export type CampoUnicoProveedor = "cuit" | "razonSocial";
+
+export interface ConflictoProveedorResponse {
+  field?: string;
+  message?: string;
+}
