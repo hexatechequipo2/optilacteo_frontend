@@ -26,6 +26,7 @@ import type { Lote } from "../../../types/lote.types";
 import type { TipoMateriaPrima } from "../../../types/configParametro.types";
 import { Ubicacion } from "../../../types/sensor.types";
 import { TipoEventoTrazabilidad, type EventoTrazabilidad } from "../../../types/trazabilidad.types";
+import { aFechaCalendario } from "../../../utils/fechaCalendario";
 
 const TIPO_MATERIA_PRIMA_LABEL = new Map(TIPO_MATERIA_PRIMA_TABS.map((t) => [t.value, t.label]));
 
@@ -231,7 +232,7 @@ export function HistorialTrazabilidadModal({
 
   const handleExportar = () => {
     if (!lote) return;
-    const fecha = new Date().toISOString().slice(0, 10);
+    const fecha = aFechaCalendario();
     exportarTrazabilidadCsv({
       codigoLote: lote.codigo,
       proveedor: nombreProveedor,

@@ -3,6 +3,7 @@ import type {
   HistorialMedicionesFilterQuery,
   HistorialMedicionesResponse,
 } from "../types/historialMediciones.types";
+import { aFechaCalendario } from "../utils/fechaCalendario";
 
 // El backend valida fechaFin >= fechaInicio (400 si no) y normaliza fechaFin
 // sin hora al final del día; no hace falta duplicar eso acá. loteCodigo
@@ -31,7 +32,7 @@ export const historialMedicionesService = {
     const url = window.URL.createObjectURL(new Blob([data]));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `historial-mediciones-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `historial-mediciones-${aFechaCalendario()}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();

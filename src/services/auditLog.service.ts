@@ -10,6 +10,7 @@ import type {
   AuditLogRawResponse,
   AuditLogResponse,
 } from "../types/auditLog.types";
+import { aFechaCalendario } from "../utils/fechaCalendario";
 
 export const auditLogService = {
   getAll: async (filters: AuditLogFilterQuery = {}): Promise<AuditLogResponse> => {
@@ -34,7 +35,7 @@ export const auditLogService = {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `log-auditoria-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `log-auditoria-${aFechaCalendario()}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
