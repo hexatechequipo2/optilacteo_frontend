@@ -349,10 +349,10 @@ test.describe("Layout › Ítem activo del menú en rutas de lotes", () => {
     { url: "/lotes/revision", item: "Revisión de calidad" },
   ];
   const activo = (page: Page) => page.getByRole("complementary").locator('[aria-current="page"]');
-  // Lotes y Revisión leen GET /lotes y /proveedores paginados; el [] genérico
-  // de mockLayout las rompe.
+  // Lotes, Revisión y Consulta leen GET /lotes, /proveedores y
+  // /lotes/producciones/consulta paginados; el [] genérico de mockLayout las rompe.
   const mockListadosVacios = (page: Page) =>
-    page.route(/\/(lotes|proveedores)\?/, (route) => {
+    page.route(/\/(lotes|proveedores|lotes\/producciones\/consulta)\?/, (route) => {
       const rt = route.request().resourceType();
       return rt === "fetch" || rt === "xhr"
         ? route.fulfill({
