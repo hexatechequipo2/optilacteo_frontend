@@ -8,7 +8,7 @@ import {
 } from "../../../hooks/useEvolucionIndicadores";
 import { INDICADORES_EVOLUCION } from "../constants/indicadoresEvolucion";
 import { exportarGraficoEvolucionPng } from "../../../utils/exportarGraficoEvolucionPng";
-import { formatearFechaCalendario } from "../../../utils/fechaCalendario";
+import { aFechaCalendario, formatearFechaCalendario } from "../../../utils/fechaCalendario";
 import { Parametro } from "../../../types/configParametro.types";
 import type {
   IndicadorEvolucionId,
@@ -85,6 +85,7 @@ export function EvolucionIndicadoresPanel() {
     isLoading,
     error,
     errorRango,
+    rangoIncompleto,
     estaVacio,
     sinIndicadores,
     refetch,
@@ -110,7 +111,7 @@ export function EvolucionIndicadoresPanel() {
       : (PERIODOS.find((p) => p.value === periodo)?.label ?? "");
 
   const exportarPng = () => {
-    const fecha = new Date().toISOString().slice(0, 10);
+    const fecha = aFechaCalendario();
     exportarGraficoEvolucionPng({
       puntos,
       indicadores: indicadoresSeleccionadosConfig,
@@ -257,6 +258,15 @@ export function EvolucionIndicadoresPanel() {
           <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 py-16 text-center dark:border-slate-700">
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Corregí el rango de fechas para ver el gráfico.
+            </p>
+          </div>
+        ) : rangoIncompleto ? (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 py-16 text-center dark:border-slate-700">
+            <p className="text-base font-medium text-slate-700 dark:text-slate-300">
+              Elegí las fechas Desde y Hasta
+            </p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Ambas fechas se incluyen en el período.
             </p>
           </div>
         ) : error?.tipo === "validacion" ? (

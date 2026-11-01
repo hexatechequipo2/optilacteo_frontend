@@ -4,6 +4,8 @@
 // UTC (el 09/06 a las 21:00 en Argentina), y toISOString() sobre una fecha
 // local la corre al día siguiente después de las 21:00 AR. El backend
 // espera exactamente este formato y lo interpreta en hora AR.
+import type { RangoFechasCalendario } from "../types/fechaCalendario.types";
+
 const REGEX_FECHA_CALENDARIO = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export function esFechaCalendario(valor: string): boolean {
@@ -32,4 +34,30 @@ export function esRangoInvertido(desde: string, hasta: string): boolean {
 export function formatearFechaCalendario(valor: string): string {
   const [anio, mes, dia] = valor.split("-");
   return `${dia}/${mes}/${anio}`;
+}
+
+// Día calendario de un Date según el reloj LOCAL del navegador. Reemplaza a
+// `date.toISOString().slice(0, 10)`, que después de las 21:00 AR (UTC-3) ya
+// devuelve el día siguiente.
+export function aFechaCalendario(fecha: Date = new Date()): string {
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  return `${fecha.getFullYear()}-${mes}-${dia}`;
+}
+
+// Criterio de rango HU-75, el mismo que el backend
+// (common/utils/rango-fechas.ts → rangoDiasInclusivoEmpresa):
+//  - "desde" y "hasta" son días calendario INCLUSIVOS en hora AR: del 10 al
+//    15 incluye 10, 11, 12, 13, 14 y 15 completos, nada del 9 ni del 16.
+//  - El front NUNCA los convierte a instante (ni Date, ni toISOString, ni
+//    "T00:00"): viajan como "YYYY-MM-DD" y el backend los traduce a
+//    [desde 00:00 AR, hasta+1 00:00 AR). Así el resultado no depende del
+//    huso del navegador ni de la hora en que se consulte.
+export function serializarRangoCalendario(
+  rango: RangoFechasCalendario,
+): RangoFechasCalendario {
+  if (!esFechaCalendario(rango.desde) || !esFechaCalendario(rango.hasta)) {
+    throw new Error(`Rango de fechas inválido: "${rango.desde}" – "${rango.hasta}"`);
+  }
+  return { desde: rango.desde, hasta: rango.hasta };
 }

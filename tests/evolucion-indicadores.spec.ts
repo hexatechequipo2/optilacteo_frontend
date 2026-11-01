@@ -327,6 +327,32 @@ test.describe("EvolucionIndicadoresPanel (HU-39)", () => {
     expect(consultasRango).toHaveLength(0);
   });
 
+  // HU-75: las fechas viajan como días calendario, sin corrimiento de huso.
+  test("rango personalizado envía desde y hasta exactamente como se eligieron", async ({ page }) => {
+    const requestRango = page.waitForRequest((req) => {
+      if (!req.url().includes("/indicadores/evolucion")) return false;
+      return new URL(req.url()).searchParams.get("periodo") === "rango";
+    });
+
+    await page.getByRole("button", { name: "Rango personalizado" }).click();
+    const fechas = page.locator('input[type="date"]');
+    await fechas.nth(0).fill("2026-06-10");
+    await fechas.nth(1).fill("2026-06-15");
+
+    const params = new URL((await requestRango).url()).searchParams;
+    expect(params.get("desde")).toBe("2026-06-10");
+    expect(params.get("hasta")).toBe("2026-06-15");
+  });
+
+  // HU-75: con una sola fecha no se consulta; se muestra un estado propio.
+  test("rango con una sola fecha muestra el aviso para completar el rango", async ({ page }) => {
+    await page.getByRole("button", { name: "Rango personalizado" }).click();
+    await page.locator('input[type="date"]').nth(0).fill("2026-06-10");
+
+    await expect(page.getByText("Elegí las fechas Desde y Hasta")).toBeVisible();
+    await expect(page.getByText("No hay registros para el período seleccionado")).toHaveCount(0);
+  });
+
   // HU-75: un 400 es error de validación (sin reintentar); un 5xx es error
   // de consulta (con reintentar). Ninguno se muestra como "sin datos".
   test("distingue un 400 de validación de un 5xx de consulta", async ({ page }) => {
