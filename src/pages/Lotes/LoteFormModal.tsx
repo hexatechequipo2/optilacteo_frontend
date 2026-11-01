@@ -36,6 +36,7 @@ import {
   type UpdateLoteDto,
 } from "../../types/lote.types";
 import type { Proveedor } from "../../types/proveedor.types";
+import { aFechaCalendario } from "../../utils/fechaCalendario";
 
 const UBICACION_OPTIONS = [
   { value: "", label: "Sin definir" },
@@ -115,7 +116,7 @@ function buildInitialValues(lote?: Lote): FormValues {
       proveedorId: "",
       tamboId: "",
       materiaPrima: TipoMateriaPrima.LECHE_CRUDA,
-      fechaIngreso: new Date().toISOString().slice(0, 10),
+      fechaIngreso: aFechaCalendario(),
       cantidad: "",
       parametros: buildParametrosVacios(),
       destinoInicial: "",
