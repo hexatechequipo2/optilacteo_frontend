@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   esErrorValidacion,
   evolucionIndicadoresService,
-  extraerMensajeError,
 } from "../services/evolucionIndicadores.service";
 import { esRangoInvertido } from "../utils/fechaCalendario";
+import { mensajeErrorApi } from "../utils/mensajeErrorApi";
+import type { RangoFechasCalendario } from "../types/fechaCalendario.types";
 import type {
   EvolucionIndicadoresQuery,
   GranularidadEvolucion,
@@ -17,10 +18,7 @@ import type {
 // "desde"/"hasta" son fechas calendario "YYYY-MM-DD" tal cual las eligió
 // el usuario en el <input type="date"> — viajan así al backend, sin pasar
 // por Date/toISOString (ver utils/fechaCalendario.ts).
-export interface RangoPersonalizado {
-  desde: string;
-  hasta: string;
-}
+export type RangoPersonalizado = RangoFechasCalendario;
 
 // Mismo texto que el 400 del backend para este caso, así el usuario ve el
 // mismo mensaje se valide de este lado o del otro.
@@ -48,6 +46,7 @@ interface ResultadoEvolucion {
   isLoading: boolean;
   error: ErrorEvolucion | null;
   errorRango: string | null;
+  rangoIncompleto: boolean;
   estaVacio: boolean;
   sinIndicadores: boolean;
   refetch: () => Promise<void>;
@@ -209,9 +208,13 @@ export function useEvolucionIndicadores({
         esErrorValidacion(err)
           ? {
               tipo: "validacion",
-              mensaje: extraerMensajeError(err, "La consulta no es válida."),
+              mensaje: mensajeErrorApi(err, "La consulta no es válida."),
             }
-          : { tipo: "consulta", mensaje: "No se pudo cargar la evolución de indicadores." },
+          : {
+              tipo: "consulta",
+              // 5xx/red → fallback; otros 4xx (403, 404) → mensaje del back.
+              mensaje: mensajeErrorApi(err, "No se pudo cargar la evolución de indicadores."),
+            },
       );
     } finally {
       if (ultimaRequestIdRef.current === requestId) setIsLoading(false);
@@ -229,6 +232,7 @@ export function useEvolucionIndicadores({
     isLoading,
     error,
     errorRango,
+    rangoIncompleto,
     estaVacio,
     sinIndicadores,
     refetch: cargar,
