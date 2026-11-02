@@ -88,7 +88,7 @@ test.describe("HU-77 — Consulta de lotes de producción", () => {
     await page.getByLabel("Proveedor").selectOption({ label: "Tambos Unidos SRL" });
     await page.getByLabel("Tambo", { exact: true }).selectOption({ label: "Tambo Norte" });
     await page.getByLabel("Estado").selectOption({ label: "En proceso" });
-    await page.getByRole("columnheader", { name: /^Lote/ }).getByRole("button").click();
+    await page.getByRole("columnheader", { name: /^Lote$/ }).getByRole("button").click();
 
     await expect
       .poll(() => pedidos.at(-1)!.searchParams.get("sortBy"))
@@ -120,4 +120,100 @@ test.describe("HU-77 — Consulta de lotes de producción", () => {
     await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
     await expect(alerta).toBeHidden();
   });
+
+  test("ordena por las columnas del back con aria-sort y pagina con vuelta a la página 1", async ({ page }) => {
+    const pedidos: URL[] = [];
+    await mockBase(page);
+    await page.route(/\/lotes\/producciones\/consulta\?/, (route) => {
+      const url = new URL(route.request().url());
+      pedidos.push(url);
+      return route.fulfill(json({ data: [LOTE], total: 45, page: Number(url.searchParams.get("page")), limit: 20 }));
+    });
+    await loginAsResponsableCalidad(page);
+
+    await page.goto("/lotes/consulta");
+    const encabezado = (nombre: RegExp) => page.getByRole("columnheader", { name: nombre });
+    await expect(encabezado(/^Fecha/)).toHaveAttribute("aria-sort", "descending");
+    await expect(encabezado(/^Lote$/)).not.toHaveAttribute("aria-sort");
+    // Proveedor y Tambo no se ordenan.
+    await expect(encabezado(/^Proveedor/).getByRole("button")).toHaveCount(0);
+    await expect(encabezado(/^Tambo/).getByRole("button")).toHaveCount(0);
+
+    const nav = page.getByRole("navigation", { name: "Paginación de lotes" });
+    await expect(nav.getByText("Página 1 de 3")).toBeVisible();
+    await nav.getByRole("button", { name: "Página siguiente" }).click();
+    await expect(nav.getByText("Página 2 de 3")).toBeVisible();
+    expect(pedidos.at(-1)!.searchParams.get("page")).toBe("2");
+
+    // Cambiar el orden vuelve a la página 1.
+    await encabezado(/^Estado/).getByRole("button").click();
+    await expect(encabezado(/^Estado/)).toHaveAttribute("aria-sort", "ascending");
+    await expect(nav.getByText("Página 1 de 3")).toBeVisible();
+    let ultimo = pedidos.at(-1)!.searchParams;
+    expect([ultimo.get("sortBy"), ultimo.get("sortOrder"), ultimo.get("page")]).toEqual(["estado", "ASC", "1"]);
+
+    await encabezado(/^Lotes de origen/).getByRole("button").click();
+    await expect(encabezado(/^Lotes de origen/)).toHaveAttribute("aria-sort", "descending");
+    ultimo = pedidos.at(-1)!.searchParams;
+    expect([ultimo.get("sortBy"), ultimo.get("sortOrder")]).toEqual(["lotesOrigen", "DESC"]);
+
+    // Cambiar un filtro también vuelve a la página 1.
+    await nav.getByRole("button", { name: "Página siguiente" }).click();
+    await expect(nav.getByText("Página 2 de 3")).toBeVisible();
+    await page.getByLabel("Estado").selectOption({ label: "Finalizado" });
+    await expect(nav.getByText("Página 1 de 3")).toBeVisible();
+    ultimo = pedidos.at(-1)!.searchParams;
+    expect([ultimo.get("estado"), ultimo.get("page")]).toEqual(["finalizado", "1"]);
+  });
+
+  test("sin resultados muestra el mensaje del back y Limpiar filtros", async ({ page }) => {
+    const MENSAJE = "No se encontraron lotes de producción que coincidan con los filtros seleccionados.";
+    await mockBase(page);
+    await page.route(/\/lotes\/producciones\/consulta\?/, (route) => {
+      const conFiltro = new URL(route.request().url()).searchParams.has("estado");
+      return route.fulfill(
+        json(conFiltro ? { data: [], total: 0, page: 1, limit: 20, mensaje: MENSAJE } : respuestaOk),
+      );
+    });
+    await loginAsResponsableCalidad(page);
+
+    await page.goto("/lotes/consulta");
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+    await page.getByLabel("Estado").selectOption({ label: "Sin consumos" });
+    await expect(page.getByText(MENSAJE)).toBeVisible();
+
+    await page.getByRole("main").getByRole("button", { name: "Limpiar filtros" }).last().click();
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+    await expect(page.getByLabel("Estado")).toHaveValue("__todos__");
+  });
+
+  test("en mobile el select Ordenar por y el botón de invertir mandan sortBy/sortOrder y page=1", async ({ page }) => {
+    const pedidos: URL[] = [];
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockBase(page);
+    await page.route(/\/lotes\/producciones\/consulta\?/, (route) => {
+      const url = new URL(route.request().url());
+      pedidos.push(url);
+      return route.fulfill(json({ data: [LOTE], total: 45, page: Number(url.searchParams.get("page")), limit: 20 }));
+    });
+    await loginAsResponsableCalidad(page);
+
+    await page.goto("/lotes/consulta");
+    const nav = page.getByRole("navigation", { name: "Paginación de lotes" });
+    await nav.getByRole("button", { name: "Página siguiente" }).click();
+    await expect(nav.getByText("Página 2 de 3")).toBeVisible();
+
+    await page.getByLabel("Ordenar por").selectOption({ label: "Estado" });
+    await expect(nav.getByText("Página 1 de 3")).toBeVisible();
+    let ultimo = pedidos.at(-1)!.searchParams;
+    expect([ultimo.get("sortBy"), ultimo.get("sortOrder"), ultimo.get("page")]).toEqual(["estado", "ASC", "1"]);
+
+    await nav.getByRole("button", { name: "Página siguiente" }).click();
+    await expect(nav.getByText("Página 2 de 3")).toBeVisible();
+    await page.getByRole("button", { name: /^Invertir orden/ }).click();
+    await expect(nav.getByText("Página 1 de 3")).toBeVisible();
+    ultimo = pedidos.at(-1)!.searchParams;
+    expect([ultimo.get("sortBy"), ultimo.get("sortOrder"), ultimo.get("page")]).toEqual(["estado", "DESC", "1"]);
+  });
 });
+

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "../../components/layout/Layout";
 import { Badge, type BadgeVariant } from "../../components/ui/Badge";
@@ -11,6 +11,7 @@ import {
   EstadoProduccion,
   type ConsultaLotesProduccionQuery,
   type LoteProduccionResumen,
+  type ProduccionSortField,
   type ReferenciaNombre,
 } from "../../types/consultaLotesProduccion.types";
 import { esFechaCalendario, esRangoInvertido } from "../../utils/fechaCalendario";
@@ -23,7 +24,24 @@ import { esFechaCalendario, esRangoInvertido } from "../../utils/fechaCalendario
 
 const TODOS = "__todos__";
 const PAGE_SIZE = 20;
-type OrdenCampo = "fecha" | "codigo";
+
+// Columnas que el back sabe ordenar (lista blanca de SORT_SQL en
+// lote-produccion-consulta.service.ts). Proveedor y Tambo son listas: no se
+// ordenan. Al cambiar de columna arranca en la dirección más útil.
+const DIRECCION_INICIAL: Record<ProduccionSortField, boolean> = {
+  codigo: true, // asc
+  fecha: false, // más recientes primero
+  estado: true,
+  lotesOrigen: false, // los que más orígenes tienen primero
+};
+
+// Mismo orden de columnas que la grilla; lo usa el select de mobile.
+const ORDEN_OPTIONS: { value: ProduccionSortField; label: string }[] = [
+  { value: "codigo", label: "Lote" },
+  { value: "fecha", label: "Fecha" },
+  { value: "lotesOrigen", label: "Lotes de origen" },
+  { value: "estado", label: "Estado" },
+];
 
 const ESTADO_LABEL: Record<EstadoProduccion, string> = {
   [EstadoProduccion.SIN_CONSUMOS]: "Sin consumos",
@@ -86,6 +104,46 @@ function aIdOpcional(valor: string): number | undefined {
   return valor === TODOS ? undefined : Number(valor);
 }
 
+interface Orden {
+  campo: ProduccionSortField;
+  asc: boolean;
+}
+
+// aria-sort solo en la columna ordenada; la flecha es decorativa.
+function EncabezadoOrdenable({
+  campo,
+  label,
+  orden,
+  onOrdenar,
+  className = "",
+}: {
+  campo: ProduccionSortField;
+  label: string;
+  orden: Orden;
+  onOrdenar: (campo: ProduccionSortField) => void;
+  className?: string;
+}) {
+  const activo = orden.campo === campo;
+  return (
+    <th
+      scope="col"
+      className={`px-5 py-3 ${className}`}
+      aria-sort={activo ? (orden.asc ? "ascending" : "descending") : undefined}
+    >
+      <button
+        type="button"
+        onClick={() => onOrdenar(campo)}
+        className="inline-flex items-center gap-1 uppercase hover:text-slate-600 dark:hover:text-slate-300"
+      >
+        {label}
+        <span aria-hidden="true" className={activo ? "" : "opacity-0"}>
+          {activo && !orden.asc ? "↓" : "↑"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 export default function ConsultaLotesPage() {
   const navigate = useNavigate();
   const { proveedores, tambos, errorProveedores, errorTambos } = useOpcionesFiltroLotes();
@@ -95,10 +153,17 @@ export default function ConsultaLotesPage() {
   const [proveedorFiltro, setProveedorFiltro] = useState(TODOS);
   const [tamboFiltro, setTamboFiltro] = useState(TODOS);
   const [estadoFiltro, setEstadoFiltro] = useState(TODOS);
-  const [orden, setOrden] = useState<{ campo: OrdenCampo; asc: boolean }>({
-    campo: "fecha",
-    asc: false,
-  });
+  const [orden, setOrden] = useState<Orden>({ campo: "fecha", asc: false });
+  const [page, setPage] = useState(1);
+
+  // Cambiar un filtro o el orden vuelve a la página 1. Se hace en el mismo
+  // handler (no con un efecto) para que salga un solo pedido, no dos.
+  const conPaginaUno =
+    <T,>(setter: (valor: T) => void) =>
+    (valor: T) => {
+      setter(valor);
+      setPage(1);
+    };
 
   // Un "Desde" posterior a "Hasta" no se manda (el back respondería 400):
   // se avisa y el período no se aplica, igual que antes.
@@ -112,13 +177,24 @@ export default function ConsultaLotesPage() {
     estado: estadoFiltro === TODOS ? undefined : (estadoFiltro as EstadoProduccion),
     sortBy: orden.campo,
     sortOrder: orden.asc ? "ASC" : "DESC",
-    page: 1,
+    page,
     limit: PAGE_SIZE,
   };
 
   const { resultado, isLoading, error, refetch } = useConsultaLotesProduccion(query);
   const lotes = resultado?.data ?? [];
   const total = resultado?.total ?? 0;
+  // Se usa lo que devolvió el back (no la constante) para no desfasar el
+  // indicador si el back ajusta el limit.
+  const totalPaginas = resultado ? Math.max(1, Math.ceil(total / resultado.limit)) : 1;
+
+  // Si la página pedida quedó fuera de rango (se borraron lotes entre una
+  // consulta y otra), se salta a la última que tiene datos.
+  useEffect(() => {
+    if (resultado && resultado.data.length === 0 && resultado.total > 0 && page > totalPaginas) {
+      setPage(totalPaginas);
+    }
+  }, [resultado, page, totalPaginas]);
 
   const proveedorOptions = useMemo(
     () => [
@@ -145,13 +221,15 @@ export default function ConsultaLotesPage() {
     setProveedorFiltro(TODOS);
     setTamboFiltro(TODOS);
     setEstadoFiltro(TODOS);
+    setPage(1);
   };
 
   const hayFiltrosActivos =
     desde !== "" || hasta !== "" || proveedorFiltro !== TODOS || tamboFiltro !== TODOS || estadoFiltro !== TODOS;
 
-  const toggleOrden = (campo: OrdenCampo) => {
-    setOrden((prev) => (prev.campo === campo ? { campo, asc: !prev.asc } : { campo, asc: campo === "codigo" }));
+  const ordenarPor = (campo: ProduccionSortField) => {
+    setOrden((prev) => (prev.campo === campo ? { campo, asc: !prev.asc } : { campo, asc: DIRECCION_INICIAL[campo] }));
+    setPage(1);
   };
 
   const irAlDetalle = (lote: LoteProduccionResumen) => navigate(`/lotes/consulta/${lote.id}`);
@@ -177,7 +255,7 @@ export default function ConsultaLotesPage() {
           label="Desde"
           value={desde}
           max={hasta || undefined}
-          onChange={(e) => setDesde(e.target.value)}
+          onChange={(e) => conPaginaUno(setDesde)(e.target.value)}
         />
         <Input
           id="consulta-lotes-hasta"
@@ -185,7 +263,7 @@ export default function ConsultaLotesPage() {
           label="Hasta"
           value={hasta}
           min={desde || undefined}
-          onChange={(e) => setHasta(e.target.value)}
+          onChange={(e) => conPaginaUno(setHasta)(e.target.value)}
         />
         <Select
           id="consulta-lotes-proveedor"
@@ -194,7 +272,7 @@ export default function ConsultaLotesPage() {
           value={proveedorFiltro}
           disabled={errorProveedores}
           error={errorProveedores ? "No se pudieron cargar los proveedores." : undefined}
-          onChange={(e) => setProveedorFiltro(e.target.value)}
+          onChange={(e) => conPaginaUno(setProveedorFiltro)(e.target.value)}
         />
         <Select
           id="consulta-lotes-tambo"
@@ -203,14 +281,14 @@ export default function ConsultaLotesPage() {
           value={tamboFiltro}
           disabled={errorTambos}
           error={errorTambos ? "No se pudieron cargar los tambos." : undefined}
-          onChange={(e) => setTamboFiltro(e.target.value)}
+          onChange={(e) => conPaginaUno(setTamboFiltro)(e.target.value)}
         />
         <Select
           id="consulta-lotes-estado"
           label="Estado"
           options={ESTADO_OPTIONS}
           value={estadoFiltro}
-          onChange={(e) => setEstadoFiltro(e.target.value)}
+          onChange={(e) => conPaginaUno(setEstadoFiltro)(e.target.value)}
         />
       </div>
 
@@ -256,16 +334,23 @@ export default function ConsultaLotesPage() {
           <p className="text-base font-medium text-slate-700 dark:text-slate-300">
             No se encontraron lotes
           </p>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Ningún lote coincide con los filtros seleccionados.
+          {/* El back distingue "sin filtros" de "filtros sin resultados" en
+              `mensaje`; el texto local queda de respaldo si no viene. */}
+          <p className="max-w-md text-sm text-slate-500 dark:text-slate-400">
+            {resultado.mensaje ??
+              (hayFiltrosActivos
+                ? "Ningún lote coincide con los filtros seleccionados."
+                : "Todavía no hay lotes de producción registrados.")}
           </p>
-          <button
-            type="button"
-            onClick={limpiarFiltros}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            Limpiar filtros
-          </button>
+          {hayFiltrosActivos && (
+            <button
+              type="button"
+              onClick={limpiarFiltros}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Limpiar filtros
+            </button>
+          )}
         </div>
       ) : (
         <div className={isLoading ? "opacity-60 transition-opacity" : undefined} aria-busy={isLoading}>
@@ -274,28 +359,19 @@ export default function ConsultaLotesPage() {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-5 py-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleOrden("codigo")}
-                      className="hover:text-slate-600 dark:hover:text-slate-300"
-                    >
-                      Lote {orden.campo === "codigo" ? (orden.asc ? "↑" : "↓") : ""}
-                    </button>
-                  </th>
-                  <th className="px-5 py-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleOrden("fecha")}
-                      className="hover:text-slate-600 dark:hover:text-slate-300"
-                    >
-                      Fecha {orden.campo === "fecha" ? (orden.asc ? "↑" : "↓") : ""}
-                    </button>
-                  </th>
-                  <th className="px-5 py-3">Proveedor</th>
-                  <th className="px-5 py-3">Tambo</th>
-                  <th className="px-5 py-3">Estado</th>
-                  <th className="px-5 py-3 text-right">Acciones</th>
+                  <EncabezadoOrdenable campo="codigo" label="Lote" orden={orden} onOrdenar={ordenarPor} />
+                  <EncabezadoOrdenable campo="fecha" label="Fecha" orden={orden} onOrdenar={ordenarPor} />
+                  <th scope="col" className="px-5 py-3">Proveedor</th>
+                  <th scope="col" className="px-5 py-3">Tambo</th>
+                  <EncabezadoOrdenable
+                    campo="lotesOrigen"
+                    label="Lotes de origen"
+                    orden={orden}
+                    onOrdenar={ordenarPor}
+                    className="text-right"
+                  />
+                  <EncabezadoOrdenable campo="estado" label="Estado" orden={orden} onOrdenar={ordenarPor} />
+                  <th scope="col" className="px-5 py-3 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -313,6 +389,9 @@ export default function ConsultaLotesPage() {
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
                       <ListaCompacta items={lote.tambos} />
                     </td>
+                    <td className="px-5 py-3 text-right tabular-nums text-slate-600 dark:text-slate-400">
+                      {lote.cantidadLotesOrigen}
+                    </td>
                     <td className="px-5 py-3">
                       <EstadoBadge lote={lote} />
                     </td>
@@ -329,6 +408,29 @@ export default function ConsultaLotesPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Orden (mobile): los encabezados de la tabla no se ven. Usa el
+              mismo ordenarPor: elegir otra columna aplica su dirección
+              inicial y el botón invierte la actual; ambos vuelven a la página 1. */}
+          <div className="mb-3 flex items-end gap-2 md:hidden">
+            <div className="flex-1">
+              <Select
+                id="consulta-lotes-orden"
+                label="Ordenar por"
+                options={ORDEN_OPTIONS}
+                value={orden.campo}
+                onChange={(e) => ordenarPor(e.target.value as ProduccionSortField)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => ordenarPor(orden.campo)}
+              aria-label={`Invertir orden (ahora ${orden.asc ? "ascendente" : "descendente"})`}
+              className="rounded-md border border-slate-300 px-3 py-2 text-base text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <span aria-hidden="true">{orden.asc ? "↑ Asc" : "↓ Desc"}</span>
+            </button>
           </div>
 
           {/* Cards (mobile) */}
@@ -370,11 +472,39 @@ export default function ConsultaLotesPage() {
             ))}
           </div>
 
-          {/* TODO(paso 2): paginación. Por ahora se avisa si quedan lotes fuera. */}
-          {total > lotes.length && (
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-              Mostrando {lotes.length} de {total} lotes.
-            </p>
+          {totalPaginas > 1 && (
+            <nav
+              aria-label="Paginación de lotes"
+              className="mt-4 flex items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-800"
+            >
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {(resultado.page - 1) * resultado.limit + 1}–
+                {(resultado.page - 1) * resultado.limit + lotes.length} de {total} lotes
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  aria-label="Página anterior"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1 || isLoading}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-sm text-slate-600 dark:text-slate-300" aria-live="polite">
+                  Página {page} de {totalPaginas}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Página siguiente"
+                  onClick={() => setPage((p) => Math.min(totalPaginas, p + 1))}
+                  disabled={page >= totalPaginas || isLoading}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </nav>
           )}
         </div>
       )}
