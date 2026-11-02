@@ -18,6 +18,7 @@ import type { TrazabilidadLoteResponse } from "../types/trazabilidad.types";
 import type {
   ConsultaLotesProduccionQuery,
   ConsultaLotesProduccionResponse,
+  TrazabilidadProduccionResponse,
 } from "../types/consultaLotesProduccion.types";
 import type { DestinoHistorialItem } from "../types/destinoProductivoHistorial.types";
 
@@ -122,6 +123,19 @@ export const loteService = {
     const { data } = await api.get<ConsultaLotesProduccionResponse>(
       "/lotes/producciones/consulta",
       { params: query, signal },
+    );
+    return data;
+  },
+
+  // HU-77 (criterio 7): cabecera del lote de producción + eventos de sus
+  // lotes de origen. 404 si no existe o es de otra empresa.
+  getTrazabilidadProduccion: async (
+    id: number,
+    signal?: AbortSignal,
+  ): Promise<TrazabilidadProduccionResponse> => {
+    const { data } = await api.get<TrazabilidadProduccionResponse>(
+      `/lotes/producciones/${id}/trazabilidad`,
+      { signal },
     );
     return data;
   },

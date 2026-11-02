@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "../../components/layout/Layout";
-import { Badge, type BadgeVariant } from "../../components/ui/Badge";
 import { Select } from "../../components/ui/Select";
 import { Input } from "../../components/ui/Input";
 import { useConsultaLotesProduccion } from "../../hooks/useConsultaLotesProduccion";
@@ -15,6 +14,12 @@ import {
   type ReferenciaNombre,
 } from "../../types/consultaLotesProduccion.types";
 import { esFechaCalendario, esRangoInvertido } from "../../utils/fechaCalendario";
+import { EstadoProduccionBadge } from "./components/EstadoProduccionBadge";
+import {
+  ESTADO_PRODUCCION_LABEL,
+  FORMATO_FECHA_AR,
+  FORMATO_FECHA_HORA_AR,
+} from "./constants/estadoProduccion";
 
 // HU-77: consulta de lotes de PRODUCCIÓN (HU-68) sin generar reporte previo,
 // contra GET /lotes/producciones/consulta. A diferencia de LotesPage.tsx
@@ -43,47 +48,10 @@ const ORDEN_OPTIONS: { value: ProduccionSortField; label: string }[] = [
   { value: "estado", label: "Estado" },
 ];
 
-const ESTADO_LABEL: Record<EstadoProduccion, string> = {
-  [EstadoProduccion.SIN_CONSUMOS]: "Sin consumos",
-  [EstadoProduccion.EN_PROCESO]: "En proceso",
-  [EstadoProduccion.FINALIZADO]: "Finalizado",
-};
-
-const ESTADO_VARIANT: Record<EstadoProduccion, BadgeVariant> = {
-  [EstadoProduccion.SIN_CONSUMOS]: "neutral",
-  [EstadoProduccion.EN_PROCESO]: "info",
-  [EstadoProduccion.FINALIZADO]: "success",
-};
-
 const ESTADO_OPTIONS = [
   { value: TODOS, label: "Todos" },
-  ...Object.values(EstadoProduccion).map((e) => ({ value: e, label: ESTADO_LABEL[e] })),
+  ...Object.values(EstadoProduccion).map((e) => ({ value: e, label: ESTADO_PRODUCCION_LABEL[e] })),
 ];
-
-// Siempre en hora AR, sin depender del huso del navegador (CA8).
-const FORMATO_FECHA_HORA = new Intl.DateTimeFormat("es-AR", {
-  timeZone: "America/Argentina/Buenos_Aires",
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-const FORMATO_FECHA = new Intl.DateTimeFormat("es-AR", {
-  timeZone: "America/Argentina/Buenos_Aires",
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
-
-function EstadoBadge({ lote }: { lote: LoteProduccionResumen }) {
-  return (
-    <span title={lote.estadoDescripcion}>
-      <Badge variant={ESTADO_VARIANT[lote.estado]}>{ESTADO_LABEL[lote.estado]}</Badge>
-    </span>
-  );
-}
 
 // Proveedores/tambos son listas: el primero + "+N"; la lista completa en el
 // title y en el detalle del lote.
@@ -381,7 +349,7 @@ export default function ConsultaLotesPage() {
                       {lote.codigo}
                     </td>
                     <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
-                      {FORMATO_FECHA_HORA.format(new Date(lote.fecha))}
+                      {FORMATO_FECHA_HORA_AR.format(new Date(lote.fecha))}
                     </td>
                     <td className="px-5 py-3 text-slate-700 dark:text-slate-300">
                       <ListaCompacta items={lote.proveedores} />
@@ -393,7 +361,7 @@ export default function ConsultaLotesPage() {
                       {lote.cantidadLotesOrigen}
                     </td>
                     <td className="px-5 py-3">
-                      <EstadoBadge lote={lote} />
+                      <EstadoProduccionBadge lote={lote} />
                     </td>
                     <td className="px-5 py-3 text-right">
                       <button
@@ -446,7 +414,7 @@ export default function ConsultaLotesPage() {
                   <span className="font-mono text-xs font-medium text-slate-900 dark:text-white">
                     {lote.codigo}
                   </span>
-                  <EstadoBadge lote={lote} />
+                  <EstadoProduccionBadge lote={lote} />
                 </div>
                 <p className="text-sm text-slate-700 dark:text-slate-300">
                   <ListaCompacta items={lote.proveedores} />
@@ -461,7 +429,7 @@ export default function ConsultaLotesPage() {
                   <div>
                     <dt className="text-slate-400 dark:text-slate-500">Fecha</dt>
                     <dd className="text-slate-600 dark:text-slate-400">
-                      {FORMATO_FECHA.format(new Date(lote.fecha))}
+                      {FORMATO_FECHA_AR.format(new Date(lote.fecha))}
                     </dd>
                   </div>
                 </dl>

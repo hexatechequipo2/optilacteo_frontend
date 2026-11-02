@@ -339,13 +339,13 @@ test.describe("Layout › Menú lateral colapsable", () => {
 });
 
 test.describe("Layout › Ítem activo del menú en rutas de lotes", () => {
-  // Prefijo más largo, salvo destino sugerido (HU-78), que pertenece al flujo
-  // de la consulta (HU-77) aunque su URL no cuelgue de /lotes/consulta.
+  // Prefijo más largo; destino sugerido (HU-78) marca su propio ítem aunque
+  // su URL (/lotes/:codigo/destino-sugerido) no cuelgue de /lotes/destino-sugerido.
   const casos = [
     { url: "/lotes", item: "Lotes" },
     { url: "/lotes/consulta", item: "Consulta de lotes" },
-    { url: "/lotes/consulta/L-2026-0412", item: "Consulta de lotes" },
-    { url: "/lotes/L-2026-0412/destino-sugerido", item: "Consulta de lotes" },
+    { url: "/lotes/consulta/12", item: "Consulta de lotes" },
+    { url: "/lotes/L-2026-0412/destino-sugerido", item: "Destino sugerido (IA)" },
     { url: "/lotes/revision", item: "Revisión de calidad" },
   ];
   const activo = (page: Page) => page.getByRole("complementary").locator('[aria-current="page"]');
@@ -374,13 +374,13 @@ test.describe("Layout › Ítem activo del menú en rutas de lotes", () => {
     }
   });
 
-  test("colapsado, destino sugerido sigue marcando Consulta de lotes", async ({ page }) => {
+  test("colapsado, destino sugerido sigue marcando su ítem", async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem("sidebar-colapsado", "true"));
     await mockLayout(page);
     await loginAsResponsableCalidad(page);
     await page.goto("/lotes/L-2026-0412/destino-sugerido");
     await expect(activo(page)).toHaveCount(1);
-    await expect(activo(page)).toHaveAttribute("title", "Consulta de lotes");
+    await expect(activo(page)).toHaveAttribute("title", "Destino sugerido (IA)");
   });
 });
 

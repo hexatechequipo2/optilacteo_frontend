@@ -1,3 +1,5 @@
+import type { EventoTrazabilidad } from "./trazabilidad.types";
+
 // HU-77: espeja LoteProduccionFilterQueryDto y LoteProduccionResumen de
 // optilacteo-backend (src/module/lote: dto/lote-produccion-filter-query.dto.ts,
 // lote-produccion-consulta.service.ts). Endpoint: GET /lotes/producciones/consulta.
@@ -59,4 +61,41 @@ export interface ConsultaLotesProduccionResponse {
   limit: number;
   // Solo cuando total === 0: distingue "sin filtros" de "filtros sin resultados".
   mensaje?: string;
+}
+
+// HU-77 (criterio 7): GET /lotes/producciones/:id/trazabilidad
+// (LoteProduccionConsultaService.getTrazabilidad). 404 si el lote de
+// producción no existe o es de otra empresa.
+
+// Un consumo de un lote de ingreso hacia este lote de producción.
+export interface OrigenConsumoProduccion {
+  consumoId: number;
+  fecha: string; // ISO (lote_consumo.createdAt, mismo TODO(backend) de +3h)
+  cantidad: number;
+  unidad: string | null;
+  parametros: unknown[];
+  loteIngreso: {
+    id: number;
+    codigo: string;
+    estado: string;
+    proveedor: string | null;
+    tambo: string | null;
+  };
+}
+
+// Mismos eventos de HU-32 (GET /lotes/:id/trazabilidad) de cada lote de
+// origen, con el lote al que pertenecen. Los CONSUMO_PARCIAL hacia otros
+// lotes de producción ya vienen filtrados por el back.
+export interface EventoTrazabilidadProduccion extends EventoTrazabilidad {
+  loteOrigenId: number;
+  loteOrigenCodigo: string;
+}
+
+export interface TrazabilidadProduccionResponse {
+  loteProduccion: LoteProduccionResumen;
+  origenes: OrigenConsumoProduccion[];
+  // El back los ordena por fecha ASC; el front reordena igual por las dudas.
+  // TODO(backend): las fechas pueden llegar +3h corridas (columnas
+  // `timestamp` sin zona + TZ AR en el proceso). No se parchea en el front.
+  eventos: EventoTrazabilidadProduccion[];
 }

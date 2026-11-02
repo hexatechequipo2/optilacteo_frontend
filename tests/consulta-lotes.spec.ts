@@ -217,3 +217,122 @@ test.describe("HU-77 — Consulta de lotes de producción", () => {
   });
 });
 
+
+// HU-77 (criterio 7): detalle contra GET /lotes/producciones/:id/trazabilidad.
+// Los eventos llegan desordenados a propósito: el front tiene que ordenarlos.
+const TRAZABILIDAD = {
+  loteProduccion: LOTE,
+  origenes: [],
+  eventos: [
+    {
+      tipo: "CONSUMO_PARCIAL",
+      fecha: "2026-10-12T16:00:00.000Z",
+      descripcion: "Consumo parcial hacia lote de producción LP-0012",
+      detalle: { loteProduccionId: 12 },
+      loteOrigenId: 2,
+      loteOrigenCodigo: "L-2",
+    },
+    {
+      tipo: "RECEPCION",
+      fecha: "2026-10-11T13:05:00.000Z",
+      descripcion: "Recepción del lote L-1",
+      detalle: {},
+      loteOrigenId: 1,
+      loteOrigenCodigo: "L-1",
+    },
+    {
+      tipo: "CLASIFICACION",
+      fecha: "2026-10-11T13:40:00.000Z",
+      descripcion: "Clasificación del lote L-1",
+      detalle: {},
+      loteOrigenId: 1,
+      loteOrigenCodigo: "L-1",
+    },
+  ],
+};
+
+const RUTA_TRAZABILIDAD = /\/lotes\/producciones\/\d+\/trazabilidad$/;
+
+test.describe("HU-77 — Detalle y trazabilidad del lote de producción", () => {
+  // Navegador en otro huso: las horas tienen que salir igual en hora AR.
+  test.use({ timezoneId: "Asia/Tokyo" });
+
+  test("desde la consulta pide la trazabilidad con el id y muestra los eventos ordenados en hora AR", async ({
+    page,
+  }) => {
+    const pedidos: string[] = [];
+    await mockBase(page);
+    await page.route(/\/lotes\/producciones\/consulta\?/, (route) => route.fulfill(json(respuestaOk)));
+    await page.route(RUTA_TRAZABILIDAD, (route) => {
+      pedidos.push(new URL(route.request().url()).pathname);
+      return route.fulfill(json(TRAZABILIDAD));
+    });
+    await loginAsResponsableCalidad(page);
+
+    await page.goto("/lotes/consulta");
+    await page.getByRole("row", { name: /LP-0012/ }).getByRole("button", { name: /Ver trazabilidad/ }).click();
+    await expect(page).toHaveURL(/\/lotes\/consulta\/12$/);
+    await expect(page.getByRole("heading", { name: "LP-0012" })).toBeVisible();
+    expect(pedidos).toEqual([expect.stringMatching(/\/lotes\/producciones\/12\/trazabilidad$/)]);
+
+    // Cabecera: listas completas, sin "+N".
+    await expect(page.getByRole("list", { name: "Proveedores" }).getByRole("listitem")).toHaveText([
+      "Tambos Unidos SRL",
+      "Lácteos del Valle",
+    ]);
+    await expect(page.getByRole("list", { name: "Lotes de origen" }).getByRole("listitem")).toHaveText(["L-1", "L-2"]);
+    await expect(page.getByText("En proceso")).toBeVisible();
+
+    const eventos = page.getByRole("list", { name: "Eventos de trazabilidad" }).getByRole("listitem");
+    await expect(eventos).toHaveCount(3);
+    await expect(eventos.nth(0)).toContainText("Recepción");
+    await expect(eventos.nth(0)).toContainText("Lote de origen: L-1");
+    await expect(eventos.nth(0).locator("time")).toHaveText(/^11\/10\/2026,? 10:05/);
+    await expect(eventos.nth(1)).toContainText("Clasificación automática");
+    await expect(eventos.nth(1).locator("time")).toHaveText(/^11\/10\/2026,? 10:40/);
+    await expect(eventos.nth(2)).toContainText("Consumo hacia producción");
+    await expect(eventos.nth(2)).toContainText("Lote de origen: L-2");
+    await expect(eventos.nth(2).locator("time")).toHaveText(/^12\/10\/2026,? (13|01):00/);
+  });
+
+  test("un lote sin eventos muestra la cabecera y el aviso de trazabilidad vacía", async ({ page }) => {
+    await mockBase(page);
+    await page.route(RUTA_TRAZABILIDAD, (route) => route.fulfill(json({ ...TRAZABILIDAD, eventos: [] })));
+    await loginAsResponsableCalidad(page);
+
+    await page.goto("/lotes/consulta/12");
+    await expect(page.getByRole("heading", { name: "LP-0012" })).toBeVisible();
+    await expect(page.getByText("Este lote todavía no tiene eventos de trazabilidad.")).toBeVisible();
+    await expect(page.getByRole("list", { name: "Eventos de trazabilidad" })).toHaveCount(0);
+  });
+
+  test("un 404 muestra No se encontró el lote", async ({ page }) => {
+    await mockBase(page);
+    await page.route(RUTA_TRAZABILIDAD, (route) =>
+      route.fulfill(json({ message: "Lote de producción 99 no encontrado" }, 404)),
+    );
+    await loginAsResponsableCalidad(page);
+
+    await page.goto("/lotes/consulta/99");
+    await expect(page.getByText("No se encontró el lote")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reintentar" })).toHaveCount(0);
+  });
+
+  test("un 500 muestra el error con Reintentar y al reintentar carga el lote", async ({ page }) => {
+    let falla = true;
+    await mockBase(page);
+    await page.route(RUTA_TRAZABILIDAD, (route) =>
+      route.fulfill(falla ? json({ message: "Internal server error" }, 500) : json(TRAZABILIDAD)),
+    );
+    await loginAsResponsableCalidad(page);
+
+    await page.goto("/lotes/consulta/12");
+    const alerta = page.getByRole("alert").filter({ hasText: "No se pudo cargar la trazabilidad del lote" });
+    await expect(alerta).toBeVisible();
+
+    falla = false;
+    await alerta.getByRole("button", { name: "Reintentar" }).click();
+    await expect(page.getByRole("heading", { name: "LP-0012" })).toBeVisible();
+    await expect(alerta).toBeHidden();
+  });
+});
