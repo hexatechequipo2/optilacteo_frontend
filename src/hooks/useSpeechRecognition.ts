@@ -11,6 +11,20 @@ const ERRORES_FATALES = new Set<string>([
   "service-not-allowed",
 ]);
 
+// Opciones del reconocedor. Los valores por defecto son los que usa el
+// dictado de HU-55 (es-AR, continuo, con resultados interinos), así ese
+// flujo no cambia. HU-56 (confirmación verbal) lo usa con
+// continuous/interimResults en false para escuchar un comando corto.
+export interface OpcionesSpeechRecognition {
+  lang?: string;
+  continuous?: boolean;
+  interimResults?: boolean;
+  // Se llama con cada fragmento final apenas llega, además de sumarlo a
+  // transcripcionAcumulada. Sirve para reaccionar a un comando sin
+  // depender de un efecto sobre el texto acumulado.
+  onResultadoFinal?: (texto: string) => void;
+}
+
 interface UseSpeechRecognitionResult {
   estado: EstadoReconocimientoVoz;
   soportado: boolean;
@@ -37,7 +51,22 @@ function obtenerConstructor(): SpeechRecognitionConstructor | null {
 //   un modal roto, en lugar de fallar recién al tocar "Dictar valores".
 // - Los resultados "interim" se pisan en cada evento; solo los "final" se
 //   van acumulando al texto que después se manda a /dictado/parsear.
-export function useSpeechRecognition(): UseSpeechRecognitionResult {
+export function useSpeechRecognition(
+  opciones: OpcionesSpeechRecognition = {},
+): UseSpeechRecognitionResult {
+  const {
+    lang = "es-AR",
+    continuous = true,
+    interimResults = true,
+    onResultadoFinal,
+  } = opciones;
+  // En ref para que crearInstancia no cambie cada vez que el componente
+  // pasa una función nueva; siempre se llama a la última.
+  const onResultadoFinalRef = useRef(onResultadoFinal);
+  useEffect(() => {
+    onResultadoFinalRef.current = onResultadoFinal;
+  }, [onResultadoFinal]);
+
   const ConstructorRef = useRef(obtenerConstructor());
   const soportado = ConstructorRef.current !== null;
 
@@ -57,9 +86,9 @@ export function useSpeechRecognition(): UseSpeechRecognitionResult {
   const crearInstancia = useCallback((): SpeechRecognition | null => {
     if (!ConstructorRef.current) return null;
     const recognition = new ConstructorRef.current();
-    recognition.lang = "es-AR";
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    recognition.lang = lang;
+    recognition.continuous = continuous;
+    recognition.interimResults = interimResults;
 
     recognition.onresult = (event) => {
       let interim = "";
@@ -75,6 +104,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionResult {
       }
       if (final) {
         setTranscripcionAcumulada((prev) => `${prev} ${final}`.trim());
+        onResultadoFinalRef.current?.(final.trim());
       }
       setTranscripcionInterina(interim);
     };
@@ -100,7 +130,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionResult {
     };
 
     return recognition;
-  }, []);
+  }, [lang, continuous, interimResults]);
 
   const iniciarInstancia = useCallback(() => {
     const recognition = crearInstancia();
