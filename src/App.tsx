@@ -21,6 +21,7 @@ import TambosPage from "./pages/Tambos/TambosPage";
 import LotesPage from "./pages/Lotes/LotesPage";
 import RevisionLotesPage from "./pages/Lotes/RevisionLotesPage";
 import DestinoSugeridoPage from "./pages/Lotes/DestinoSugeridoPage";
+import DestinoSugeridoInicio from "./pages/Lotes/DestinoSugeridoInicio";
 import ConsultaLotesPage from "./pages/Lotes/ConsultaLotesPage";
 import LoteConsultaDetallePage from "./pages/Lotes/LoteConsultaDetallePage";
 import MedicionManualPage from "./pages/MedicionManual/MedicionManualPage";
@@ -182,10 +183,18 @@ function App() {
                   }
                 />
                 <Route
-                  path="/lotes/consulta/:codigo"
+                  path="/lotes/consulta/:id"
                   element={
                     <ProtectedRoute ruta="/lotes/consulta">
                       <LoteConsultaDetallePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/lotes/destino-sugerido"
+                  element={
+                    <ProtectedRoute ruta="/lotes/destino-sugerido">
+                      <DestinoSugeridoInicio />
                     </ProtectedRoute>
                   }
                 />

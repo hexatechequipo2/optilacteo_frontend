@@ -28,7 +28,7 @@ export const REGLAS_RUTAS = {
   "/lotes/revision": { modulos: ["trazabilidad"] },
   "/lotes/destino-sugerido": { modulos: ["trazabilidad"] },
   // HU-77: consulta de lotes con filtros, sin generar reporte previo. Mismo
-  // módulo que la ruta de detalle (/lotes/consulta/:codigo usa esta misma
+  // módulo que la ruta de detalle (/lotes/consulta/:id usa esta misma
   // clave, ver ProtectedRoute en App.tsx).
   "/lotes/consulta": { modulos: ["trazabilidad"] },
   "/mediciones-manuales": { modulos: ["monitoreo_alertas"], accion: "crear" },

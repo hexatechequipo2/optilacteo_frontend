@@ -15,6 +15,11 @@ import type {
 import type { ComparacionHistoricaLote } from "../types/comparacionHistorica.types";
 import type { DesvioProveedorLote } from "../types/desvioProveedor.types";
 import type { TrazabilidadLoteResponse } from "../types/trazabilidad.types";
+import type {
+  ConsultaLotesProduccionQuery,
+  ConsultaLotesProduccionResponse,
+  TrazabilidadProduccionResponse,
+} from "../types/consultaLotesProduccion.types";
 import type { DestinoHistorialItem } from "../types/destinoProductivoHistorial.types";
 
 // El backend valida existencia del proveedor, rangos de parámetros y unicidad
@@ -103,6 +108,33 @@ export const loteService = {
   ): Promise<DesvioProveedorLote[]> => {
     const { data } = await api.get<DesvioProveedorLote[]>(
       `/lotes/proveedor/${proveedorId}/desvios`,
+      { signal },
+    );
+    return data;
+  },
+
+  // HU-77: consulta de lotes de producción con filtros, orden y paginado.
+  // Solo se mandan los filtros cargados (axios omite los undefined). Las
+  // fechas viajan como "YYYY-MM-DD" (HU-75); el back valida formato y rango.
+  consultarProducciones: async (
+    query: ConsultaLotesProduccionQuery,
+    signal?: AbortSignal,
+  ): Promise<ConsultaLotesProduccionResponse> => {
+    const { data } = await api.get<ConsultaLotesProduccionResponse>(
+      "/lotes/producciones/consulta",
+      { params: query, signal },
+    );
+    return data;
+  },
+
+  // HU-77 (criterio 7): cabecera del lote de producción + eventos de sus
+  // lotes de origen. 404 si no existe o es de otra empresa.
+  getTrazabilidadProduccion: async (
+    id: number,
+    signal?: AbortSignal,
+  ): Promise<TrazabilidadProduccionResponse> => {
+    const { data } = await api.get<TrazabilidadProduccionResponse>(
+      `/lotes/producciones/${id}/trazabilidad`,
       { signal },
     );
     return data;
