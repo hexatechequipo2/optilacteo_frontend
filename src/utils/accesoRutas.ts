@@ -26,7 +26,6 @@ export const REGLAS_RUTAS = {
   "/proveedores": { modulos: ["recepcion"], paraSistema: true },
   "/tambos": { modulos: ["recepcion", "trazabilidad"] },
   "/lotes/revision": { modulos: ["trazabilidad"] },
-  "/lotes/destino-sugerido": { modulos: ["trazabilidad"] },
   // HU-77: consulta de lotes con filtros, sin generar reporte previo. Mismo
   // módulo que la ruta de detalle (/lotes/consulta/:id usa esta misma
   // clave, ver ProtectedRoute en App.tsx).
