@@ -311,6 +311,19 @@ async function mockSpeechRecognitionNoSoportado(page: Page) {
   });
 }
 
+// HU-56: la revisión arranca sola la confirmación verbal (speechSynthesis).
+// Sin esto el resultado dependería de la máquina: en macOS el Chromium
+// headless trae voces y habla de verdad, en Linux/CI no. Sin síntesis la
+// revisión cae directo a revisión manual (clic habilitado), que es el
+// camino que verifican los specs de HU-55.
+async function mockSpeechSynthesisNoDisponible(page: Page) {
+  await page.addInitScript(() => {
+    const w = globalThis as any;
+    Object.defineProperty(w, "speechSynthesis", { value: undefined, configurable: true });
+    Object.defineProperty(w, "SpeechSynthesisUtterance", { value: undefined, configurable: true });
+  });
+}
+
 async function simularResultadoFinal(page: Page, texto: string) {
   await page.evaluate((t) => {
     const instancia = (globalThis as any).__mockRecognitionInstance;
@@ -330,6 +343,7 @@ async function simularError(page: Page, error: string) {
 test.describe("HU-55 — Registro de parámetros por voz", () => {
   test.beforeEach(async ({ page }) => {
     await mockMedicionManualDeps(page);
+    await mockSpeechSynthesisNoDisponible(page);
   });
 
   test("el botón 'Dictar valores' abre el modal y arranca escuchando", async ({ page }) => {
@@ -567,6 +581,7 @@ test.describe("HU-55 — Revisión del dictado › cambio de lote", () => {
   async function prepararRevision(page: Page, falloLote2 = false) {
     await mockMedicionManualDeps(page);
     await mockSpeechRecognitionSoportado(page);
+    await mockSpeechSynthesisNoDisponible(page);
     await page.route("**/lotes*", (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
