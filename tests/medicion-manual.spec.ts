@@ -301,7 +301,7 @@ async function mockSpeechRecognitionSoportado(page: Page) {
   });
 }
 
-// Fuerza el camino "no soportado" (Firefox/Safari real) borrando lo que
+// Fuerza el camino "no soportado" (Firefox real) borrando lo que
 // Chromium trae nativo.
 async function mockSpeechRecognitionNoSoportado(page: Page) {
   await page.addInitScript(() => {
@@ -322,6 +322,68 @@ async function mockSpeechSynthesisNoDisponible(page: Page) {
     Object.defineProperty(w, "speechSynthesis", { value: undefined, configurable: true });
     Object.defineProperty(w, "SpeechSynthesisUtterance", { value: undefined, configurable: true });
   });
+}
+
+// HU-56: speechSynthesis controlable desde el test. Registra cada enunciado
+// en window.__enunciados y deja las lecturas pendientes en
+// window.__lecturasPendientes; el test las termina a mano con
+// terminarLectura() (dispara onend), así no depende de las voces de la
+// máquina ni de cuánto tarda en hablar.
+async function mockSpeechSynthesisControlable(page: Page) {
+  await page.addInitScript(() => {
+    const w = globalThis as any;
+    w.__enunciados = [];
+    w.__lecturasPendientes = [];
+    function MockUtterance(this: any, texto: string) {
+      this.text = texto;
+      this.lang = "";
+      this.voice = null;
+      this.onend = null;
+      this.onerror = null;
+    }
+    Object.defineProperty(w, "SpeechSynthesisUtterance", { value: MockUtterance, configurable: true });
+    Object.defineProperty(w, "speechSynthesis", {
+      configurable: true,
+      value: {
+        speaking: false,
+        pending: false,
+        getVoices: () => [{ lang: "es-AR", name: "Mock es-AR" }],
+        addEventListener() {},
+        removeEventListener() {},
+        speak(utterance: any) {
+          w.__enunciados.push(utterance.text);
+          w.__lecturasPendientes.push(utterance);
+        },
+        cancel() {
+          for (const u of w.__lecturasPendientes.splice(0)) u.onerror?.({ error: "interrupted" });
+        },
+      },
+    });
+  });
+}
+
+// Termina la lectura en curso: dispara onend de cada enunciado pendiente,
+// dejando que el hook encole el siguiente, hasta que no llegue ninguno más.
+async function terminarLectura(page: Page) {
+  await page.evaluate(async () => {
+    const w = globalThis as any;
+    const tick = () => new Promise((r) => setTimeout(r, 20));
+    for (let vueltasSinPendientes = 0; vueltasSinPendientes < 5; ) {
+      const utterance = w.__lecturasPendientes.shift();
+      if (!utterance) {
+        vueltasSinPendientes++;
+        await tick();
+        continue;
+      }
+      vueltasSinPendientes = 0;
+      utterance.onend?.({});
+      await tick();
+    }
+  });
+}
+
+async function enunciados(page: Page): Promise<string[]> {
+  return page.evaluate(() => (globalThis as any).__enunciados);
 }
 
 async function simularResultadoFinal(page: Page, texto: string) {
@@ -650,5 +712,151 @@ test.describe("HU-55 — Revisión del dictado › cambio de lote", () => {
     await expect(page.getByRole("dialog", { name: "Revisar dictado" })).toHaveCount(0);
     await expect(captura.getByText("ph 6.8", { exact: true })).toHaveCount(0);
     await expect(captura.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-56 — Confirmación verbal antes de guardar el registro
+// ---------------------------------------------------------------------------
+
+test.describe("HU-56 — Confirmación verbal antes de guardar", () => {
+  const PARSEO = {
+    textoOriginal: "ph 6.8 temperatura 4",
+    parametros: [
+      { parametro: "ph", valor: 6.8, confianza: "alta", fueraDeRangoFisico: false, fueraDeUmbralEmpresa: true, textoOriginal: "ph 6.8" },
+      { parametro: "temperatura", valor: 4, confianza: "media", fueraDeRangoFisico: false, fueraDeUmbralEmpresa: false, textoOriginal: "temperatura 4" },
+    ],
+    noReconocido: [],
+    obligatoriosFaltantes: ["grasa"],
+  };
+
+  // Llega a la revisión con la síntesis indicada y devuelve el diálogo y
+  // los POST de registro que se hayan hecho.
+  async function llegarARevision(page: Page, sintesis: "controlable" | "no_disponible") {
+    await mockMedicionManualDeps(page);
+    await mockSpeechRecognitionSoportado(page);
+    if (sintesis === "controlable") await mockSpeechSynthesisControlable(page);
+    else await mockSpeechSynthesisNoDisponible(page);
+    await page.route(/\/lotes\/\d+\/dictado\/parsear/, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(PARSEO) }),
+    );
+    const registros: unknown[] = [];
+    await page.route(/\/lotes\/\d+\/mediciones-manuales/, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      registros.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          loteId: 1, tipoMateriaPrima: "leche_cruda", usuarioId: 5,
+          mediciones: [
+            { id: 1, parametro: "ph", valor: 6.8, estado: "FUERA_DE_RANGO", createdAt: "2026-08-01T10:00:00.000Z" },
+            { id: 2, parametro: "temperatura", valor: 4, estado: "NORMAL", createdAt: "2026-08-01T10:00:00.000Z" },
+          ],
+        }),
+      });
+    });
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+    await page.getByRole("button", { name: "Dictar valores", exact: true }).click();
+    await simularResultadoFinal(page, "ph 6.8 temperatura 4");
+    await page.getByRole("dialog", { name: "Dictando valores" })
+      .getByRole("button", { name: "Revisar y confirmar" }).click();
+    const revision = page.getByRole("dialog", { name: "Revisar dictado" });
+    await expect(revision).toBeVisible();
+    return { revision, registros };
+  }
+
+  // Lee todo y queda escuchando el primer intento.
+  async function hastaEscuchar(page: Page) {
+    const resultado = await llegarARevision(page, "controlable");
+    await expect(resultado.revision.getByText("Leyendo los valores en voz alta...")).toBeVisible();
+    await terminarLectura(page);
+    await expect(resultado.revision.getByText("Intento 1 de 3")).toBeVisible();
+    return resultado;
+  }
+
+  test("lee el lote y los valores reconocidos antes de pedir la confirmación", async ({ page }) => {
+    const { revision } = await hastaEscuchar(page);
+
+    expect(await enunciados(page)).toEqual([
+      "Lote LOT-2026-001.",
+      "pH 6,8, fuera de rango.",
+      "Temperatura 4 grados.",
+      "Faltan obligatorios: Materia grasa.",
+      "Decí confirmar para guardar, o cancelar.",
+    ]);
+    await expect(revision.getByRole("button", { name: "Confirmar registro" })).toBeDisabled();
+  });
+
+  test("'confirmar' por voz guarda el registro", async ({ page }) => {
+    const { revision, registros } = await hastaEscuchar(page);
+
+    await simularResultadoFinal(page, "Confirmar");
+
+    await expect(revision.getByText("MEDICIÓN REGISTRADA")).toBeVisible();
+    expect(registros).toEqual([
+      {
+        tipoMateriaPrima: "leche_cruda",
+        parametros: [
+          { parametro: "ph", valor: 6.8 },
+          { parametro: "temperatura", valor: 4 },
+        ],
+      },
+    ]);
+  });
+
+  test("'cancelar' por voz no guarda y deja la revisión abierta", async ({ page }) => {
+    const { revision, registros } = await hastaEscuchar(page);
+
+    await simularResultadoFinal(page, "cancelar");
+
+    await expect(revision.getByText("Confirmación por voz cancelada. No se guardó nada.")).toBeVisible();
+    await expect(revision.locator("#revision-dictado-ph")).toHaveValue("6.8");
+    await expect(revision.getByRole("button", { name: "Confirmar registro" })).toBeDisabled();
+    expect(registros).toHaveLength(0);
+  });
+
+  test("una palabra que no es comando pide reintentar", async ({ page }) => {
+    const { revision, registros } = await hastaEscuchar(page);
+
+    await simularResultadoFinal(page, "ok");
+
+    await expect(revision.getByText("Leyendo los valores en voz alta...")).toBeVisible();
+    expect((await enunciados(page)).at(-1)).toBe("No entendí. Decí confirmar o cancelar.");
+    await terminarLectura(page);
+    await expect(revision.getByText("Intento 2 de 3")).toBeVisible();
+    expect(registros).toHaveLength(0);
+  });
+
+  test("tras 3 intentos fallidos pasa a revisión manual con confirmación por clic", async ({ page }) => {
+    const { revision, registros } = await hastaEscuchar(page);
+
+    await simularResultadoFinal(page, "sí");
+    await terminarLectura(page);
+    await expect(revision.getByText("Intento 2 de 3")).toBeVisible();
+    await simularResultadoFinal(page, "no confirmo");
+    await terminarLectura(page);
+    await expect(revision.getByText("Intento 3 de 3")).toBeVisible();
+    await simularResultadoFinal(page, "dale");
+
+    await expect(revision.getByText("No pudimos confirmar por voz")).toBeVisible();
+    const confirmar = revision.getByRole("button", { name: "Confirmar registro" });
+    await expect(confirmar).toBeEnabled();
+    expect(registros).toHaveLength(0);
+
+    await confirmar.click();
+    await expect(revision.getByText("MEDICIÓN REGISTRADA")).toBeVisible();
+    expect(registros).toHaveLength(1);
+  });
+
+  test("sin síntesis de voz va directo a revisión manual con aviso", async ({ page }) => {
+    const { revision } = await llegarARevision(page, "no_disponible");
+
+    await expect(revision.getByText("No pudimos confirmar por voz")).toBeVisible();
+    await expect(
+      revision.getByText("Este navegador no puede leer los valores en voz alta."),
+    ).toBeVisible();
+    await expect(revision.getByRole("button", { name: "Confirmar registro" })).toBeEnabled();
   });
 });

@@ -46,7 +46,8 @@ function obtenerConstructor(): SpeechRecognitionConstructor | null {
 // - Chrome corta la sesión sola tras un silencio aunque continuous=true:
 //   reiniciamos automáticamente salvo que el corte haya sido por una acción
 //   del usuario (pausar/cerrar) o un error fatal.
-// - Firefox y Safari no implementan SpeechRecognition: se detecta al montar
+// - Firefox no implementa SpeechRecognition (Safari sí, como
+//   webkitSpeechRecognition, aunque menos estable): se detecta al montar
 //   (`soportado`) para que el modal muestre un estado explicativo en vez de
 //   un modal roto, en lugar de fallar recién al tocar "Dictar valores".
 // - Los resultados "interim" se pisan en cada evento; solo los "final" se

@@ -333,14 +333,10 @@ function RevisionDictadoVozModalBody({
               </div>
 
               {resultado.obligatoriosFaltantes.length > 0 && (
-                // TODO(backend, optilacteo-backend): medicion-manual.service.ts
-                // hoy rechaza el registro si falta algún parámetro obligatorio
-                // configurado para el tipo de materia prima. Eso bloquea un
-                // caso válido (dictar solo algunos parámetros), hay que
-                // relajarlo para que acepte registros parciales — afecta
-                // tanto a este flujo como al formulario manual
-                // (RegistrarMedicionManualTab). Mientras tanto, este aviso es
-                // solo informativo: no bloqueamos "Confirmar registro".
+                // Aviso solo informativo: el backend acepta registros
+                // parciales (medicion-manual.service.ts ya no exige el
+                // conjunto completo de obligatorios, AC3 corregido por
+                // HU-20), así que no bloquea "Confirmar registro".
                 <div className="flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
                   <Info className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>
