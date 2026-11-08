@@ -1891,6 +1891,30 @@ test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () 
     await expect(dialog.getByRole("button", { name: "Actualizar" })).toHaveCount(0);
     expect(gets).toEqual([]);
   });
+
+  // HU-78 CA8: si el back nunca responde, al vencer el timeout (10 s) se
+  // informa el motivo, se apaga la carga y no queda ninguna recomendación.
+  // En tiempo real: page.clock no afecta el timeout de axios (el adapter xhr
+  // usa XMLHttpRequest.timeout nativo, no setTimeout).
+  test("timeout de la recomendación: informa el motivo y no queda cargando", async ({ page }) => {
+    test.slow();
+    await page.route(/\/recomendaciones\/lote\/\d+/, () => {
+      // Nunca responde.
+    });
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Buscando una recomendación para este lote...")).toBeVisible();
+
+    await expect(
+      dialog.getByText("El servicio no respondió a tiempo. Intentá nuevamente."),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(dialog.getByText("Buscando una recomendación para este lote...")).toHaveCount(0);
+    await expect(dialog.getByText(/Destino recomendado por el sistema/)).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Aceptar recomendación" })).toHaveCount(0);
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  });
 });
 
 test.describe("HU-49 — sin otro destino activo en el catálogo", () => {

@@ -205,12 +205,32 @@ function RecomendacionDestinoApto({
     );
   }
 
+  // HU-78 CA6: con el back actual solo se distinguen tres resultados: hay
+  // recomendación, vacío (motivo desconocido) y error del servicio (HTTP o
+  // timeout).
+  // TODO(backend): pedir que GET /recomendaciones/lote/:loteId (y el futuro
+  // POST .../recalcular) devuelva el motivo cuando no hay sugerencia:
+  //   { motivo: "falta_datos" | "sin_historico" | "error_servicio" }
+  // Hoy http-ml-client.ts convierte cualquier falla del ml-service en
+  // insufficient_data y ml.service.ts devuelve null, así que todo llega vacío.
+  // Textos a usar cuando llegue el motivo (tomados del mock de HU-78):
+  //   - falta_datos: "Falta de datos" · "El lote no tiene los parámetros
+  //     mínimos requeridos por el modelo. Completalos y volvé a calcular."
+  //   - sin_historico: "Sin histórico suficiente" · "No hay lotes comparables
+  //     válidos." (el mock decía "Ni el mismo proveedor ni proveedores
+  //     similares superan el mínimo de comparación", pero el modelo no usa
+  //     proveedor: revisar con el PO).
+  //   - error_servicio: el bloque de abajo.
   if (error) {
     return (
       <div className="flex flex-col gap-2 rounded-lg border border-dashed border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-500/10">
         {header}
-        <p className="flex items-center gap-1.5 text-sm text-red-700 dark:text-red-400">
-          <AlertCircle className="h-4 w-4" /> {error}
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-red-700 dark:text-red-400">
+          <AlertCircle className="h-4 w-4" /> Error del servicio
+        </p>
+        <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          No se muestra un resultado anterior como si fuera nuevo.
         </p>
         <button
           type="button"
@@ -298,6 +318,11 @@ function RecomendacionDestinoApto({
     );
   }
 
+  // HU-78 CA10: no se muestra un badge "Calculada ahora" ni la hora de
+  // cálculo: GET /recomendaciones/lote/:loteId no trae cuándo se generó y la
+  // recomendación pudo haberse calculado al registrar el lote.
+  // TODO(backend): sumar createdAt a RecomendacionPendienteResponseDto para
+  // mostrar "Calculada el …" (y, con recalcular, distinguir la recién hecha).
   const nivelConfianza = derivarNivelConfianza(recomendacion.confianza);
   // HU-37 AC1: el destino recomendado no es una alternativa válida acá —
   // este selector es específicamente para elegir OTRO destino (si el
