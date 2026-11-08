@@ -184,9 +184,12 @@ function RecomendacionDestinoApto({
           refetch();
         }}
         disabled={isLoading}
+        title="Vuelve a leer la recomendación guardada para este lote"
         className="flex items-center gap-1 text-xs font-medium text-slate-400 transition hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:text-slate-300"
       >
-        <RotateCcw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} /> Recalcular
+        {/* TODO(backend): volver a "Recalcular" (CA7) cuando exista POST
+            /recomendaciones/lote/:loteId/recalcular; hoy solo se relee. */}
+        <RotateCcw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} /> Actualizar
       </button>
     </div>
   );

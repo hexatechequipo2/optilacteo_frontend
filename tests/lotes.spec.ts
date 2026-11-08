@@ -1745,11 +1745,11 @@ test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () 
 
   test("confianza media y baja muestran el badge correspondiente", async ({ page }) => {
     await mockRecomendacionPendiente(page, { ...RECOMENDACION_MOCK, confianza: 60 });
-    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Actualizar" }).click();
     await expect(page.getByRole("dialog").getByText("Confianza media")).toBeVisible();
 
     await mockRecomendacionPendiente(page, { ...RECOMENDACION_MOCK, confianza: 30 });
-    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Actualizar" }).click();
     await expect(page.getByRole("dialog").getByText("Confianza baja")).toBeVisible();
   });
 
@@ -1824,7 +1824,7 @@ test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () 
 
     const [response] = await Promise.all([
       page.waitForResponse((res) => /\/recomendaciones\/lote\/\d+/.test(res.url())),
-      page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click(),
+      page.getByRole("dialog").getByRole("button", { name: "Actualizar" }).click(),
     ]);
     expect(response.status()).toBe(200);
   });
@@ -1839,7 +1839,7 @@ test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () 
       });
     });
 
-    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Actualizar" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("No se pudo cargar la recomendación de destino.")).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Reintentar" })).toBeVisible();
@@ -1888,6 +1888,7 @@ test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () 
     await expect(dialog.getByText("Se habilita cuando el lote esté clasificado.")).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Aceptar recomendación" })).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: "Recalcular" })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Actualizar" })).toHaveCount(0);
     expect(gets).toEqual([]);
   });
 });
