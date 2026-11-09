@@ -23,7 +23,6 @@ import {
   X,
   KeyRound,
   Route,
-  Sparkles,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
@@ -67,7 +66,6 @@ export function Sidebar({ isOpen, onClose, isCollapsed }: SidebarProps) {
   const puedeVerLotes = entra("/lotes");
   const puedeVerRevisionCalidad = entra("/lotes/revision");
   const puedeVerConsultaLotes = entra("/lotes/consulta");
-  const puedeVerDestinoSugerido = entra("/lotes/destino-sugerido");
   const puedeVerMedicionManual = entra("/mediciones-manuales");
   const puedeVerIngresoCamara = entra("/ingreso-camara");
   const puedeVerSensores = entra("/sensores");
@@ -191,9 +189,6 @@ export function Sidebar({ isOpen, onClose, isCollapsed }: SidebarProps) {
     ...(puedeVerConsultaLotes
       ? [{ label: "Consulta de lotes", icon: Route, path: "/lotes/consulta" }]
       : []),
-    ...(puedeVerDestinoSugerido
-      ? [{ label: "Destino sugerido (IA)", icon: Sparkles, path: "/lotes/destino-sugerido" }]
-      : []),
     ...(puedeVerMedicionManual
       ? [{ label: "Medición manual", icon: FlaskConical, path: "/mediciones-manuales" }]
       : []),
@@ -224,17 +219,13 @@ export function Sidebar({ isOpen, onClose, isCollapsed }: SidebarProps) {
       : []),
   ];
 
-  // HU-78: la pantalla vive en /lotes/:codigo/destino-sugerido, que no
-  // cuelga del path de su ítem (/lotes/destino-sugerido); se normaliza a ese
-  // path para que se marque "Destino sugerido (IA)" y no "Lotes".
-  const rutaDelMenu = /^\/lotes\/[^/]+\/destino-sugerido$/.test(location.pathname)
-    ? "/lotes/destino-sugerido"
-    : location.pathname;
   // Match por prefijo más largo: /lotes/revision no puede activar
   // también "Lotes" (/lotes) solo porque comparte el prefijo.
   const rutaActiva = navItems
     .map((i) => i.path)
-    .filter((path) => rutaDelMenu === path || rutaDelMenu.startsWith(`${path}/`))
+    .filter(
+      (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
+    )
     .sort((a, b) => b.length - a.length)[0];
 
   // El modo colapsado es solo de escritorio: todo lo que oculta o reacomoda

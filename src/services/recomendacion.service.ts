@@ -6,17 +6,26 @@ import type {
   ResponderRecomendacionDto,
 } from "../types/recomendacionDestino.types";
 
+// HU-78 CA8: tope de espera de la recomendación, para que la tarjeta nunca
+// quede cargando. La instancia `api` no tiene timeout global.
+export const TIMEOUT_RECOMENDACION_MS = 10_000;
+
 export const recomendacionService = {
   // GET /recomendaciones/lote/:loteId: 200 con la recomendación pendiente,
   // o 200 con body vacío (Content-Length: 0) si no hay ninguna — NO es un
   // 404. axios no rompe acá: su transformResponse por defecto solo intenta
   // JSON.parse si `data` es truthy (ver node_modules/axios defaults.js),
   // así que un body vacío llega como "" sin lanzar.
+  // TODO(backend): sumar recalcular(loteId) con POST
+  // /recomendaciones/lote/:loteId/recalcular cuando exista; hoy el back solo
+  // genera la recomendación al crear el lote o registrar un consumo.
   getPendientePorLote: async (
     loteId: number,
+    opciones: { signal?: AbortSignal } = {},
   ): Promise<RecomendacionDestinoIA | null> => {
     const { data } = await api.get<RecomendacionDestinoIA | "">(
       `/recomendaciones/lote/${loteId}`,
+      { signal: opciones.signal, timeout: TIMEOUT_RECOMENDACION_MS },
     );
     return data ? data : null;
   },

@@ -1059,6 +1059,7 @@ export function LoteFormModal({
           {esEdicion && (
             <RecomendacionDestinoCard
               loteId={lote!.id}
+              clasificacion={lote!.clasificacion}
               destinoVigente={destinoHistorial.destinoVigente}
               divergenciaVigente={destinoHistorial.divergenciaVigente}
               onDestinoRespondido={destinoHistorial.refetch}
