@@ -96,8 +96,9 @@ const ESTADO_SEMAFORO_META: Record<
 };
 
 function formatearValor(valor: number, parametro: Parametro): string {
-  // Densidad con 3 decimales, el resto con 2 (mismo criterio del prototipo).
-  const decimales = parametro === Parametro.DENSIDAD ? 3 : 2;
+  // Densidad en kg/m³ (≈ 1030) con 1 decimal; el resto con 2. Con g/mL eran
+  // 3 decimales, que en kg/m³ quedaría "1030.000".
+  const decimales = parametro === Parametro.DENSIDAD ? 1 : 2;
   return valor.toFixed(decimales);
 }
 

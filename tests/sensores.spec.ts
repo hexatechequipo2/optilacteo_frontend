@@ -992,13 +992,13 @@ test.describe("EstadoDiagnosticoTab (HU-13) › Tiempo real", () => {
     const socket = await abrirEnVivo(page);
 
     socket.emitir("/sensores", "lectura:nueva", {
-      id: 900, sensorId: 3, loteId: 7, valor: 1.031, timestampLectura: AHORA.toISOString(),
+      id: 900, sensorId: 3, loteId: 7, valor: 1031, timestampLectura: AHORA.toISOString(),
       empresaId: 10, origen: "sensor", usuarioId: null,
     });
 
     const densidad = card(page, "Sensor Densidad Recepción");
-    await expect(densidad).toContainText("1.031");
-    await expect(densidad).toContainText("g/mL");
+    await expect(densidad).toContainText("1031");
+    await expect(densidad).toContainText("kg/m³");
     // Sin lote en el sensor, toma el de la lectura.
     await expect(densidad).toContainText("Lote #7");
     await expect(densidad).toContainText("ahora");

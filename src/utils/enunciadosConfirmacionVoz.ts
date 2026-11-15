@@ -6,12 +6,12 @@ import { PARAMETRO_LABEL } from "../pages/Sensores/constants/parametroSensor";
 // antes de pedir "confirmar". Un enunciado por ítem: Chrome corta los
 // textos largos y así cada parámetro queda separado.
 
-// Las unidades de UNIDAD_POR_PARAMETRO son símbolos ("°C", "g/mL") que el
+// Las unidades de UNIDAD_POR_PARAMETRO son símbolos ("°C", "kg/m³") que el
 // sintetizador lee mal; acá van como se dicen.
 const UNIDAD_HABLADA: Record<Parametro, string | undefined> = {
   [Parametro.PH]: undefined,
   [Parametro.TEMPERATURA]: "grados",
-  [Parametro.DENSIDAD]: "gramos por mililitro",
+  [Parametro.DENSIDAD]: "kilogramos por metro cúbico",
   [Parametro.GRASA]: "por ciento",
   [Parametro.PROTEINA]: "por ciento",
   [Parametro.ACIDEZ]: "grados Dornic",
