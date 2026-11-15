@@ -44,6 +44,23 @@ export const UnidadRendimiento = {
 
 export type UnidadRendimiento = (typeof UnidadRendimiento)[keyof typeof UnidadRendimiento];
 
+// HU-76 (criterio 7): parámetro que explica la clasificación vigente.
+// Espeja ParametroMotivoResponseDto del backend; llegan con los críticos primero.
+export type NivelMotivoClasificacion = "alerta" | "critico";
+export type OrigenMotivoClasificacion = "sensor" | "manual" | "inicial";
+
+export interface ClasificacionMotivo {
+  parametro: Parametro;
+  valor: number;
+  nivel: NivelMotivoClasificacion;
+  origen: OrigenMotivoClasificacion;
+  enRevisionPorConflicto: boolean;
+  umbralMin: number;
+  umbralMax: number;
+  umbralAlertaMin: number;
+  umbralAlertaMax: number;
+}
+
 export interface LoteParametro {
   parametro: Parametro;
   valor: number;
@@ -62,7 +79,12 @@ export interface Lote {
   tamboId: number; // HU-36: tambo de origen, obligatorio
   materiaPrima: TipoMateriaPrima;
   fechaIngreso: string; // ISO datetime
+  // HU-76: null = pendiente de clasificar (faltan parámetros o configuración).
   clasificacion: ClasificacionLote | null;
+  // HU-76: siempre array (vacío si no hay parámetros en alerta o críticos).
+  clasificacionMotivos: ClasificacionMotivo[];
+  // HU-22: true si la clasificación vigente viene de una aprobación manual.
+  clasificacionManual: boolean;
   destinoInicial: DestinoLote | null;
   ubicacionInicial?: Ubicacion | null;
   estado: EstadoLote;
@@ -118,7 +140,8 @@ export interface CreateLoteDto {
 // PATCH /lotes/:id (LoteService.update en el backend) solo aplica estos 3
 // campos aunque UpdateLoteDto sea un PartialType completo de CreateLoteDto:
 // no se puede editar código, proveedor, ubicacionInicial, parametros ni
-// clasificacion (autocalculada) de un lote ya registrado.
+// clasificacion (autocalculada, HU-76: el PATCH no la acepta) de un lote ya
+// registrado.
 export interface UpdateLoteDto {
   materiaPrima?: TipoMateriaPrima;
   fechaIngreso?: string;

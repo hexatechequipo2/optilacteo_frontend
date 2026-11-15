@@ -6,6 +6,7 @@ import { Input } from "../../../components/ui/Input";
 import { Select } from "../../../components/ui/Select";
 import { Button } from "../../../components/ui/Button";
 import { SectionHeader } from "../../../components/ui/SectionHeader";
+import { ClasificacionLoteResumen } from "./ClasificacionLoteResumen";
 import { useConsumosLote } from "../../../hooks/useConsumosLote";
 import { useLotesProduccion } from "../../../hooks/useLotesProduccion";
 import { useRegistrarConsumo } from "../../../hooks/useRegistrarConsumo";
@@ -260,6 +261,12 @@ export function TrazabilidadLoteModal({
               </p>
             </div>
           </div>
+        </div>
+
+        {/* HU-76: clasificación vigente y sus motivos */}
+        <div className="flex flex-col gap-3">
+          <SectionHeader>CLASIFICACIÓN</SectionHeader>
+          <ClasificacionLoteResumen lote={lote} />
         </div>
 
         {/* Parámetros de calidad al ingreso */}

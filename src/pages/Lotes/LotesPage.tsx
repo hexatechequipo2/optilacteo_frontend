@@ -3,7 +3,6 @@ import { CheckCircle2, FlaskConical, GitMerge, History, Pencil, Route, Search } 
 import { Layout } from "../../components/layout/Layout";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
-import { ClasificacionLoteBadge } from "../../components/ClasificacionLoteBadge";
 import { AuditoriaModal } from "../../components/AuditoriaModal";
 import { useLotes } from "../../hooks/useLotes";
 import { useSensores } from "../../hooks/useSensores";
@@ -20,6 +19,7 @@ import { DestinoLote, EstadoLote, UnidadRendimiento, type Lote } from "../../typ
 import type { Proveedor } from "../../types/proveedor.types";
 import type { Tambo } from "../../types/tambo.types";
 import type { ModuloPermiso } from "../../types/permisos.types";
+import { ClasificacionLoteResumen } from "./components/ClasificacionLoteResumen";
 import { LoteFormModal } from "./LoteFormModal";
 import { LoteMedicionesModal } from "./components/LoteMedicionesModal";
 import { TrazabilidadLoteModal } from "./components/TrazabilidadLoteModal";
@@ -490,11 +490,7 @@ export default function LotesPage() {
                     </td>
                     {puedeVerClasificacion && (
                       <td className="px-5 py-3">
-                        {lote.clasificacion ? (
-                          <ClasificacionLoteBadge resultado={lote.clasificacion} />
-                        ) : (
-                          <span className="text-slate-400 dark:text-slate-500">—</span>
-                        )}
+                        <ClasificacionLoteResumen lote={lote} compacto />
                       </td>
                     )}
                     <td className="px-3 py-3">
@@ -668,13 +664,7 @@ export default function LotesPage() {
 
                 {puedeVerClasificacion && (
                   <div>
-                    {lote.clasificacion ? (
-                      <ClasificacionLoteBadge resultado={lote.clasificacion} />
-                    ) : (
-                      <span className="text-xs text-slate-400 dark:text-slate-500">
-                        Sin clasificación
-                      </span>
-                    )}
+                    <ClasificacionLoteResumen lote={lote} compacto />
                   </div>
                 )}
 
