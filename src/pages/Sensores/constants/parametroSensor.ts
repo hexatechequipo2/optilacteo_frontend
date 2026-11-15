@@ -20,7 +20,7 @@ export const PARAMETRO_LABEL: Record<Parametro, string> = {
 export const UNIDAD_POR_PARAMETRO: Record<Parametro, string | undefined> = {
   [Parametro.PH]: undefined,
   [Parametro.TEMPERATURA]: "°C",
-  [Parametro.DENSIDAD]: "g/mL",
+  [Parametro.DENSIDAD]: "kg/m³",
   [Parametro.GRASA]: "%",
   [Parametro.PROTEINA]: "%",
   [Parametro.ACIDEZ]: "°D",

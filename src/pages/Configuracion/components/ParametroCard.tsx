@@ -90,8 +90,9 @@ export function ParametroCard({
     setErrorServidor(null);
   }, [config, tipoMateriaPrima]);
 
-  const errores = validarUmbrales(input, meta.rangoFisico);
+  const errores = validarUmbrales(input, meta.rangoFisico, meta.ejemplo);
   const esValido = Object.keys(errores).length === 0;
+  const completos = CAMPOS_UMBRAL.every((campo) => input[campo].trim() !== "");
   const umbrales = esValido ? inputAUmbrales(input) : undefined;
   const sinCambios = config
     ? umbrales !== undefined && umbralesIguales(umbrales, config)
@@ -190,9 +191,10 @@ export function ParametroCard({
               </label>
               <input
                 id={id}
-                type="number"
+                // text + inputMode: type="number" no acepta coma en todos los navegadores.
+                type="text"
                 inputMode="decimal"
-                step="any"
+                placeholder={meta.ejemplo}
                 value={input[campo]}
                 disabled={isSaving || !puedeGuardar}
                 aria-invalid={error ? true : undefined}
@@ -218,7 +220,31 @@ export function ParametroCard({
         })}
       </div>
 
-      <ZonasSemaforoBar umbrales={umbrales} rangoFisico={meta.rangoFisico} />
+      {meta.ejemplo && (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Valores en {meta.unidad}, entre {meta.rangoFisico.min} y{" "}
+          {meta.rangoFisico.max} (ej.: {meta.ejemplo}). Podés usar coma decimal.
+        </p>
+      )}
+
+      <ZonasSemaforoBar
+        umbrales={umbrales}
+        completos={completos}
+        rangoFisico={meta.rangoFisico}
+      />
+
+      {intentoGuardar && !esValido && (
+        <p
+          role="alert"
+          className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-500/15 dark:text-red-400"
+        >
+          No se guardó: revisá los valores marcados
+          {meta.ejemplo
+            ? ` (se esperan ${meta.unidad}, ej.: ${meta.ejemplo})`
+            : ""}
+          .
+        </p>
+      )}
 
       {errorServidor && (
         <p
