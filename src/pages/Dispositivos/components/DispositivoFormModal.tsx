@@ -14,6 +14,7 @@ import {
   type FormaConexion,
   type TipoSenal,
 } from "../constants/dispositivos";
+import { aFechaCalendario } from "../../../utils/fechaCalendario";
 
 interface FormValues {
   nombre: string;
@@ -45,7 +46,7 @@ const VALORES_INICIALES: FormValues = {
   rangoMin: "",
   rangoMax: "",
   unidad: "",
-  fechaCalibracion: new Date().toISOString().slice(0, 10),
+  fechaCalibracion: aFechaCalendario(),
   formaConexion: "directa",
 };
 

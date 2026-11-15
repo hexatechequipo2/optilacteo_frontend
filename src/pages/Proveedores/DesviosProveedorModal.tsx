@@ -4,6 +4,18 @@ import { SectionHeader } from "../../components/ui/SectionHeader";
 import { useDesviosProveedor } from "../../hooks/useDesviosProveedor";
 import { PARAMETRO_LABEL, UNIDAD_POR_PARAMETRO } from "../Sensores/constants/parametroSensor";
 import type { Proveedor } from "../../types/proveedor.types";
+import type { UnidadCantidadDesvio } from "../../types/desvioProveedor.types";
+
+const UNIDAD_CANTIDAD_ABREV: Record<UnidadCantidadDesvio, string> = {
+  litros: "L",
+  kilogramos: "kg",
+};
+
+// HU-74: nunca mostrar "null" — sin valor se muestra "Sin dato".
+function formatCantidad(valor: number | null, unidad: UnidadCantidadDesvio | null) {
+  if (valor == null) return "Sin dato";
+  return unidad ? `${valor} ${UNIDAD_CANTIDAD_ABREV[unidad]}` : `${valor}`;
+}
 
 interface DesviosProveedorModalProps {
   isOpen: boolean;
@@ -15,7 +27,16 @@ interface DesviosProveedorModalProps {
 // no manda un flag de "significativo" para este endpoint (a diferencia de
 // HU-24/comparación histórica) — acá solo se indica el signo: positivo
 // (recibiste más/mejor de lo prometido) en verde, negativo en rojo.
-function IndicadorDesvio({ valor }: { valor: number }) {
+// HU-74: null = no comparable (unidades distintas, falta un valor o
+// comprometido 0) — estilo neutro, sin ícono de tendencia.
+function IndicadorDesvio({ valor }: { valor: number | null }) {
+  if (valor == null) {
+    return (
+      <span className="inline-flex items-center gap-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+        No comparable
+      </span>
+    );
+  }
   const Icono = valor > 0 ? TrendingUp : valor < 0 ? TrendingDown : Minus;
   const color =
     valor > 0
@@ -49,7 +70,11 @@ export function DesviosProveedorModal({ isOpen, proveedor, onClose }: DesviosPro
       onClose={onClose}
     >
       <div className="flex flex-col gap-6">
-        {error && (
+        {isLoading ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Cargando historial de desvíos...
+          </p>
+        ) : error ? (
           <div className="flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
             <span>{error}</span>
             <button
@@ -60,15 +85,9 @@ export function DesviosProveedorModal({ isOpen, proveedor, onClose }: DesviosPro
               Reintentar
             </button>
           </div>
-        )}
-
-        {isLoading ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Cargando historial de desvíos...
-          </p>
         ) : !desvios ? null : desvios.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Este proveedor todavía no tiene lotes con remito cargado.
+            Este proveedor todavía no tiene lotes con remito cargado
           </p>
         ) : (
           <div className="flex flex-col gap-4">
@@ -88,7 +107,8 @@ export function DesviosProveedorModal({ isOpen, proveedor, onClose }: DesviosPro
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Cantidad: {lote.cantidadComprometidaKg} comprometido — {lote.cantidadReal}{" "}
+                      Cantidad: {formatCantidad(lote.cantidadComprometidaKg, "kilogramos")}{" "}
+                      comprometido — {formatCantidad(lote.cantidadReal, lote.unidadCantidadReal)}{" "}
                       recibido
                     </p>
                     <IndicadorDesvio valor={lote.desvioCantidadPorcentaje} />
@@ -111,8 +131,8 @@ export function DesviosProveedorModal({ isOpen, proveedor, onClose }: DesviosPro
                           >
                             <span className="text-slate-700 dark:text-slate-300">
                               {nombre}: {p.valorComprometido}
-                              {unidad} comprometido — {p.valorReal}
-                              {unidad} recibido
+                              {unidad} comprometido —{" "}
+                              {p.valorReal == null ? "Sin dato" : `${p.valorReal}${unidad}`} recibido
                             </span>
                             <IndicadorDesvio valor={p.desvioPorcentaje} />
                           </li>

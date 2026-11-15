@@ -1,4 +1,5 @@
 import axios from "axios";
+import { mensajeErrorApi } from "../utils/mensajeErrorApi";
 import {
   AccionVencimiento,
   EntidadRetenible,
@@ -172,13 +173,10 @@ export const retencionService = {
   },
 };
 
-// Contempla los dos orígenes: el Error del mock y el 400 de axios que va a
+// Contempla los dos orígenes: el Error del mock y el error de axios que va a
 // devolver el backend real.
 export function extraerMensajeError(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && err.response?.data?.message) {
-    const { message } = err.response.data;
-    return Array.isArray(message) ? message.join(" ") : message;
-  }
+  if (axios.isAxiosError(err)) return mensajeErrorApi(err, fallback);
   if (err instanceof Error && err.message) return err.message;
   return fallback;
 }

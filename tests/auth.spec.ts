@@ -118,6 +118,66 @@ test.describe("LoginPage", () => {
     ).toBeVisible();
   });
 
+  test("429 por rate limit pide esperar un minuto", async ({ page }) => {
+    await page.route("**/login", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify("ThrottlerException: Too Many Requests"),
+      });
+    });
+
+    await page.goto("/login");
+    await page.getByLabel("Correo corporativo").fill("admin@optilacteo.com");
+    await page.locator("#password").fill("password123");
+    await page.getByRole("button", { name: "Ingresar a la consola" }).click();
+
+    await expect(
+      page.getByText("Demasiados intentos. Esperá un minuto y volvé a intentar."),
+    ).toBeVisible();
+  });
+
+  test("429 con Retry-After usa ese tiempo", async ({ page }) => {
+    await page.route("**/login", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        headers: { "Retry-After": "30", "Access-Control-Expose-Headers": "Retry-After" },
+        body: JSON.stringify("ThrottlerException: Too Many Requests"),
+      });
+    });
+
+    await page.goto("/login");
+    await page.getByLabel("Correo corporativo").fill("admin@optilacteo.com");
+    await page.locator("#password").fill("password123");
+    await page.getByRole("button", { name: "Ingresar a la consola" }).click();
+
+    await expect(
+      page.getByText("Demasiados intentos. Esperá 30 segundos y volvé a intentar."),
+    ).toBeVisible();
+  });
+
+  test("500 muestra el mensaje genérico y no el técnico", async ({ page }) => {
+    await page.route("**/login", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ statusCode: 500, message: "Internal server error" }),
+      });
+    });
+
+    await page.goto("/login");
+    await page.getByLabel("Correo corporativo").fill("admin@optilacteo.com");
+    await page.locator("#password").fill("password123");
+    await page.getByRole("button", { name: "Ingresar a la consola" }).click();
+
+    await expect(page.getByText("Ocurrió un error inesperado.")).toBeVisible();
+    await expect(page.getByText("Internal server error")).toHaveCount(0);
+  });
+
   test("toggle de mostrar/ocultar contraseña funciona", async ({ page }) => {
     await page.goto("/login");
     const passwordInput = page.locator("#password");

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { serializarRangoCalendario } from "../utils/fechaCalendario";
 import api from "./api";
 import type {
   EvolucionIndicadoresQuery,
@@ -24,7 +25,10 @@ export const evolucionIndicadoresService = {
         params: {
           periodo,
           indicadores: indicadores.join(","),
-          ...(periodo === "rango" ? { desde, hasta } : {}),
+          // HU-75: días calendario inclusivos, sin pasar por Date.
+          ...(periodo === "rango"
+            ? serializarRangoCalendario({ desde: desde ?? "", hasta: hasta ?? "" })
+            : {}),
         },
       },
     );
@@ -32,15 +36,9 @@ export const evolucionIndicadoresService = {
   },
 };
 
-// Mismo helper que tambo.service.ts / medicionManual.service.ts / etc:
-// el backend responde 400 con mensaje descriptivo para rango inválido
-// (hasta < desde) o falta de indicadores — se lo pasa tal cual al usuario
-// en vez de un genérico, así se cumple el criterio de prueba de HU-39
-// ("mostrar el error que devuelve el back, no romper").
-export function extraerMensajeError(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && err.response?.data?.message) {
-    const { message } = err.response.data;
-    return Array.isArray(message) ? message.join(" ") : message;
-  }
-  return fallback;
+// HU-75: un 400 es un error de validación de la consulta (se muestra el
+// mensaje del backend, reintentar daría lo mismo); cualquier otra falla
+// (red caída, 5xx) es un error de consulta que sí vale la pena reintentar.
+export function esErrorValidacion(err: unknown): boolean {
+  return axios.isAxiosError(err) && err.response?.status === 400;
 }

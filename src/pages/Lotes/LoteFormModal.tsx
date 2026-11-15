@@ -14,6 +14,7 @@ import { useConfigParametros } from "../../hooks/useConfigParametros";
 import { useTambosPorProveedor } from "../../hooks/useTambos";
 import { usePermisos } from "../../hooks/usePermisos";
 import { RecomendacionDestinoCard } from "./components/RecomendacionDestinoCard";
+import { ClasificacionLoteResumen } from "./components/ClasificacionLoteResumen";
 import { useCatalogoDestinosProductivos } from "../../hooks/useCatalogoDestinosProductivos";
 import { useDestinoProductivoLote } from "../../hooks/useDestinoProductivoLote";
 import {
@@ -36,6 +37,7 @@ import {
   type UpdateLoteDto,
 } from "../../types/lote.types";
 import type { Proveedor } from "../../types/proveedor.types";
+import { aFechaCalendario } from "../../utils/fechaCalendario";
 
 const UBICACION_OPTIONS = [
   { value: "", label: "Sin definir" },
@@ -115,7 +117,7 @@ function buildInitialValues(lote?: Lote): FormValues {
       proveedorId: "",
       tamboId: "",
       materiaPrima: TipoMateriaPrima.LECHE_CRUDA,
-      fechaIngreso: new Date().toISOString().slice(0, 10),
+      fechaIngreso: aFechaCalendario(),
       cantidad: "",
       parametros: buildParametrosVacios(),
       destinoInicial: "",
@@ -164,11 +166,7 @@ function buscarConfig(
   );
 }
 
-function validate(
-  values: FormValues,
-  configs: ConfigParametro[],
-  esEdicion: boolean,
-): FormErrors {
+function validate(values: FormValues, esEdicion: boolean): FormErrors {
   const errors: FormErrors = {};
 
   if (!values.proveedorId) errors.proveedorId = "El proveedor es obligatorio";
@@ -197,8 +195,8 @@ function validate(
   }
 
   // Los parámetros son opcionales campo por campo, pero el backend exige al
-  // menos uno (@ArrayMinSize(1) en CreateLoteDto): solo se valida formato y
-  // rango de los que sí tengan un valor cargado.
+  // menos uno (@ArrayMinSize(1) en CreateLoteDto): solo se valida el formato
+  // de los que sí tengan un valor cargado.
   const parametrosErrors: Partial<Record<ParametroVisible, string>> = {};
   let algunoCargado = false;
   for (const parametro of ORDEN_PARAMETROS) {
@@ -212,17 +210,9 @@ function validate(
       parametrosErrors[parametro] = "Debe ser numérico";
       continue;
     }
-
-    // El rol Responsable de calidad no tiene acceso de lectura a GET
-    // /config-parametros (solo Gerente, ver config-parametro.controller.ts),
-    // así que "configs" puede llegar vacío aunque los umbrales sí existan.
-    // Cuando no hay match no bloqueamos en el cliente: el backend vuelve a
-    // validar el rango real en el POST /lotes y devuelve el error ahí.
-    const config = buscarConfig(configs, parametro, values.materiaPrima);
-    if (config && (valor < config.umbralMin || valor > config.umbralMax)) {
-      parametrosErrors[parametro] =
-        `Debe estar entre ${config.umbralMin} y ${config.umbralMax}`;
-    }
+    // HU-76: un valor fuera de umbral no bloquea. El back guarda el lote, lo
+    // clasifica (No Apto) y lo informa en warnings/clasificacionMotivos. El
+    // rango físico imposible lo rechaza el back con 422.
   }
   if (Object.keys(parametrosErrors).length > 0)
     errors.parametros = parametrosErrors;
@@ -285,7 +275,7 @@ interface LoteFormModalProps {
   onUpdate: (id: number, dto: UpdateLoteDto) => Promise<Lote>;
 }
 
-type Paso = "form" | "asociar" | "warnings";
+type Paso = "form" | "asociar" | "resultado";
 
 export function LoteFormModal({
   isOpen,
@@ -328,6 +318,9 @@ export function LoteFormModal({
   // en vez de pedirlos aparte.
   const [paso, setPaso] = useState<Paso>("form");
   const [loteCreadoId, setLoteCreadoId] = useState<number | null>(null);
+  // HU-76: lote devuelto por POST /lotes, para mostrar su clasificación
+  // (Apto / No Apto / Pendiente) apenas se guarda.
+  const [loteCreado, setLoteCreado] = useState<Lote | null>(null);
   const [sensoresDisponibles, setSensoresDisponibles] = useState<Sensor[]>([]);
   const [sensoresSeleccionados, setSensoresSeleccionados] = useState<
     Set<number>
@@ -335,9 +328,9 @@ export function LoteFormModal({
   const [isAsociando, setIsAsociando] = useState(false);
   const [asociarError, setAsociarError] = useState("");
 
-  // Advertencias no bloqueantes de POST /lotes (ej. parámetro fuera de rango
-  // o sin config de umbral): el lote se guarda igual, pero no queremos que
-  // se pierdan silenciosamente cerrando el modal solo.
+  // Textos informativos de POST /lotes (ej. parámetro fuera de umbral o
+  // pendiente por parámetros faltantes): el lote se guarda igual, se
+  // muestran junto al resultado de la clasificación.
   const [warnings, setWarnings] = useState<string[]>([]);
 
   // HU-69: si ya se tocó el campo de número de remito — recién ahí se
@@ -355,6 +348,7 @@ export function LoteFormModal({
     setCerrarCicloMensaje("");
     setPaso("form");
     setLoteCreadoId(null);
+    setLoteCreado(null);
     setSensoresDisponibles([]);
     setSensoresSeleccionados(new Set());
     setAsociarError("");
@@ -490,7 +484,7 @@ export function LoteFormModal({
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setServerError("");
-    const validationErrors = validate(values, configs, esEdicion);
+    const validationErrors = validate(values, esEdicion);
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
@@ -570,15 +564,14 @@ export function LoteFormModal({
         );
       }
       setWarnings(advertencias);
+      setLoteCreado(respuesta.lote);
 
       if (respuesta.sensoresDisponibles.length > 0) {
         setLoteCreadoId(respuesta.lote.id);
         setSensoresDisponibles(respuesta.sensoresDisponibles);
         setPaso("asociar");
-      } else if (advertencias.length > 0) {
-        setPaso("warnings");
       } else {
-        onClose();
+        setPaso("resultado");
       }
     } catch (err) {
       setServerError(
@@ -624,30 +617,55 @@ export function LoteFormModal({
     }
   };
 
-  if (paso === "warnings") {
+  // HU-76: resultado de la clasificación + textos informativos del back.
+  // No bloquea: el lote ya está guardado, sea Apto, No Apto o Pendiente.
+  const resultadoRegistro = (
+    <>
+      {loteCreado && (
+        <div className="flex flex-col gap-2 rounded-md border border-slate-200 px-4 py-3 dark:border-slate-800">
+          <SectionHeader>CLASIFICACIÓN AUTOMÁTICA</SectionHeader>
+          <ClasificacionLoteResumen lote={loteCreado} />
+        </div>
+      )}
+      {warnings.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Información del registro
+          </p>
+          {warnings.map((w, i) => (
+            <div
+              key={i}
+              className="rounded-md bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:bg-slate-800/60 dark:text-slate-300"
+            >
+              {w}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+
+  if (paso === "resultado") {
     return (
       <Modal
         isOpen={isOpen}
         title="Lote registrado"
-        description="El lote se guardó correctamente, pero hay advertencias para revisar"
+        description={
+          loteCreado
+            ? `El lote ${loteCreado.codigo} se guardó. Resultado de la clasificación automática:`
+            : "El lote se guardó correctamente."
+        }
         onClose={onClose}
         footer={
           <div className="flex justify-end">
             <Button type="button" className="!w-auto px-6" onClick={onClose}>
-              Entendido, cerrar
+              Cerrar
             </Button>
           </div>
         }
       >
         <div className="flex flex-col gap-3">
-          {warnings.map((w, i) => (
-            <div
-              key={i}
-              className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
-            >
-              {w}
-            </div>
-          ))}
+          {resultadoRegistro}
         </div>
       </Modal>
     );
@@ -681,14 +699,7 @@ export function LoteFormModal({
         }
       >
         <div className="flex flex-col gap-3">
-          {warnings.map((w, i) => (
-            <div
-              key={i}
-              className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
-            >
-              {w}
-            </div>
-          ))}
+          {resultadoRegistro}
           {sensoresDisponibles.map((sensor) => (
             <label
               key={sensor.id}
@@ -906,6 +917,14 @@ export function LoteFormModal({
           )}
         </div>
 
+        {/* HU-76: clasificación vigente, de solo lectura (el PATCH no la acepta). */}
+        {esEdicion && (
+          <div className="flex flex-col gap-3">
+            <SectionHeader>CLASIFICACIÓN</SectionHeader>
+            <ClasificacionLoteResumen lote={lote!} />
+          </div>
+        )}
+
         {/* Parámetros de calidad: PATCH /lotes/:id no los acepta (ver
             UpdateLoteDto), así que en edición se muestran de solo lectura. */}
         <div className="flex flex-col gap-3">
@@ -1058,6 +1077,7 @@ export function LoteFormModal({
           {esEdicion && (
             <RecomendacionDestinoCard
               loteId={lote!.id}
+              clasificacion={lote!.clasificacion}
               destinoVigente={destinoHistorial.destinoVigente}
               divergenciaVigente={destinoHistorial.divergenciaVigente}
               onDestinoRespondido={destinoHistorial.refetch}

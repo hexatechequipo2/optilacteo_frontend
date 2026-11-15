@@ -1,4 +1,4 @@
-import axios from "axios";
+import { mensajeErrorApi } from "../utils/mensajeErrorApi";
 import api from "./api";
 import type { CreateSkuDto, Sku } from "../types/sku.types";
 
@@ -23,9 +23,5 @@ export const skuService = {
 };
 
 export function extraerMensajeError(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && err.response?.data?.message) {
-    const { message } = err.response.data;
-    return Array.isArray(message) ? message.join(" ") : message;
-  }
-  return fallback;
+  return mensajeErrorApi(err, fallback);
 }

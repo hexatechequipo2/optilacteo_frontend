@@ -15,9 +15,10 @@ import type {
   HistorialAlertasFilterQuery,
   HistorialAlertasResponse,
 } from "../types/historialAlertas.types";
+import { aFechaCalendario } from "../utils/fechaCalendario";
 
 function nombreArchivo(extension: string): string {
-  return `historial-alertas-${new Date().toISOString().slice(0, 10)}.${extension}`;
+  return `historial-alertas-${aFechaCalendario()}.${extension}`;
 }
 
 // Mismo patrón que historialMedicionesService.exportCsv (HU-19): blob +

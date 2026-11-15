@@ -270,6 +270,10 @@ async function mockIngresoCamaraDeps(
 }
 
 test.describe("IngresoCamaraPage (HU-67)", () => {
+  // El form manda el mediodía local del día elegido: se fija el huso del
+  // navegador para que el ISO esperado no dependa de la máquina.
+  test.use({ timezoneId: "America/Argentina/Cordoba" });
+
   test("muestra el historial de ingresos con SKU, cantidad, lote de origen y fecha", async ({ page }) => {
     await mockIngresoCamaraDeps(page);
     await loginAsResponsableProduccion(page);
@@ -317,7 +321,8 @@ test.describe("IngresoCamaraPage (HU-67)", () => {
       skuId: 2,
       cantidad: 25,
       loteId: 5,
-      fechaIngreso: "2026-08-11T00:00:00.000Z",
+      // 11/08 12:00 AR (mediodía local del día elegido) = 15:00 UTC.
+      fechaIngreso: "2026-08-11T15:00:00.000Z",
     });
     await expect(dialog).not.toBeVisible();
   });

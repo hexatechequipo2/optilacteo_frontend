@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
 import { CheckCircle } from "lucide-react";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { QLLogo } from "../../components/ui/QLLogo";
 import { authService } from "../../services/auth.service";
+import { mensajeErrorApi } from "../../utils/mensajeErrorApi";
 
 function validateEmail(email: string): string {
   if (!email.trim()) return "El correo es obligatorio";
@@ -33,11 +33,9 @@ export default function ForgotPasswordPage() {
       await authService.requestPasswordReset(email);
       setSuccess(true);
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.data?.message) {
-        setServerError(err.response.data.message);
-      } else {
-        setServerError("No se pudo conectar con el servidor. Intentá nuevamente.");
-      }
+      setServerError(
+        mensajeErrorApi(err, "No se pudo conectar con el servidor. Intentá nuevamente."),
+      );
     } finally {
       setIsSubmitting(false);
     }

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { mensajeErrorApi } from "../utils/mensajeErrorApi";
 import api from "./api";
 import type {
   CreateLoteDto,
@@ -14,7 +15,21 @@ import type {
 import type { ComparacionHistoricaLote } from "../types/comparacionHistorica.types";
 import type { DesvioProveedorLote } from "../types/desvioProveedor.types";
 import type { TrazabilidadLoteResponse } from "../types/trazabilidad.types";
+import type {
+  ConsultaLotesProduccionQuery,
+  ConsultaLotesProduccionResponse,
+  TrazabilidadProduccionResponse,
+} from "../types/consultaLotesProduccion.types";
 import type { DestinoHistorialItem } from "../types/destinoProductivoHistorial.types";
+
+// HU-76: el back siempre manda clasificacionMotivos (array) y clasificacionManual.
+// Se normaliza por si llega un lote sin esos campos (respuestas o mocks previos).
+const normalizarLote = (lote: Lote): Lote => ({
+  ...lote,
+  clasificacion: lote.clasificacion ?? null,
+  clasificacionMotivos: lote.clasificacionMotivos ?? [],
+  clasificacionManual: lote.clasificacionManual ?? false,
+});
 
 // El backend valida existencia del proveedor, rangos de parámetros y unicidad
 // del código directamente (404/400/409 con mensaje); no hace falta duplicar
@@ -26,7 +41,7 @@ export const loteService = {
     const { data } = await api.get<PaginatedLotes>("/lotes", {
       params: { limit: 100, ...filters },
     });
-    return data.data;
+    return data.data.map(normalizarLote);
   },
 
   // Pide 1 solo registro para leer el "total" del paginado sin traer todos
@@ -43,12 +58,12 @@ export const loteService = {
   // candidatos a asociar (ver LoteFormModal.tsx).
   create: async (dto: CreateLoteDto): Promise<LoteCreateResponse> => {
     const { data } = await api.post<LoteCreateResponse>("/lotes", dto);
-    return data;
+    return { ...data, lote: normalizarLote(data.lote) };
   },
 
   update: async (id: number, dto: UpdateLoteDto): Promise<Lote> => {
     const { data } = await api.patch<Lote>(`/lotes/${id}`, dto);
-    return data;
+    return normalizarLote(data);
   },
 
   // PATCH /lotes/:id/finalizar (lote.controller.ts): HU-62 amplió el rol
@@ -58,7 +73,7 @@ export const loteService = {
   // envía `rendimiento` si el usuario lo cargó en el modal.
   finalizar: async (id: number, dto?: FinalizarLoteDto): Promise<Lote> => {
     const { data } = await api.patch<Lote>(`/lotes/${id}/finalizar`, dto);
-    return data;
+    return normalizarLote(data);
   },
 
   // HU-22: bandeja dedicada de lotes No Apto sin revisión vigente (el
@@ -66,7 +81,7 @@ export const loteService = {
   // reclasificaron de nuevo). No está paginado.
   getNoAptos: async (): Promise<Lote[]> => {
     const { data } = await api.get<Lote[]>("/lotes/no-aptos");
-    return data;
+    return data.map(normalizarLote);
   },
 
   // POST /lotes/:id/revision devuelve el lote actualizado completo (no solo
@@ -75,7 +90,7 @@ export const loteService = {
   // cual vía extraerMensajeError).
   revisar: async (id: number, dto: RevisarLoteDto): Promise<Lote> => {
     const { data } = await api.post<Lote>(`/lotes/${id}/revision`, dto);
-    return data;
+    return normalizarLote(data);
   },
 
   getHistorialRevisiones: async (id: number): Promise<LoteRevision[]> => {
@@ -96,9 +111,40 @@ export const loteService = {
   // proveedor. El backend filtra solo lotes con cantidadComprometidaKg
   // cargado (array vacío si no hay desvíos, 404 si el proveedor no existe o
   // es de otra empresa — extraerMensajeError ya cubre ese caso).
-  getDesviosPorProveedor: async (proveedorId: number): Promise<DesvioProveedorLote[]> => {
+  getDesviosPorProveedor: async (
+    proveedorId: number,
+    signal?: AbortSignal,
+  ): Promise<DesvioProveedorLote[]> => {
     const { data } = await api.get<DesvioProveedorLote[]>(
       `/lotes/proveedor/${proveedorId}/desvios`,
+      { signal },
+    );
+    return data;
+  },
+
+  // HU-77: consulta de lotes de producción con filtros, orden y paginado.
+  // Solo se mandan los filtros cargados (axios omite los undefined). Las
+  // fechas viajan como "YYYY-MM-DD" (HU-75); el back valida formato y rango.
+  consultarProducciones: async (
+    query: ConsultaLotesProduccionQuery,
+    signal?: AbortSignal,
+  ): Promise<ConsultaLotesProduccionResponse> => {
+    const { data } = await api.get<ConsultaLotesProduccionResponse>(
+      "/lotes/producciones/consulta",
+      { params: query, signal },
+    );
+    return data;
+  },
+
+  // HU-77 (criterio 7): cabecera del lote de producción + eventos de sus
+  // lotes de origen. 404 si no existe o es de otra empresa.
+  getTrazabilidadProduccion: async (
+    id: number,
+    signal?: AbortSignal,
+  ): Promise<TrazabilidadProduccionResponse> => {
+    const { data } = await api.get<TrazabilidadProduccionResponse>(
+      `/lotes/producciones/${id}/trazabilidad`,
+      { signal },
     );
     return data;
   },
@@ -159,7 +205,7 @@ export const loteService = {
     const { data } = await api.patch<Lote>(`/lotes/${id}/destino-productivo`, {
       destinoProductivoId,
     });
-    return data;
+    return normalizarLote(data);
   },
 };
 
@@ -177,9 +223,5 @@ async function parsearErrorBlob(err: unknown): Promise<unknown> {
 }
 
 export function extraerMensajeError(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && err.response?.data?.message) {
-    const { message } = err.response.data;
-    return Array.isArray(message) ? message.join(" ") : message;
-  }
-  return fallback;
+  return mensajeErrorApi(err, fallback);
 }

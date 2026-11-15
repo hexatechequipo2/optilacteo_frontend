@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   X,
   KeyRound,
+  Route,
 } from "lucide-react";
 import { usuariosService } from "../../services/usuarios.service";
 import { empresasService } from "../../services/empresa.service";
@@ -37,9 +38,10 @@ import optilacteoLogo from "../../assets/images/optilacteo_logo.png";
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  isCollapsed: boolean;
 }
 
-export function Sidebar({ isOpen, onClose }: SidebarProps) {
+export function Sidebar({ isOpen, onClose, isCollapsed }: SidebarProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,8 +50,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const permisos = usePermisos();
   const entra = (ruta: RutaApp) => puedeEntrarA(ruta, permisos);
 
-  // Badge abreviado (solo visual, no gatea nada).
-  const esResponsableProduccion = user?.rolNombre === "Responsable de producción";
   // La visibilidad de cada ítem sale de la misma regla que protege la ruta
   // (utils/accesoRutas.ts), así menú y ProtectedRoute no se desalinean.
   const puedeVerDashboard = entra("/dashboard");
@@ -65,6 +65,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const puedeVerTambos = entra("/tambos");
   const puedeVerLotes = entra("/lotes");
   const puedeVerRevisionCalidad = entra("/lotes/revision");
+  const puedeVerConsultaLotes = entra("/lotes/consulta");
   const puedeVerMedicionManual = entra("/mediciones-manuales");
   const puedeVerIngresoCamara = entra("/ingreso-camara");
   const puedeVerSensores = entra("/sensores");
@@ -185,6 +186,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(puedeVerLotes
       ? [{ label: "Lotes", icon: ClipboardList, count: counts.lotes, path: "/lotes" }]
       : []),
+    ...(puedeVerConsultaLotes
+      ? [{ label: "Consulta de lotes", icon: Route, path: "/lotes/consulta" }]
+      : []),
     ...(puedeVerMedicionManual
       ? [{ label: "Medición manual", icon: FlaskConical, path: "/mediciones-manuales" }]
       : []),
@@ -215,13 +219,28 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       : []),
   ];
 
+  // Match por prefijo más largo: /lotes/revision no puede activar
+  // también "Lotes" (/lotes) solo porque comparte el prefijo.
+  const rutaActiva = navItems
+    .map((i) => i.path)
+    .filter(
+      (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
+    )
+    .sort((a, b) => b.length - a.length)[0];
+
+  // El modo colapsado es solo de escritorio: todo lo que oculta o reacomoda
+  // va con prefijo lg:, así el drawer de mobile se ve siempre completo
+  // aunque haya quedado guardado "colapsado".
+  const ocultoSiColapsado = isCollapsed ? "lg:hidden" : "";
+
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex h-screen w-70 flex-shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm transition-transform duration-300 print:hidden dark:border-slate-800 dark:bg-slate-900 dark:shadow-none lg:static lg:translate-x-0 ${
-        isOpen ? "translate-x-0" : "-translate-x-full"
-      }`}
+      id="sidebar-principal"
+      className={`fixed inset-y-0 left-0 z-40 flex h-screen w-70 flex-shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white shadow-sm transition-[translate,width] duration-300 print:hidden dark:border-slate-800 dark:bg-slate-900 dark:shadow-none lg:static lg:translate-x-0 ${
+        isCollapsed ? "lg:w-18" : ""
+      } ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
     >
-      <div className="flex items-center gap-3 border-b border-slate-200 p-4 dark:border-slate-800">
+      <div className="flex items-start gap-3 border-b border-slate-200 p-4 dark:border-slate-800">
         {isLoadingEmpresa ? (
           <div className="h-10 w-10 flex-shrink-0 animate-pulse rounded-md bg-slate-100 dark:bg-slate-800" />
         ) : (
@@ -232,26 +251,32 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           />
         )}
 
-        <div className="min-w-0 flex-1">
+        {/* HU-81: nombre de empresa y rol en líneas propias, cada uno en su
+            propio renglón, en vez de compartir una fila con truncate — así
+            un rol largo (ej. "Responsable de producción") ya no empuja ni
+            recorta el nombre de la empresa, sea cual sea su longitud. */}
+        <div className={`flex min-w-0 flex-1 flex-col gap-1.5 ${ocultoSiColapsado}`}>
           {isLoadingEmpresa ? (
             <div className="h-5 w-32 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
           ) : (
-            <h1 className="truncate text-xl font-bold text-slate-900 dark:text-white">
+            <h1 className="break-words text-xl font-bold leading-tight text-slate-900 dark:text-white">
               {empresa?.name ?? "OptiLácteo"}
             </h1>
           )}
-        </div>
 
-        <span className="flex-shrink-0 rounded-md bg-blue-100 px-3 py-1 text-xs font-semibold uppercase text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
-          {/* Badge de rol arriba a la izquierda: para Responsable de
-              producción se abrevia a "Producción" para que no se corte con
-              nombres de empresa largos (el resto de los roles no cambia). */}
-          {esResponsableProduccion ? "Producción" : (user?.rolNombre ?? "Sin rol")}
-        </span>
+          {/* Sin "truncate": si el nombre del rol no entra en una línea
+              (ej. "Responsable de producción"), el pill se achica a lo
+              que ocupa el texto y, si no alcanza, pasa a una segunda
+              línea — nunca lo recorta con "...". */}
+          <span className="self-start rounded-md bg-blue-100 px-3 py-1 text-xs font-semibold uppercase leading-snug text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
+            {user?.rolNombre ?? "Sin rol"}
+          </span>
+        </div>
 
         <button
           type="button"
           onClick={onClose}
+          aria-label="Cerrar menú lateral"
           className={`flex-shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 lg:hidden ${
             isOpen ? "" : "hidden"
           }`}
@@ -261,42 +286,52 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <p className="px-2 pb-2 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500">
+        <p className={`px-2 pb-2 text-xs font-semibold tracking-wide text-slate-400 dark:text-slate-500 ${ocultoSiColapsado}`}>
           CONSOLA
         </p>
 
         <ul className="flex flex-col gap-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            // Match por prefijo más largo: /lotes/revision no puede activar
-            // también "Lotes" (/lotes) solo porque comparte el prefijo.
-            const rutaActivaMasEspecifica = navItems
-              .map((i) => i.path)
-              .filter(
-                (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
-              )
-              .sort((a, b) => b.length - a.length)[0];
-            const isActive = item.path === rutaActivaMasEspecifica;
+            const isActive = item.path === rutaActiva;
 
             return (
               <li key={item.label}>
                 <button
                   type="button"
                   onClick={() => navigate(item.path)}
+                  aria-current={isActive ? "page" : undefined}
+                  // Colapsado solo queda el ícono: el label pasa al tooltip
+                  // nativo y al nombre accesible del botón.
+                  title={isCollapsed ? item.label : undefined}
+                  aria-label={
+                    isCollapsed
+                      ? item.count ? `${item.label}, ${item.count}` : item.label
+                      : undefined
+                  }
                   className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition ${
+                    isCollapsed ? "lg:justify-center" : ""
+                  } ${
                     isActive
                       ? "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400"
                       : "text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800"
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <Icon className="h-4 w-4" />
-                    <span>{item.label}</span>
+                    <span className="relative flex flex-shrink-0">
+                      <Icon className="h-4 w-4" />
+                      {isCollapsed && !!item.count && (
+                        <span className="absolute -right-2.5 -top-2 hidden h-3.5 min-w-3.5 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-semibold leading-none text-white lg:flex">
+                          {item.count > 99 ? "99+" : item.count}
+                        </span>
+                      )}
+                    </span>
+                    <span className={`whitespace-nowrap ${ocultoSiColapsado}`}>{item.label}</span>
                   </div>
 
                   {item.count !== undefined && (
                     <span
-                      className={`rounded-md px-2 py-0.5 text-xs ${
+                      className={`rounded-md px-2 py-0.5 text-xs ${ocultoSiColapsado} ${
                         isActive
                           ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400"
                           : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
@@ -313,11 +348,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       </nav>
 
       <div className="flex-shrink-0 border-t border-slate-200 p-4 dark:border-slate-800">
-        <div className="flex items-center gap-3">
+        <div className={`flex items-center gap-3 ${isCollapsed ? "lg:flex-col" : ""}`}>
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold uppercase text-white">
             {(user?.email ?? "U").slice(0, 2)}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className={`min-w-0 flex-1 ${ocultoSiColapsado}`}>
             <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
               {user?.email ?? "Usuario"}
             </p>

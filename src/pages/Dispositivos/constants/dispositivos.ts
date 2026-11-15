@@ -1,4 +1,5 @@
 import type { BadgeVariant } from "../../../components/ui/Badge";
+import { aFechaCalendario } from "../../../utils/fechaCalendario";
 
 // HU-71 (Sprint 5, mock visual): "Gestión del hardware de sensores
 // relevado en planta". A pedido explícito de la tarea, sin conexión a
@@ -117,7 +118,7 @@ export function diasHastaCalibracion(fechaCalibracion: string, ahora: Date): num
 function fechaRelativa(hoy: Date, diasDesdeHoy: number): string {
   const fecha = new Date(hoy);
   fecha.setDate(fecha.getDate() + diasDesdeHoy);
-  return fecha.toISOString().slice(0, 10);
+  return aFechaCalendario(fecha);
 }
 
 function hace(hoy: Date, minutos: number): string {

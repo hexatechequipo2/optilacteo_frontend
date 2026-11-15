@@ -3,6 +3,7 @@ import type {
   PrediccionVolumenQuery,
   PrediccionVolumenResponse,
 } from "../types/prediccionVolumen.types";
+import { aFechaCalendario } from "../utils/fechaCalendario";
 
 // HU-51: espeja PrediccionVolumenController real en optilacteo-backend
 // (rama feature/prediccion-volumen-produccion, módulo prediccion-volumen).
@@ -35,9 +36,7 @@ export const prediccionVolumenService = {
     const url = window.URL.createObjectURL(new Blob([data]));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `prediccion-volumen-${query.tipoMateriaPrima}-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
+    link.download = `prediccion-volumen-${query.tipoMateriaPrima}-${aFechaCalendario()}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();

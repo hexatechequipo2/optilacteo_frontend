@@ -1,15 +1,4 @@
-import type { LucideIcon } from "lucide-react";
-import {
-  ArrowRightLeft,
-  CheckCircle2,
-  ClipboardCheck,
-  Download,
-  GitBranch,
-  HelpCircle,
-  MapPin,
-  PackagePlus,
-  Snowflake,
-} from "lucide-react";
+import { Download, GitBranch } from "lucide-react";
 import { Modal } from "../../../components/ui/Modal";
 import { Badge } from "../../../components/ui/Badge";
 import { ClasificacionLoteBadge } from "../../../components/ClasificacionLoteBadge";
@@ -26,6 +15,8 @@ import type { Lote } from "../../../types/lote.types";
 import type { TipoMateriaPrima } from "../../../types/configParametro.types";
 import { Ubicacion } from "../../../types/sensor.types";
 import { TipoEventoTrazabilidad, type EventoTrazabilidad } from "../../../types/trazabilidad.types";
+import { aFechaCalendario } from "../../../utils/fechaCalendario";
+import { TIPO_EVENTO_FALLBACK, TIPO_EVENTO_META } from "../constants/tipoEventoTrazabilidad";
 
 const TIPO_MATERIA_PRIMA_LABEL = new Map(TIPO_MATERIA_PRIMA_TABS.map((t) => [t.value, t.label]));
 
@@ -37,30 +28,6 @@ const DECISION_VARIANT: Record<DecisionRevision, "success" | "danger"> = {
   [DecisionRevision.APROBADO]: "success",
   [DecisionRevision.RECHAZADO]: "danger",
 };
-
-// Ícono + etiqueta por tipo de evento — mismo criterio que RESULTADO_META en
-// ClasificacionLoteBadge (dict fijo + fallback defensivo si el backend llega
-// a mandar un tipo fuera del enum vigente).
-const TIPO_EVENTO_META: Record<TipoEventoTrazabilidad, { label: string; icon: LucideIcon }> = {
-  [TipoEventoTrazabilidad.RECEPCION]: { label: "Recepción", icon: PackagePlus },
-  [TipoEventoTrazabilidad.CLASIFICACION]: {
-    label: "Clasificación automática",
-    icon: ClipboardCheck,
-  },
-  [TipoEventoTrazabilidad.REVISION_CALIDAD]: { label: "Revisión de calidad", icon: ClipboardCheck },
-  [TipoEventoTrazabilidad.CAMBIO_UBICACION]: { label: "Cambio de ubicación", icon: MapPin },
-  [TipoEventoTrazabilidad.INGRESO_CAMARA]: { label: "Ingreso a cámara", icon: Snowflake },
-  [TipoEventoTrazabilidad.CONSUMO_PARCIAL]: {
-    label: "Consumo hacia producción",
-    icon: ArrowRightLeft,
-  },
-  [TipoEventoTrazabilidad.FINALIZACION]: { label: "Finalización", icon: CheckCircle2 },
-  [TipoEventoTrazabilidad.RECOMENDACION_DESTINO]: {
-    label: "Recomendación de destino",
-    icon: GitBranch,
-  },
-};
-const TIPO_EVENTO_FALLBACK = { label: "Evento", icon: HelpCircle };
 
 function formatFecha(iso: string): string {
   return new Date(iso).toLocaleString("es-AR", {
@@ -231,7 +198,7 @@ export function HistorialTrazabilidadModal({
 
   const handleExportar = () => {
     if (!lote) return;
-    const fecha = new Date().toISOString().slice(0, 10);
+    const fecha = aFechaCalendario();
     exportarTrazabilidadCsv({
       codigoLote: lote.codigo,
       proveedor: nombreProveedor,

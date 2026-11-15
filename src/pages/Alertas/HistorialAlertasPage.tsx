@@ -49,14 +49,25 @@ export default function HistorialAlertasPage() {
     [lotes],
   );
 
-  const { items, meta, page, setPage, isLoading, error, isExporting, exportError, exportCsv, exportPdf } =
-    useHistorialAlertas({
-      loteId: filtrosAplicados.loteId !== "todos" ? Number(filtrosAplicados.loteId) : undefined,
-      nivelAlerta: filtrosAplicados.nivelAlerta !== "todos" ? filtrosAplicados.nivelAlerta : undefined,
-      estado: filtrosAplicados.estado !== "todos" ? filtrosAplicados.estado : undefined,
-      fechaInicio: filtrosAplicados.fechaDesde || undefined,
-      fechaFin: filtrosAplicados.fechaHasta || undefined,
-    });
+  const {
+    items,
+    meta,
+    page,
+    setPage,
+    isLoading,
+    error,
+    refetch,
+    isExporting,
+    exportError,
+    exportCsv,
+    exportPdf,
+  } = useHistorialAlertas({
+    loteId: filtrosAplicados.loteId !== "todos" ? Number(filtrosAplicados.loteId) : undefined,
+    nivelAlerta: filtrosAplicados.nivelAlerta !== "todos" ? filtrosAplicados.nivelAlerta : undefined,
+    estado: filtrosAplicados.estado !== "todos" ? filtrosAplicados.estado : undefined,
+    fechaInicio: filtrosAplicados.fechaDesde || undefined,
+    fechaFin: filtrosAplicados.fechaHasta || undefined,
+  });
 
   const aplicarFiltros = () => {
     if (draft.fechaDesde && draft.fechaHasta && draft.fechaHasta < draft.fechaDesde) {
@@ -128,8 +139,15 @@ export default function HistorialAlertasPage() {
       )}
 
       {error ? (
-        <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
-          {error}
+        <div className="flex items-center justify-between rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-400">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="ml-4 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
+          >
+            Reintentar
+          </button>
         </div>
       ) : (
         <HistorialAlertasTabla

@@ -1,17 +1,21 @@
 import { useState } from "react";
-import { AlertCircle, CheckCircle2, RotateCcw, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { AlertCircle, Ban, CheckCircle2, Clock, RotateCcw, Sparkles } from "lucide-react";
 import { Badge } from "../../../components/ui/Badge";
 import type { BadgeVariant } from "../../../components/ui/Badge";
 import { Select } from "../../../components/ui/Select";
+import { usePermisos } from "../../../hooks/usePermisos";
 import { useRecomendacionDestino } from "../../../hooks/useRecomendacionDestino";
 import type {
   DestinoVigente,
   DivergenciaVigente,
 } from "../../../hooks/useDestinoProductivoLote";
+import { ClasificacionLote } from "../../../types/lote.types";
 import {
   derivarNivelConfianza,
   type NivelConfianzaRecomendacion,
 } from "../../../types/recomendacionDestino.types";
+import { puedeEntrarA } from "../../../utils/accesoRutas";
 
 // HU-49: tarjeta de recomendación de destino productivo por ML dentro de
 // "Editar lote" (Figura 7), conectada a GET/PATCH /recomendaciones reales
@@ -21,6 +25,26 @@ import {
 // LoteFormModal — son dos conceptos distintos del backend (ver el
 // comentario en destino-productivo.entity.ts), así que esta tarjeta no
 // toca ni valida contra ese campo.
+//
+// HU-78: decisiones vigentes (2026-11-08, sujetas a confirmación del PO):
+// 1. Visibilidad: la sugerencia solo se ve dentro de "Editar lote", es
+//    decir, la ven quienes pueden responderla (Gerente, Responsable de
+//    producción, Responsable de calidad: trazabilidad:editar). El Operario
+//    de línea no la ve por ahora, aunque GET /recomendaciones/lote/:loteId
+//    le permitiría leerla (trazabilidad:ver).
+// 2. CA9: el selector manual de destino productivo (PATCH
+//    /lotes/:id/destino-productivo, en LoteFormModal) sigue siempre
+//    disponible, haya o no sugerencia. Esta tarjeta no lo condiciona.
+// 3. D-08: la sugerencia se muestra solo si clasificacion === APTO.
+//    - No Apto → "No aplica", con enlace a la revisión de calidad (HU-22).
+//    - Pendiente (null; HU-76) → "Se habilita cuando el lote esté
+//      clasificado", sin Aceptar ni Recalcular: un lote pendiente puede
+//      terminar No Apto.
+//    En ninguno de los dos casos se pide la recomendación al back.
+//    TODO(backend): el back genera recomendación también para lotes no_apto
+//    (lote.service.ts create: evaluarYClasificar → generarRecomendacion sin
+//    mirar la clasificación) y GET /recomendaciones/lote/:loteId tampoco lo
+//    filtra; la regla tiene que estar allá también.
 
 // El backend exige un mínimo de 20 caracteres (ver
 // responder-recomendacion.dto.ts, HU-37 AC2) — acá se pide más para que la
@@ -43,6 +67,8 @@ const NIVEL_LABEL: Record<NivelConfianzaRecomendacion, string> = {
 
 interface RecomendacionDestinoCardProps {
   loteId: number;
+  // D-08: decide si se pide la sugerencia (ver el comentario de arriba).
+  clasificacion: ClasificacionLote | null;
   // HU-34/HU-37: el destino vigente (y, si corresponde, la divergencia que
   // lo originó) ahora vive en el backend (GET
   // /lotes/:id/destino-productivo/historial) y se calcula una sola vez en
@@ -56,12 +82,72 @@ interface RecomendacionDestinoCardProps {
   onDestinoRespondido: () => void;
 }
 
+function EtiquetaSugerencia() {
+  return (
+    <span className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
+      <Sparkles className="h-3.5 w-3.5" /> SUGERENCIA DEL SISTEMA
+    </span>
+  );
+}
+
+function SugerenciaNoAplica() {
+  const navigate = useNavigate();
+  const permisos = usePermisos();
+  const puedeVerRevision = puedeEntrarA("/lotes/revision", permisos);
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+      <EtiquetaSugerencia />
+      <p className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-300">
+        <Ban className="h-4 w-4" /> No aplica
+      </p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Este lote está clasificado como No Apto. Su destino se define en la revisión de
+        calidad, no mediante sugerencias de IA.
+      </p>
+      {puedeVerRevision && (
+        <button
+          type="button"
+          onClick={() => navigate("/lotes/revision")}
+          className="self-start text-xs font-semibold text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+        >
+          Ir a la revisión de calidad
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SugerenciaPendienteClasificacion() {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+      <EtiquetaSugerencia />
+      <p className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-300">
+        <Clock className="h-4 w-4" /> Pendiente de clasificar
+      </p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Se habilita cuando el lote esté clasificado.
+      </p>
+    </div>
+  );
+}
+
+// D-08: el gate va en un componente aparte para que el hook (y el GET) solo
+// corra con lotes Apto, sin romper las reglas de los hooks.
 export function RecomendacionDestinoCard({
+  clasificacion,
+  ...props
+}: RecomendacionDestinoCardProps) {
+  if (clasificacion === ClasificacionLote.NO_APTO) return <SugerenciaNoAplica />;
+  if (clasificacion !== ClasificacionLote.APTO) return <SugerenciaPendienteClasificacion />;
+  return <RecomendacionDestinoApto {...props} />;
+}
+
+function RecomendacionDestinoApto({
   loteId,
   destinoVigente,
   divergenciaVigente,
   onDestinoRespondido,
-}: RecomendacionDestinoCardProps) {
+}: Omit<RecomendacionDestinoCardProps, "clasificacion">) {
   const {
     recomendacion,
     isLoading,
@@ -90,9 +176,7 @@ export function RecomendacionDestinoCard({
 
   const header = (
     <div className="flex items-center justify-between gap-3">
-      <span className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
-        <Sparkles className="h-3.5 w-3.5" /> SUGERENCIA DEL SISTEMA
-      </span>
+      <EtiquetaSugerencia />
       <button
         type="button"
         onClick={() => {
@@ -100,9 +184,12 @@ export function RecomendacionDestinoCard({
           refetch();
         }}
         disabled={isLoading}
+        title="Vuelve a leer la recomendación guardada para este lote"
         className="flex items-center gap-1 text-xs font-medium text-slate-400 transition hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:text-slate-300"
       >
-        <RotateCcw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} /> Recalcular
+        {/* TODO(backend): volver a "Recalcular" (CA7) cuando exista POST
+            /recomendaciones/lote/:loteId/recalcular; hoy solo se relee. */}
+        <RotateCcw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} /> Actualizar
       </button>
     </div>
   );
@@ -118,12 +205,32 @@ export function RecomendacionDestinoCard({
     );
   }
 
+  // HU-78 CA6: con el back actual solo se distinguen tres resultados: hay
+  // recomendación, vacío (motivo desconocido) y error del servicio (HTTP o
+  // timeout).
+  // TODO(backend): pedir que GET /recomendaciones/lote/:loteId (y el futuro
+  // POST .../recalcular) devuelva el motivo cuando no hay sugerencia:
+  //   { motivo: "falta_datos" | "sin_historico" | "error_servicio" }
+  // Hoy http-ml-client.ts convierte cualquier falla del ml-service en
+  // insufficient_data y ml.service.ts devuelve null, así que todo llega vacío.
+  // Textos a usar cuando llegue el motivo (tomados del mock de HU-78):
+  //   - falta_datos: "Falta de datos" · "El lote no tiene los parámetros
+  //     mínimos requeridos por el modelo. Completalos y volvé a calcular."
+  //   - sin_historico: "Sin histórico suficiente" · "No hay lotes comparables
+  //     válidos." (el mock decía "Ni el mismo proveedor ni proveedores
+  //     similares superan el mínimo de comparación", pero el modelo no usa
+  //     proveedor: revisar con el PO).
+  //   - error_servicio: el bloque de abajo.
   if (error) {
     return (
       <div className="flex flex-col gap-2 rounded-lg border border-dashed border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-500/10">
         {header}
-        <p className="flex items-center gap-1.5 text-sm text-red-700 dark:text-red-400">
-          <AlertCircle className="h-4 w-4" /> {error}
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-red-700 dark:text-red-400">
+          <AlertCircle className="h-4 w-4" /> Error del servicio
+        </p>
+        <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          No se muestra un resultado anterior como si fuera nuevo.
         </p>
         <button
           type="button"
@@ -199,14 +306,23 @@ export function RecomendacionDestinoCard({
         <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
           Sin recomendación disponible
         </p>
+        {/* El modelo no usa proveedor ni tambo, y el back devuelve vacío
+            por varias causas que hoy no distingue (sin modelo entrenado,
+            servicio de IA caído al registrar el lote, destino fuera del
+            catálogo): no se afirma un motivo puntual. */}
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          No hay historial suficiente de este proveedor para generar una
-          predicción confiable.
+          El sistema no tiene una recomendación para este lote. Podés asignar el
+          destino productivo manualmente.
         </p>
       </div>
     );
   }
 
+  // HU-78 CA10: no se muestra un badge "Calculada ahora" ni la hora de
+  // cálculo: GET /recomendaciones/lote/:loteId no trae cuándo se generó y la
+  // recomendación pudo haberse calculado al registrar el lote.
+  // TODO(backend): sumar createdAt a RecomendacionPendienteResponseDto para
+  // mostrar "Calculada el …" (y, con recalcular, distinguir la recién hecha).
   const nivelConfianza = derivarNivelConfianza(recomendacion.confianza);
   // HU-37 AC1: el destino recomendado no es una alternativa válida acá —
   // este selector es específicamente para elegir OTRO destino (si el

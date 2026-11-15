@@ -32,6 +32,7 @@ const DESVIOS_MOCK = [
     fechaIngreso: "2026-08-01T12:00:00.000Z",
     cantidadComprometidaKg: 1000,
     cantidadReal: 1046,
+    unidadCantidadReal: "kilogramos",
     desvioCantidadPorcentaje: 4.6,
     parametros: [
       { parametro: "ph", valorComprometido: 6.5, valorReal: 6.8, desvioPorcentaje: 4.62 },
@@ -135,12 +136,53 @@ test.describe("DesviosProveedorModal", () => {
       dialog.getByText("Tambo El Roble — comprometido según remito vs. recibido"),
     ).toBeVisible();
     await expect(dialog.getByText("LOT-2026-001")).toBeVisible();
-    await expect(dialog.getByText("Cantidad: 1000 comprometido — 1046 recibido")).toBeVisible();
+    await expect(dialog.getByText("Cantidad: 1000 kg comprometido — 1046 kg recibido")).toBeVisible();
     await expect(dialog.getByText("+4.6%")).toBeVisible();
     await expect(dialog.getByText("pH: 6.5 comprometido — 6.8 recibido")).toBeVisible();
     await expect(dialog.getByText("+4.62%")).toBeVisible();
     await expect(dialog.getByText("Materia grasa: 3.5 % comprometido — 3.3 % recibido")).toBeVisible();
     await expect(dialog.getByText("-5.71%")).toBeVisible();
+  });
+
+  // HU-74 + HU-51: lote en litros → el backend no calcula el desvío de cantidad (null).
+  test("lote en litros: muestra la unidad, 'No comparable', 'Sin dato' y nunca 'null'", async ({ page }) => {
+    await mockProveedoresDeps(page);
+    await page.route(/\/lotes\/proveedor\/\d+\/desvios/, async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            loteId: 3,
+            codigo: "LOT-2026-003",
+            fechaIngreso: "2026-08-02T12:00:00.000Z",
+            cantidadComprometidaKg: 1000,
+            cantidadReal: 980,
+            unidadCantidadReal: "litros",
+            desvioCantidadPorcentaje: null,
+            parametros: [
+              { parametro: "grasa", valorComprometido: 3.5, valorReal: null, desvioPorcentaje: null },
+            ],
+          },
+        ]),
+      });
+    });
+
+    await loginAsAdministrador(page);
+    await page.goto("/proveedores");
+
+    await abrirModalDesvios(page, "Tambo El Roble");
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("LOT-2026-003")).toBeVisible();
+    await expect(dialog.getByText("Cantidad: 1000 kg comprometido — 980 L recibido")).toBeVisible();
+    await expect(dialog.getByText("Materia grasa: 3.5 % comprometido — Sin dato recibido")).toBeVisible();
+    // Uno por la cantidad y otro por el parámetro.
+    await expect(dialog.getByText("No comparable")).toHaveCount(2);
+    await expect(dialog.getByText(/null/)).toHaveCount(0);
   });
 
   test("muestra mensaje cuando el proveedor todavía no tiene lotes con remito cargado", async ({
@@ -160,7 +202,9 @@ test.describe("DesviosProveedorModal", () => {
     await abrirModalDesvios(page, "Tambo El Roble");
 
     await expect(
-      page.getByRole("dialog").getByText("Este proveedor todavía no tiene lotes con remito cargado."),
+      page
+        .getByRole("dialog")
+        .getByText("Este proveedor todavía no tiene lotes con remito cargado", { exact: true }),
     ).toBeVisible();
   });
 
@@ -192,10 +236,121 @@ test.describe("DesviosProveedorModal", () => {
     await abrirModalDesvios(page, "Tambo El Roble");
 
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("Error interno")).toBeVisible();
+    await expect(
+      dialog.getByText("No se pudo recuperar el historial de desvíos. Intentá nuevamente."),
+    ).toBeVisible();
 
     await dialog.getByRole("button", { name: "Reintentar" }).click();
     await expect(dialog.getByText("LOT-2026-001")).toBeVisible();
+  });
+
+  test("ante un 500 muestra un mensaje amigable y no el texto técnico del backend", async ({
+    page,
+  }) => {
+    await mockProveedoresDeps(page);
+    await page.route(/\/lotes\/proveedor\/\d+\/desvios/, async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ statusCode: 500, message: "Internal server error" }),
+      });
+    });
+
+    await loginAsAdministrador(page);
+    await page.goto("/proveedores");
+
+    await abrirModalDesvios(page, "Tambo El Roble");
+
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByText("No se pudo recuperar el historial de desvíos. Intentá nuevamente."),
+    ).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Reintentar" })).toBeVisible();
+    await expect(dialog.getByText("Internal server error")).toHaveCount(0);
+  });
+
+  // HU-74: la respuesta de A llega después de la de B y no debe pisarla.
+  test("si se cambia de proveedor antes de que responda el anterior, solo muestra los datos del nuevo", async ({
+    page,
+  }) => {
+    await mockProveedoresDeps(page);
+    await page.route("**/proveedores*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            PROVEEDORES_MOCK.data[0],
+            {
+              ...PROVEEDORES_MOCK.data[0],
+              id: 2,
+              razonSocial: "Tambo La Esperanza",
+              cuit: "30-22222222-2",
+            },
+          ],
+          meta: { page: 1, limit: 3, total: 2, totalPages: 1 },
+        }),
+      });
+    });
+
+    let liberarA!: () => void;
+    const aLiberado = new Promise<void>((resolve) => (liberarA = resolve));
+    let marcarRespuestaA!: () => void;
+    const respuestaA = new Promise<void>((resolve) => (marcarRespuestaA = resolve));
+
+    await page.route(/\/lotes\/proveedor\/\d+\/desvios/, async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr"))
+        return route.continue();
+      if (route.request().url().includes("/lotes/proveedor/1/")) {
+        await aLiberado;
+        try {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(DESVIOS_MOCK),
+          });
+        } catch {
+          // El pedido de A ya fue cancelado por el frontend.
+        } finally {
+          marcarRespuestaA();
+        }
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ ...DESVIOS_MOCK[0], loteId: 2, codigo: "LOT-2026-002" }]),
+      });
+    });
+
+    await loginAsAdministrador(page);
+    await page.goto("/proveedores");
+
+    const dialog = page.getByRole("dialog");
+    await abrirModalDesvios(page, "Tambo El Roble");
+    await expect(dialog.getByText("Cargando historial de desvíos...")).toBeVisible();
+    await dialog.getByRole("button", { name: "Cerrar" }).click();
+
+    await abrirModalDesvios(page, "Tambo La Esperanza");
+    await expect(
+      dialog.getByText("Tambo La Esperanza — comprometido según remito vs. recibido"),
+    ).toBeVisible();
+    await expect(dialog.getByText("LOT-2026-002")).toBeVisible();
+
+    liberarA();
+    await respuestaA;
+    // Margen para que una respuesta tardía de A llegue a renderizarse si no se descartó.
+    await page.waitForTimeout(500);
+
+    await expect(dialog.getByText("LOT-2026-001")).toHaveCount(0);
+    await expect(dialog.getByText("LOT-2026-002")).toBeVisible();
   });
 });
 

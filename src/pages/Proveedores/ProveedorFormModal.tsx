@@ -4,18 +4,21 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { SectionHeader } from "../../components/ui/SectionHeader";
 import type { EmpresaType } from "../../types/empresa.types";
-import axios from "axios";
 import type {
   Proveedor,
   TipoProveedor,
   EstadoProveedor,
   CreateProveedorDto,
+  CampoUnicoProveedor,
 } from "../../types/proveedor.types";
 import {
   PROVINCIAS,
   LOCALIDADES_POR_PROVINCIA,
 } from "../../data/localidades-argentina";
 import { Combobox } from "../../components/ui/Combobox";
+import { validarTelefono } from "../../utils/telefono";
+import { mensajeErrorApi } from "../../utils/mensajeErrorApi";
+import { ProveedorDuplicadoError } from "../../services/proveedores.service";
 // ─── Datos estáticos ────────────────────────────────────────────────────────
 
 const TIPOS = [
@@ -80,6 +83,7 @@ interface FormValues {
 interface FormErrors {
   razonSocial?: string;
   cuit?: string;
+  telefono?: string;
   empresaId?: string;
 }
 
@@ -124,6 +128,8 @@ function validate(values: FormValues): FormErrors {
     errors.cuit = "El CUIT debe tener el formato XX-XXXXXXXX-X";
   }
   if (!values.empresaId) errors.empresaId = "La empresa es obligatoria";
+  const errorTelefono = validarTelefono(values.telefono);
+  if (errorTelefono) errors.telefono = errorTelefono;
   return errors;
 }
 
@@ -198,6 +204,15 @@ export function ProveedorFormModal({
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setValues((prev) => ({ ...prev, [field]: e.target.value }));
 
+  // Un 409 de unicidad queda viejo en cuanto se edita el campo, o al cambiar
+  // de empresa (la unicidad es por empresa).
+  const limpiarErrores = (...campos: CampoUnicoProveedor[]) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      for (const campo of campos) delete next[campo];
+      return next;
+    });
+
   const empresaOptions = [
     { value: "", label: "Seleccioná una empresa" },
     ...empresas.map((e) => ({ value: String(e.id), label: e.name })),
@@ -221,6 +236,11 @@ export function ProveedorFormModal({
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
+    // Al crear, los opcionales vacíos se omiten. Al editar van como null:
+    // el PATCH ignora los campos ausentes, así que omitirlos no permitiría
+    // vaciar un dato que el proveedor ya tenía cargado.
+    const vacio = isEditing ? null : undefined;
+
     try {
       await onSubmit({
         tipo: values.tipo,
@@ -228,44 +248,24 @@ export function ProveedorFormModal({
         cuit: values.cuit.trim(),
         empresaId: Number(values.empresaId),
         estado: values.estado,
-        ...(values.telefono.trim() && { telefono: values.telefono.trim() }),
-        ...(values.emailContacto.trim() && {
-          emailContacto: values.emailContacto.trim(),
-        }),
-        ...(values.provincia && { provincia: values.provincia }),
-        ...(values.localidad.trim() && { localidad: values.localidad.trim() }),
-        ...(values.capacidad && { capacidad: Number(values.capacidad) }),
+        telefono: values.telefono.trim() || vacio,
+        emailContacto: values.emailContacto.trim() || vacio,
+        provincia: values.provincia || vacio,
+        localidad: values.localidad.trim() || vacio,
+        capacidad: values.capacidad ? Number(values.capacidad) : vacio,
       });
       onClose();
     } catch (error) {
-        if (axios.isAxiosError(error)) {
-          const data = error.response?.data;
-
-          if (error.response?.status === 409) {
-
-            if (data.field === "cuit") {
-              setErrors(prev => ({
-                ...prev,
-                cuit: data.message,
-              }));
-              return;
-            }
-
-            if (data.field === "razonSocial") {
-              setErrors(prev => ({
-                ...prev,
-                razonSocial: data.message,
-              }));
-              return;
-            }
-
-            setServerError(data.message);
-            return;
-          }
-        }
-
-        setServerError("No se pudo guardar el proveedor. Intentá nuevamente.");
+      // Alta y edición por igual (incluido el cambio de empresa del
+      // Administrador: el back valida contra la empresa destino).
+      if (error instanceof ProveedorDuplicadoError) {
+        setErrors((prev) => ({ ...prev, [error.field]: error.message }));
+        return;
       }
+      setServerError(
+        mensajeErrorApi(error, "No se pudo guardar el proveedor. Intentá nuevamente."),
+      );
+    }
   };
 
   return (
@@ -334,7 +334,10 @@ export function ProveedorFormModal({
                 label="Razón social *"
                 placeholder="Ej: Tambo San Martín S.R.L."
                 value={values.razonSocial}
-                onChange={set("razonSocial")}
+                onChange={(e) => {
+                  set("razonSocial")(e);
+                  limpiarErrores("razonSocial");
+                }}
                 error={errors.razonSocial}
                 autoFocus
               />
@@ -344,12 +347,13 @@ export function ProveedorFormModal({
                   label="CUIT *"
                   placeholder="Ej: 20-12345678-9"
                   value={values.cuit}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setValues((prev) => ({
                       ...prev,
                       cuit: formatCuit(e.target.value),
-                    }))
-                  }
+                    }));
+                    limpiarErrores("cuit");
+                  }}
                   error={errors.cuit}
                 />
                 <Input
@@ -358,6 +362,7 @@ export function ProveedorFormModal({
                   placeholder="Ej: +54 351 1234567"
                   value={values.telefono}
                   onChange={set("telefono")}
+                  error={errors.telefono}
                 />
               </div>
               <Input
@@ -378,7 +383,10 @@ export function ProveedorFormModal({
                 label="Empresa asignada *"
                 options={empresaOptions}
                 value={values.empresaId}
-                onChange={set("empresaId")}
+                onChange={(e) => {
+                  set("empresaId")(e);
+                  limpiarErrores("cuit", "razonSocial");
+                }}
                 error={errors.empresaId}
                 disabled={!!empresaIdBloqueada}
               />

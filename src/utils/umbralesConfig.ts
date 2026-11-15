@@ -30,9 +30,18 @@ export function umbralesAInput(config: UmbralesConfig | undefined): UmbralesInpu
 // umbralAlertaMin <= umbralMin < umbralMax <= umbralAlertaMax, todo dentro del
 // rango físico. Devuelve un error por campo; la cadena se marca en el campo
 // que queda "del lado equivocado".
+// Acepta coma o punto decimal ("1,028" / "1.028"). Rechaza separadores de
+// miles y notación científica: "1.027,4" → NaN.
+export function parsearDecimal(texto: string): number {
+  const t = texto.trim();
+  if (!/^-?(\d+([.,]\d*)?|[.,]\d+)$/.test(t)) return NaN;
+  return Number(t.replace(",", "."));
+}
+
 export function validarUmbrales(
   input: UmbralesInput,
   rangoFisico: { min: number; max: number },
+  ejemplo?: string,
 ): ErroresUmbrales {
   const errores: ErroresUmbrales = {};
   const valores: Partial<UmbralesConfig> = {};
@@ -43,13 +52,15 @@ export function validarUmbrales(
       errores[campo] = "Ingresá un valor";
       continue;
     }
-    const valor = Number(texto);
+    const valor = parsearDecimal(texto);
     if (Number.isNaN(valor)) {
       errores[campo] = "Debe ser un número";
       continue;
     }
     if (valor < rangoFisico.min || valor > rangoFisico.max) {
-      errores[campo] = `Debe estar entre ${rangoFisico.min} y ${rangoFisico.max}`;
+      errores[campo] =
+        `Debe estar entre ${rangoFisico.min} y ${rangoFisico.max}` +
+        (ejemplo ? ` (ej.: ${ejemplo})` : "");
       continue;
     }
     valores[campo] = valor;
@@ -72,10 +83,10 @@ export function validarUmbrales(
 
 export function inputAUmbrales(input: UmbralesInput): UmbralesConfig {
   return {
-    umbralAlertaMin: Number(input.umbralAlertaMin),
-    umbralMin: Number(input.umbralMin),
-    umbralMax: Number(input.umbralMax),
-    umbralAlertaMax: Number(input.umbralAlertaMax),
+    umbralAlertaMin: parsearDecimal(input.umbralAlertaMin),
+    umbralMin: parsearDecimal(input.umbralMin),
+    umbralMax: parsearDecimal(input.umbralMax),
+    umbralAlertaMax: parsearDecimal(input.umbralAlertaMax),
   };
 }
 

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import axios from "axios";
 import {
   recomendacionService,
   extraerMensajeError,
@@ -6,6 +7,14 @@ import {
 import { destinoProductivoService } from "../services/destinoProductivo.service";
 import type { RecomendacionDestinoIA } from "../types/recomendacionDestino.types";
 import type { DestinoProductivo } from "../types/destinoProductivo.types";
+
+const MENSAJE_TIMEOUT = "El servicio no respondió a tiempo. Intentá nuevamente.";
+
+// axios marca el vencimiento del timeout con ECONNABORTED (o ETIMEDOUT si
+// transitional.clarifyTimeoutError está activo).
+function esTimeout(err: unknown): boolean {
+  return axios.isAxiosError(err) && (err.code === "ECONNABORTED" || err.code === "ETIMEDOUT");
+}
 
 interface RespuestaConfirmada {
   estado: "aceptada" | "rechazada";
@@ -52,24 +61,39 @@ export function useRecomendacionDestino(
   const [errorResponder, setErrorResponder] = useState<string | null>(null);
   const [respuestaConfirmada, setRespuestaConfirmada] = useState<RespuestaConfirmada | null>(null);
 
+  // HU-78: cada pedido cancela el anterior y solo el vigente toca el estado
+  // (CA8: la carga siempre se apaga; CA10: ante error o timeout no queda a
+  // la vista la recomendación anterior, se limpia al empezar).
+  const pedidoRef = useRef<AbortController | null>(null);
+
   const fetchRecomendacion = useCallback(async () => {
+    pedidoRef.current?.abort();
+    const pedido = new AbortController();
+    pedidoRef.current = pedido;
+
     setIsLoading(true);
     setError(null);
+    setRecomendacion(null);
+    setRespuestaConfirmada(null);
     try {
-      const result = await recomendacionService.getPendientePorLote(loteId);
+      const result = await recomendacionService.getPendientePorLote(loteId, {
+        signal: pedido.signal,
+      });
+      if (pedidoRef.current !== pedido) return;
       setRecomendacion(result);
-      // Recalcular manual: se descarta cualquier confirmación previa que
-      // se estuviera mostrando.
-      setRespuestaConfirmada(null);
     } catch (err) {
+      if (pedidoRef.current !== pedido || axios.isCancel(err)) return;
       setError(
-        extraerMensajeError(err, "No se pudo cargar la recomendación de destino."),
+        esTimeout(err)
+          ? MENSAJE_TIMEOUT
+          : extraerMensajeError(err, "No se pudo cargar la recomendación de destino."),
       );
-      setRecomendacion(null);
     } finally {
-      setIsLoading(false);
+      if (pedidoRef.current === pedido) setIsLoading(false);
     }
   }, [loteId]);
+
+  useEffect(() => () => pedidoRef.current?.abort(), []);
 
   const fetchDestinos = useCallback(async () => {
     setIsLoadingDestinos(true);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Info, X } from "lucide-react";
 import { Badge } from "../../../components/ui/Badge";
 import type { BadgeVariant } from "../../../components/ui/Badge";
@@ -7,6 +7,8 @@ import { Button } from "../../../components/ui/Button";
 import { SectionHeader } from "../../../components/ui/SectionHeader";
 import { LoteActivoSelector } from "../../../components/LoteActivoSelector";
 import { useMedicionManual } from "../../../hooks/useMedicionManual";
+import { useConfirmacionVerbal } from "../../../hooks/useConfirmacionVerbal";
+import { armarEnunciadosConfirmacion } from "../../../utils/enunciadosConfirmacionVoz";
 import { extraerMensajeError } from "../../../services/medicionManual.service";
 import { Parametro } from "../../../types/configParametro.types";
 import type {
@@ -20,12 +22,19 @@ import {
   PARAMETRO_LABEL,
   UNIDAD_POR_PARAMETRO,
 } from "../../Sensores/constants/parametroSensor";
+import { ConfirmacionVerbalPanel } from "./ConfirmacionVerbalPanel";
 
 // HU-55: pantalla de revisión que sigue al dictado (DictadoVozModal) una vez
 // que el backend interpretó el texto (POST /dictado/parsear). Ese endpoint
 // solo previsualiza, no persiste nada — confirmar acá dispara el registro
 // real (POST /mediciones-manuales, mismo endpoint y hook que usa la carga
 // manual de RegistrarMedicionManualTab).
+//
+// HU-56: antes de ese registro hay una confirmación verbal que arranca sola
+// (useConfirmacionVerbal): lee el lote y los valores, y el operario dice
+// "confirmar" o "cancelar". El clic en "Confirmar registro" solo se
+// habilita en revisión manual o tras corregir algo a mano (decisiones en
+// el hook).
 
 const CONFIANZA_BADGE_VARIANT: Record<ConfianzaDictado, BadgeVariant> = {
   alta: "success",
@@ -55,6 +64,14 @@ const ESTADO_VARIANT: Record<EstadoLectura, "success" | "danger" | "warning"> =
     [EstadoLectura.FUERA_DE_RANGO]: "danger",
     [EstadoLectura.SIN_UMBRAL_CONFIGURADO]: "warning",
   };
+
+function valoresIniciales(
+  resultado: ParsearDictadoResponse,
+): Partial<Record<Parametro, string>> {
+  return Object.fromEntries(
+    resultado.parametros.map((p) => [p.parametro, String(p.valor)]),
+  );
+}
 
 interface RevisionDictadoVozModalProps {
   isOpen: boolean;
@@ -124,8 +141,10 @@ function RevisionDictadoVozModalBody({
   onVolverADictar,
   onCancelar,
 }: RevisionDictadoVozModalBodyProps) {
+  // Inicializado ya en el primer render (no solo en el efecto de abajo):
+  // la confirmación verbal arranca al montar y tiene que leer los valores.
   const [valores, setValores] = useState<Partial<Record<Parametro, string>>>(
-    {},
+    () => valoresIniciales(resultado),
   );
   const [fieldErrors, setFieldErrors] = useState<
     Partial<Record<Parametro, string>>
@@ -142,20 +161,12 @@ function RevisionDictadoVozModalBody({
   // "Volver a dictar") se reinicializan los valores editables a lo que
   // interpretó el backend.
   useEffect(() => {
-    setValores(
-      Object.fromEntries(
-        resultado.parametros.map((p) => [p.parametro, String(p.valor)]),
-      ),
-    );
+    setValores(valoresIniciales(resultado));
     setFieldErrors({});
     setServerError("");
     setRegistroExitoso(null);
     setConfirmandoCancelar(false);
   }, [resultado]);
-
-  const handleValorChange = (parametro: Parametro, valor: string) => {
-    setValores((prev) => ({ ...prev, [parametro]: valor }));
-  };
 
   const handleConfirmar = async () => {
     setServerError("");
@@ -198,11 +209,37 @@ function RevisionDictadoVozModalBody({
     }
   };
 
+  // HU-56: lo que se lee en voz alta sale de los valores vigentes (los
+  // editados, si los hubo), así "Leer de nuevo" lee lo corregido.
+  const enunciados = useMemo(
+    () => armarEnunciadosConfirmacion(lote.codigo, resultado, valores),
+    [lote.codigo, resultado, valores],
+  );
+  // El hook llama siempre a la última versión de onConfirmar, así que
+  // handleConfirmar ve los valores vigentes al momento del "confirmar".
+  const confirmacion = useConfirmacionVerbal({
+    enunciados,
+    habilitada: resultado.parametros.length > 0,
+    onConfirmar: () => void handleConfirmar(),
+  });
+
+  const handleValorChange = (parametro: Parametro, valor: string) => {
+    confirmacion.interrumpir();
+    setValores((prev) => ({ ...prev, [parametro]: valor }));
+  };
+
+  const handleCambiarLote = (loteId: number) => {
+    confirmacion.interrumpir();
+    onCambiarLote(loteId);
+  };
+
   const pedirCierre = () => {
     if (registroExitoso) {
       onCancelar();
       return;
     }
+    // Que un "confirmar" dicho con el "¿Descartar?" abierto no guarde nada.
+    confirmacion.detener();
     setConfirmandoCancelar(true);
   };
 
@@ -271,11 +308,17 @@ function RevisionDictadoVozModalBody({
             </div>
           ) : (
             <>
+              <ConfirmacionVerbalPanel
+                estado={confirmacion.estado}
+                puedeLeerDeNuevo={!isCambiandoLote}
+                onLeerDeNuevo={confirmacion.leerDeNuevo}
+              />
+
               <div className="flex flex-col gap-1.5">
                 <LoteActivoSelector
                   lotes={lotesDisponibles}
                   value={lote.id}
-                  onChange={onCambiarLote}
+                  onChange={handleCambiarLote}
                 />
                 {isCambiandoLote && (
                   <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -290,14 +333,10 @@ function RevisionDictadoVozModalBody({
               </div>
 
               {resultado.obligatoriosFaltantes.length > 0 && (
-                // TODO(backend, optilacteo-backend): medicion-manual.service.ts
-                // hoy rechaza el registro si falta algún parámetro obligatorio
-                // configurado para el tipo de materia prima. Eso bloquea un
-                // caso válido (dictar solo algunos parámetros), hay que
-                // relajarlo para que acepte registros parciales — afecta
-                // tanto a este flujo como al formulario manual
-                // (RegistrarMedicionManualTab). Mientras tanto, este aviso es
-                // solo informativo: no bloqueamos "Confirmar registro".
+                // Aviso solo informativo: el backend acepta registros
+                // parciales (medicion-manual.service.ts ya no exige el
+                // conjunto completo de obligatorios, AC3 corregido por
+                // HU-20), así que no bloquea "Confirmar registro".
                 <div className="flex items-start gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
                   <Info className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>
@@ -450,7 +489,7 @@ function RevisionDictadoVozModalBody({
                 type="button"
                 onClick={handleConfirmar}
                 isLoading={isSubmitting}
-                disabled={isCambiandoLote}
+                disabled={isCambiandoLote || !confirmacion.puedeConfirmarPorClic}
                 className="flex-1 !w-auto"
               >
                 Confirmar registro

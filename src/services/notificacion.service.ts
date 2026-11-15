@@ -1,4 +1,4 @@
-import axios from "axios";
+import { mensajeErrorApi } from "../utils/mensajeErrorApi";
 import api from "./api";
 import type { Notificacion, NotificacionPaginada } from "../types/notificacion.types";
 import type {
@@ -29,6 +29,21 @@ export const notificacionService = {
 
   marcarLeida: async (id: number): Promise<void> => {
     await api.patch(`/notificaciones/${id}/leida`);
+  },
+
+  // Todas las no leídas del usuario en la empresa activa (no solo la página
+  // cargada). Devuelve cuántas cambió el backend.
+  marcarTodasLeidas: async (): Promise<number> => {
+    const { data } = await api.patch<{ actualizadas: number }>("/notificaciones/leidas");
+    return data.actualizadas;
+  },
+
+  // HU-79: total de no leídas del usuario en la empresa activa, sin paginar
+  // (getAll trae solo las primeras 20, así que no sirve para contar).
+  contarNoLeidas: async (): Promise<number> => {
+    const { data } = await api.get<{ total: number }>("/notificaciones/no-leidas/count");
+    if (typeof data?.total !== "number") throw new Error("Respuesta de conteo inválida");
+    return data.total;
   },
 };
 
@@ -150,9 +165,5 @@ export const configuracionSilencioAlertaService = {
 };
 
 export function extraerMensajeError(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && err.response?.data?.message) {
-    const { message } = err.response.data;
-    return Array.isArray(message) ? message.join(" ") : message;
-  }
-  return fallback;
+  return mensajeErrorApi(err, fallback);
 }

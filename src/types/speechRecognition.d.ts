@@ -1,8 +1,8 @@
 // Tipos mínimos del Web Speech API (SpeechRecognition) para poder usarlo con
 // TS estricto. No forma parte de la lib "dom" de TypeScript porque sigue
-// siendo un borrador de spec — hoy solo lo implementan Chrome/Edge (bajo el
-// prefijo "webkitSpeechRecognition"); Firefox y Safari no lo soportan (ver
-// useSpeechRecognition.ts). Cubre únicamente lo que usa ese hook.
+// siendo un borrador de spec — hoy lo implementan Chrome/Edge y Safari
+// 14.1+, los dos bajo el prefijo "webkitSpeechRecognition"; Firefox no lo
+// soporta (ver useSpeechRecognition.ts). Cubre únicamente lo que usa ese hook.
 // Sin imports/exports a propósito: así queda como script global y las
 // declaraciones se mezclan directo con las de lib.dom (interface Window).
 

@@ -30,6 +30,21 @@ const HISTORIAL_CERRADA = {
   },
 };
 
+const HISTORIAL_FALSO_POSITIVO = {
+  id: 3, tipo: "alerta_anomalia",
+  mensaje: "Se detectó un patrón inusual de Materia grasa en el lote LOT-2026-003",
+  nivelAlerta: null, estado: "falso_positivo",
+  accionCorrectiva: null, fechaResolucion: null,
+  loteId: 3, loteCodigo: null, parametro: "grasa", sensorId: null,
+  tipoDesvio: "pico", confianza: 91.5, modeloVersion: "v1.3.0",
+  marcadaFalsoPositivoPorId: 5, fechaMarcadoFalsoPositivo: "2026-08-03T09:00:00.000Z",
+  leida: true, createdAt: "2026-08-03T08:00:00.000Z",
+  data: {
+    loteId: 3, loteCodigo: "LOT-2026-003", parametro: "grasa",
+    tipoDesvio: "pico", confianza: 91.5, modeloVersion: "v1.3.0",
+  },
+};
+
 async function mockHistorialDeps(page: Page, alertas: object[] = []) {
   await page.route("**/*", async (route) => {
     const rt = route.request().resourceType();
@@ -245,4 +260,33 @@ test("HistorialAlertasPage (HU-28) - filtra por lote y estado y manda los filtro
   const ultimo = pedidos.at(-1)!;
   expect(ultimo.get("loteId")).toBe("2");
   expect(ultimo.get("estado")).toBe("cerrada");
+});
+
+test("HistorialAlertasPage (HU-79) - filtra por Falso positivo y manda estado=falso_positivo", async ({ page }) => {
+  await mockHistorialDeps(page, [HISTORIAL_ABIERTA, HISTORIAL_FALSO_POSITIVO]);
+  const pedidos: URLSearchParams[] = [];
+  await page.route("**/notificaciones/historial*", async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    pedidos.push(params);
+    const data = params.get("estado") === "falso_positivo"
+      ? [HISTORIAL_FALSO_POSITIVO]
+      : [HISTORIAL_ABIERTA, HISTORIAL_FALSO_POSITIVO];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data, total: data.length, page: 1, limit: 20 }),
+    });
+  });
+  await loginAsResponsableCalidad(page);
+  await page.goto("/alertas/historial");
+  const tabla = page.locator("table");
+  await expect(tabla.getByText("LOT-2026-001")).toBeVisible();
+
+  await page.locator("#historial-alertas-filtro-estado").selectOption({ label: "Falso positivo" });
+  await page.getByRole("button", { name: "Buscar" }).click();
+
+  await expect(tabla.getByText("LOT-2026-001")).toHaveCount(0);
+  await expect(tabla.getByText("LOT-2026-003")).toBeVisible();
+  await expect(tabla.getByText("Falso positivo")).toBeVisible();
+  expect(pedidos.at(-1)!.get("estado")).toBe("falso_positivo");
 });

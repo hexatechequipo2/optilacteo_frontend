@@ -491,10 +491,45 @@ test.describe("LotesPage", () => {
   });
 
 
-    test("muestra error cuando un parámetro está fuera del umbral configurado", async ({
+    test("no bloquea un parámetro fuera del umbral: guarda y muestra No apto", async ({
     page,
   }) => {
     await mockLotesDeps(page);
+
+    // HU-76: el back guarda el lote fuera de umbral (201) y lo clasifica No Apto.
+    await page.route("**/lotes*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          lote: {
+            ...LOTE_1,
+            id: 99,
+            codigo: "LOT-2026-099",
+            clasificacion: "no_apto",
+            clasificacionManual: false,
+            clasificacionMotivos: [
+              {
+                parametro: "ph",
+                valor: 2,
+                nivel: "critico",
+                origen: "inicial",
+                enRevisionPorConflicto: false,
+                umbralMin: 6,
+                umbralMax: 7.5,
+                umbralAlertaMin: 5.9,
+                umbralAlertaMax: 7.6,
+              },
+            ],
+          },
+          sensoresDisponibles: [],
+          warnings: ["El valor de 'ph' (2) está fuera del rango permitido [6.00 - 7.50]"],
+        }),
+      });
+    });
 
     await page.route("**/config-param*", async (route) => {
       const rt = route.request().resourceType();
@@ -524,7 +559,9 @@ test.describe("LotesPage", () => {
     await page.getByRole("button", { name: /nuevo lote/i }).click();
 
     await page.getByLabel("Proveedor *").selectOption({ value: "1" });
+    await page.getByLabel("Tambo de origen *").selectOption({ value: "1" });
     await page.getByLabel("Fecha de ingreso *").fill("2026-08-01");
+    await page.getByLabel("Cantidad ingresada (L) *").fill("1000");
     await page.locator("#lote-form").getByText("Leche cruda").click();
     // pH por debajo del mínimo configurado (6–7.5)
     await page.getByLabel("pH (sin unidad)").fill("2");
@@ -533,7 +570,11 @@ test.describe("LotesPage", () => {
 
     await page.getByRole("button", { name: "Registrar lote" }).click();
 
-    await expect(page.getByText("Debe estar entre 6 y 7.5")).toBeVisible();
+    await expect(page.getByText("Debe estar entre 6 y 7.5")).not.toBeVisible();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Lote registrado")).toBeVisible();
+    await expect(dialog.getByText("No apto")).toBeVisible();
+    await expect(dialog.getByText("(rango normal 6 – 7.5)")).toBeVisible();
   });
 });
 
@@ -1065,6 +1106,9 @@ test.describe("LotesPage › ClasificacionAutomaticaTab", () => {
         }),
       });
     });
+    await page.route("**/notificaciones/no-leidas/count", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ total: 1 }) }),
+    );
     await page.reload();
     // El badge rojo sobre la campana debe mostrar "1"
     await expect(page.getByTitle("Notificaciones")).toContainText("1");
@@ -1672,6 +1716,25 @@ const RECOMENDACION_MOCK = {
   destinoReal: null,
 };
 
+// HU-78 (D-08): la sugerencia solo se pide para lotes Apto. Los specs de
+// HU-49/HU-37 abren "Editar lote" sobre LOTE_1 (sin clasificar), así que se
+// pisa el listado con ese lote Apto. Registrar después de mockLotesDeps (LIFO).
+async function mockPrimerLoteApto(page: Page) {
+  await page.route("**/lotes*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...LOTES_PAGINATED_MOCK,
+        data: [{ ...LOTE_1, clasificacion: "apto" }, LOTE_2],
+      }),
+    });
+  });
+}
+
 async function mockRecomendacionPendiente(page: Page, recomendacion: unknown) {
   await page.route(/\/recomendaciones\/lote\/\d+/, async (route) => {
     const rt = route.request().resourceType();
@@ -1690,6 +1753,7 @@ async function mockRecomendacionPendiente(page: Page, recomendacion: unknown) {
 test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () => {
   test.beforeEach(async ({ page }) => {
     await mockLotesDeps(page);
+    await mockPrimerLoteApto(page);
     await page.route("**/destinos-productivos*", async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
@@ -1722,11 +1786,11 @@ test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () 
 
   test("confianza media y baja muestran el badge correspondiente", async ({ page }) => {
     await mockRecomendacionPendiente(page, { ...RECOMENDACION_MOCK, confianza: 60 });
-    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Actualizar" }).click();
     await expect(page.getByRole("dialog").getByText("Confianza media")).toBeVisible();
 
     await mockRecomendacionPendiente(page, { ...RECOMENDACION_MOCK, confianza: 30 });
-    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Actualizar" }).click();
     await expect(page.getByRole("dialog").getByText("Confianza baja")).toBeVisible();
   });
 
@@ -1801,7 +1865,7 @@ test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () 
 
     const [response] = await Promise.all([
       page.waitForResponse((res) => /\/recomendaciones\/lote\/\d+/.test(res.url())),
-      page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click(),
+      page.getByRole("dialog").getByRole("button", { name: "Actualizar" }).click(),
     ]);
     expect(response.status()).toBe(200);
   });
@@ -1816,16 +1880,88 @@ test.describe("HU-49 — Recomendaciones predictivas de destino productivo", () 
       });
     });
 
-    await page.getByRole("dialog").getByRole("button", { name: "Recalcular" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Actualizar" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("Error del servidor")).toBeVisible();
+    await expect(dialog.getByText("No se pudo cargar la recomendación de destino.")).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Reintentar" })).toBeVisible();
+  });
+
+  // HU-78 (D-08): con un lote que no es Apto la tarjeta no pide la
+  // recomendación. Se recarga /lotes con un único lote de la clasificación
+  // a probar y se cuentan los GET desde ahí.
+  async function abrirEdicionConClasificacion(page: Page, clasificacion: "no_apto" | null) {
+    await page.route("**/lotes*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...LOTES_PAGINATED_MOCK, data: [{ ...LOTE_1, clasificacion }], total: 1 }),
+      });
+    });
+    const getsRecomendacion: string[] = [];
+    page.on("request", (req) => {
+      if (req.method() === "GET" && /\/recomendaciones\/lote\/\d+/.test(req.url())) {
+        getsRecomendacion.push(req.url());
+      }
+    });
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page.waitForLoadState("networkidle");
+    return getsRecomendacion;
+  }
+
+  test("lote No Apto: muestra 'No aplica' con enlace a la revisión y no pide la recomendación", async ({ page }) => {
+    const gets = await abrirEdicionConClasificacion(page, "no_apto");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("No aplica", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Ir a la revisión de calidad" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Aceptar recomendación" })).toHaveCount(0);
+    expect(gets).toEqual([]);
+  });
+
+  test("lote pendiente de clasificar: se habilita al clasificar, sin acciones ni GET", async ({ page }) => {
+    const gets = await abrirEdicionConClasificacion(page, null);
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Se habilita cuando el lote esté clasificado.")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Aceptar recomendación" })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Recalcular" })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Actualizar" })).toHaveCount(0);
+    expect(gets).toEqual([]);
+  });
+
+  // HU-78 CA8: si el back nunca responde, al vencer el timeout (10 s) se
+  // informa el motivo, se apaga la carga y no queda ninguna recomendación.
+  // En tiempo real: page.clock no afecta el timeout de axios (el adapter xhr
+  // usa XMLHttpRequest.timeout nativo, no setTimeout).
+  test("timeout de la recomendación: informa el motivo y no queda cargando", async ({ page }) => {
+    test.slow();
+    await page.route(/\/recomendaciones\/lote\/\d+/, () => {
+      // Nunca responde.
+    });
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Buscando una recomendación para este lote...")).toBeVisible();
+
+    await expect(
+      dialog.getByText("El servicio no respondió a tiempo. Intentá nuevamente."),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(dialog.getByText("Buscando una recomendación para este lote...")).toHaveCount(0);
+    await expect(dialog.getByText(/Destino recomendado por el sistema/)).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Aceptar recomendación" })).toHaveCount(0);
+    await page.unrouteAll({ behavior: "ignoreErrors" });
   });
 });
 
 test.describe("HU-49 — sin otro destino activo en el catálogo", () => {
   test("avisa que no se puede registrar una divergencia si no hay otro destino disponible", async ({ page }) => {
     await mockLotesDeps(page);
+    await mockPrimerLoteApto(page);
     // Único destino activo = el mismo que recomienda el sistema (id 1)
     await page.route("**/destinos-productivos*", async (route) => {
       const rt = route.request().resourceType();
@@ -1861,6 +1997,7 @@ test.describe("HU-49 — sin otro destino activo en el catálogo", () => {
 test.describe("HU-49 — sin recomendación disponible", () => {
   test("lote sin historial suficiente muestra el mensaje de sin recomendación", async ({ page }) => {
     await mockLotesDeps(page);
+    await mockPrimerLoteApto(page);
     await page.route("**/destinos-productivos*", async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
@@ -1885,6 +2022,7 @@ test.describe("HU-49 — sin recomendación disponible", () => {
 test.describe("HU-37 — Justificación de divergencia operador vs sistema", () => {
   test("una divergencia ya resuelta se muestra en el historial del lote con su justificación", async ({ page }) => {
     await mockLotesDeps(page);
+    await mockPrimerLoteApto(page);
     await page.route("**/destinos-productivos*", async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();
@@ -1952,6 +2090,7 @@ test.describe("HU-37 — Justificación de divergencia operador vs sistema", () 
 
   test("una divergencia ya resuelta no tiene ningún control para editar la justificación", async ({ page }) => {
     await mockLotesDeps(page);
+    await mockPrimerLoteApto(page);
     await page.route("**/destinos-productivos*", async (route) => {
       const rt = route.request().resourceType();
       if (rt !== "fetch" && rt !== "xhr") return route.continue();

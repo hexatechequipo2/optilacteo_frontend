@@ -5,6 +5,8 @@ import type { ZonaSemaforo } from "../../../utils/umbralesConfig";
 interface ZonasSemaforoBarProps {
   // undefined: los inputs todavía no forman una cadena válida.
   umbrales: UmbralesConfig | undefined;
+  // false: falta algún valor; true con umbrales undefined: hay errores.
+  completos: boolean;
   rangoFisico: { min: number; max: number };
 }
 
@@ -18,13 +20,15 @@ const COLOR_ZONA: Record<ZonaSemaforo, string> = {
 // HU-40: referencia visual de qué valores quedan en verde, amarillo y rojo
 // con los umbrales que se están editando. Es solo una vista previa: el
 // estado de cada lectura lo calcula el backend.
-export function ZonasSemaforoBar({ umbrales, rangoFisico }: ZonasSemaforoBarProps) {
+export function ZonasSemaforoBar({ umbrales, completos, rangoFisico }: ZonasSemaforoBarProps) {
   if (!umbrales) {
     return (
       <div className="flex flex-col gap-1.5">
         <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800" />
         <p className="text-xs text-slate-400 dark:text-slate-500">
-          Completá los 4 valores para ver las zonas del semáforo.
+          {completos
+            ? "Corregí los valores marcados para ver las zonas del semáforo."
+            : "Completá los 4 valores para ver las zonas del semáforo."}
         </p>
       </div>
     );

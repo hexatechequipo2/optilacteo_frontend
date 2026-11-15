@@ -6,6 +6,7 @@ import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { QLLogo } from "../../components/ui/QLLogo";
 import { useAuth } from "../../hooks/useAuth";
+import { mensajeErrorApi } from "../../utils/mensajeErrorApi";
 
 interface FormErrors {
   email?: string;
@@ -85,7 +86,8 @@ export default function LoginPage() {
               break;
             }
             default:
-              setServerError(data?.message ?? "Ocurrió un error inesperado.");
+              // 429 (rate limit), 5xx sin mensaje técnico y 4xx con el message del back.
+              setServerError(mensajeErrorApi(error, "Ocurrió un error inesperado."));
           }
         }
       } else {

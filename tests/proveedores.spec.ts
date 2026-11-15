@@ -262,6 +262,38 @@ test.describe("ProveedoresPage", () => {
 
     expect(updatePayload).toMatchObject({ telefono: "3534009999", razonSocial: "Tambo El Roble" });
   });
+
+  test("editar y vaciar teléfono y email los manda como null en el PATCH", async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await loginAsAdministrador(page);
+
+    let updatePayload: Record<string, unknown> | undefined;
+    await page.route("**/proveedores/1", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      updatePayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...PROVEEDORES_MOCK.data[0], ...updatePayload }),
+      });
+    });
+
+    await page.goto("/proveedores");
+
+    await page.getByRole("button", { name: "Editar Tambo El Roble" }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByLabel("Teléfono")).toHaveValue("3534000000");
+    await expect(dialog.getByLabel("Email de contacto")).toHaveValue("contacto@elroble.com");
+
+    await dialog.getByLabel("Teléfono").fill("");
+    await dialog.getByLabel("Email de contacto").fill("");
+    await dialog.getByRole("button", { name: "Guardar cambios" }).click();
+
+    await expect(dialog).not.toBeVisible();
+
+    expect(updatePayload).toMatchObject({ telefono: null, emailContacto: null });
+  });
   test.describe("ProveedorFormModal", () => {
   test.beforeEach(async ({ page }) => {
     await mockProveedoresAndEmpresas(page);
@@ -664,6 +696,91 @@ test.describe("ProveedoresPage", () => {
         "No se pudo guardar el proveedor. Intentá nuevamente.",
       ),
     ).toBeVisible();
+  });
+
+  // HU-73 / D-06: la regla en sí se cubre en telefono.spec.ts; acá solo que
+  // el formulario la usa para bloquear o dejar pasar el envío.
+  test("un teléfono inválido muestra el error y no envía la request", async ({
+    page,
+  }) => {
+    let postCount = 0;
+
+    await page.route("**/proveedores", async (route) => {
+      if (route.request().method() !== "POST") {
+        return route.continue();
+      }
+
+      postCount++;
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: 3 }),
+      });
+    });
+
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog.getByLabel("Razón social *").fill("Proveedor Test");
+    await dialog.getByLabel("CUIT *").fill("30333333333");
+    await dialog.getByLabel("Teléfono").fill("353-abc-1234");
+    await dialog
+      .getByLabel("Empresa asignada *")
+      .selectOption("1");
+
+    await dialog
+      .getByRole("button", { name: "Crear proveedor" })
+      .click();
+
+    await expect(
+      dialog.getByText(
+        "El teléfono solo puede tener números, espacios, guiones y un + al inicio",
+      ),
+    ).toBeVisible();
+    await expect(dialog).toBeVisible();
+    expect(postCount).toBe(0);
+  });
+
+  test("un teléfono válido se envía sin transformar", async ({ page }) => {
+    let requestBody: Record<string, unknown> | undefined;
+
+    await page.route("**/proveedores", async (route) => {
+      if (route.request().method() !== "POST") {
+        return route.continue();
+      }
+
+      requestBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: 3, ...requestBody }),
+      });
+    });
+
+    await page
+      .getByRole("button", { name: /nuevo proveedor/i })
+      .click();
+
+    const dialog = page.getByRole("dialog");
+
+    await dialog.getByLabel("Razón social *").fill("Proveedor Test");
+    await dialog.getByLabel("CUIT *").fill("30333333333");
+    await dialog.getByLabel("Teléfono").fill("+54 353 412-3456");
+    await dialog
+      .getByLabel("Empresa asignada *")
+      .selectOption("1");
+
+    await dialog
+      .getByRole("button", { name: "Crear proveedor" })
+      .click();
+
+    await expect
+      .poll(() => requestBody)
+      .toMatchObject({ telefono: "+54 353 412-3456" });
+    await expect(dialog).not.toBeVisible();
   });
 
   test("Cancelar cierra el modal", async ({ page }) => {

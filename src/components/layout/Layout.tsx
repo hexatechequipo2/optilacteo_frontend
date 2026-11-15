@@ -6,6 +6,26 @@ import { useNotificaciones } from "../../hooks/useNotificaciones";
 import { Bell, Moon, Sun, Menu } from "lucide-react";
 import { FloatingDictadoVozButton } from "../FloatingDictadoVozButton";
 
+const SIDEBAR_COLAPSADO_KEY = "sidebar-colapsado";
+
+// Si el storage no está disponible (modo privado, bloqueado), el menú
+// arranca expandido y el estado vive solo en memoria.
+function leerSidebarColapsado(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLAPSADO_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function guardarSidebarColapsado(colapsado: boolean) {
+  try {
+    localStorage.setItem(SIDEBAR_COLAPSADO_KEY, String(colapsado));
+  } catch {
+    // Sin persistencia: se pierde al recargar, pero el toggle sigue andando.
+  }
+}
+
 interface LayoutProps {
   breadcrumb: string;
   children: ReactNode;
@@ -14,15 +34,45 @@ interface LayoutProps {
 export function Layout({ breadcrumb, children }: LayoutProps) {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { notificaciones, noLeidasCount, marcarLeida } = useNotificaciones();
+  const {
+    notificaciones,
+    noLeidasCount,
+    isLoading,
+    error,
+    refetch,
+    marcarLeida,
+    marcarTodasLeidas,
+    marcandoTodas,
+    errorMarcarTodas,
+    limpiarErrorMarcarTodas,
+  } = useNotificaciones();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarColapsado, setIsSidebarColapsado] = useState(leerSidebarColapsado);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  // El conteo puede superar la página cargada (o ser null si falló); la lista cubre ese caso.
+  const hayNoLeidas = (noLeidasCount ?? 0) > 0 || notificaciones.some((n) => !n.leida);
+
+  // El error de "marcar todas" no sobrevive a cerrar el desplegable.
+  const cerrarNotif = () => {
+    setIsNotifOpen(false);
+    limpiarErrorMarcarTodas();
+  };
 
   const breadcrumbs = breadcrumb.split(" > ");
 
+  const toggleSidebarColapsado = () => {
+    const next = !isSidebarColapsado;
+    setIsSidebarColapsado(next);
+    guardarSidebarColapsado(next);
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950">
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        isCollapsed={isSidebarColapsado}
+      />
 
       {isSidebarOpen && (
         <div
@@ -35,9 +85,24 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
         <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 print:hidden dark:border-slate-800 dark:bg-slate-900 sm:px-6 sm:py-4 lg:px-8">
           {/* Breadcrumb y menú */}
           <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+            {/* Mismo ícono, dos acciones según el breakpoint (sin JS): en
+                mobile abre el drawer, en escritorio colapsa o expande. */}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              aria-label="Abrir menú lateral"
+              aria-expanded={isSidebarOpen}
               className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 lg:hidden"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+
+            <button
+              onClick={toggleSidebarColapsado}
+              aria-label={isSidebarColapsado ? "Expandir menú lateral" : "Colapsar menú lateral"}
+              aria-expanded={!isSidebarColapsado}
+              aria-controls="sidebar-principal"
+              title={isSidebarColapsado ? "Expandir menú lateral" : "Colapsar menú lateral"}
+              className="hidden rounded-md p-2 text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 lg:flex"
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -90,12 +155,13 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
 
             <div>
               <button
-                onClick={() => setIsNotifOpen((prev) => !prev)}
+                onClick={() => (isNotifOpen ? cerrarNotif() : setIsNotifOpen(true))}
                 className="relative rounded-full border border-slate-200 p-2 transition hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
                 title="Notificaciones"
+                aria-label={noLeidasCount ? `Notificaciones, ${noLeidasCount} sin leer` : "Notificaciones"}
               >
                 <Bell className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-                {noLeidasCount > 0 && (
+                {noLeidasCount !== null && noLeidasCount > 0 && (
                   <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
                     {noLeidasCount > 9 ? "9+" : noLeidasCount}
                   </span>
@@ -106,16 +172,48 @@ export function Layout({ breadcrumb, children }: LayoutProps) {
                 <>
                   <div
                     className="fixed inset-0 z-10"
-                    onClick={() => setIsNotifOpen(false)}
+                    onClick={cerrarNotif}
                   />
                   <div className="absolute right-0 top-full z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
                     <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                        Notificaciones
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                          Notificaciones
+                        </p>
+                        {(hayNoLeidas || marcandoTodas) && (
+                          <button
+                            type="button"
+                            onClick={() => void marcarTodasLeidas()}
+                            disabled={marcandoTodas}
+                            className="shrink-0 text-xs font-medium text-blue-600 transition hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:no-underline dark:text-blue-400"
+                          >
+                            Marcar todas como leídas
+                          </button>
+                        )}
+                      </div>
+                      {errorMarcarTodas && (
+                        <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-400">
+                          {errorMarcarTodas}
+                        </p>
+                      )}
                     </div>
                     <div className="max-h-80 overflow-y-auto">
-                      {notificaciones.length === 0 ? (
+                      {isLoading ? (
+                        <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                          Cargando notificaciones...
+                        </p>
+                      ) : error ? (
+                        <div className="flex flex-col items-center gap-2 px-4 py-6 text-center text-sm text-red-700 dark:text-red-400">
+                          <span>{error}</span>
+                          <button
+                            type="button"
+                            onClick={() => void refetch()}
+                            className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
+                          >
+                            Reintentar
+                          </button>
+                        </div>
+                      ) : notificaciones.length === 0 ? (
                         <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
                           No tenés notificaciones.
                         </p>

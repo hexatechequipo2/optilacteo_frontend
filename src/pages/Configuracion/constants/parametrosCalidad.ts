@@ -7,6 +7,8 @@ interface ParametroMeta {
   unidad: string;
   icon: LucideIcon;
   rangoFisico: { min: number; max: number };
+  // Ejemplo de formato para placeholder y ayuda, donde la escala confunde.
+  ejemplo?: string;
 }
 
 export type ParametroVisible = Parametro;
@@ -14,6 +16,7 @@ export type ParametroVisible = Parametro;
 // Rango físico espeja RANGOS_FISICOS en
 // optilacteo-backend/src/module/config-parametro/validators/rangos-fisicos.constant.ts
 // Si el backend cambia esos valores, hay que actualizar esta tabla a mano.
+// Densidad va en kg/m³: un "1.030" (g/mL) queda fuera del rango físico.
 export const PARAMETROS_META: Record<ParametroVisible, ParametroMeta> = {
   [Parametro.PH]: {
     label: "pH",
@@ -47,9 +50,11 @@ export const PARAMETROS_META: Record<ParametroVisible, ParametroMeta> = {
   },
   [Parametro.DENSIDAD]: {
     label: "Densidad",
-    unidad: "g/mL",
+    // kg/m³, igual que el back (RANGOS_FISICOS 1000–1100). Leche ≈ 1028–1034.
+    unidad: "kg/m³",
     icon: Grid2x2,
-    rangoFisico: { min: 0, max: 2 },
+    rangoFisico: { min: 1000, max: 1100 },
+    ejemplo: "1028",
   },
   [Parametro.CONDUCTIVIDAD]: {
     label: "Conductividad",

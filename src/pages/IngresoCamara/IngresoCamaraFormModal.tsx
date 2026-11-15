@@ -8,21 +8,17 @@ import { extraerMensajeError } from "../../services/ingresoCamara.service";
 import type { Lote } from "../../types/lote.types";
 import type { CreateIngresoCamaraDto, IngresoCamara } from "../../types/ingresoCamara.types";
 import type { Sku } from "../../types/sku.types";
+import { aFechaCalendario } from "../../utils/fechaCalendario";
 
 const SIN_LOTE_ORIGEN = "";
 
-function hoyComoInputDate(): string {
-  const hoy = new Date();
-  const anio = hoy.getFullYear();
-  const mes = String(hoy.getMonth() + 1).padStart(2, "0");
-  const dia = String(hoy.getDate()).padStart(2, "0");
-  return `${anio}-${mes}-${dia}`;
-}
-
-// El backend espera fechaIngreso como ISO datetime (@IsDateString). El
-// input date del form solo tiene día/mes/año; se envía a medianoche UTC.
+// El backend guarda fechaIngreso en una columna `timestamp` (sin huso).
+// Medianoche UTC es el día anterior a las 21:00 AR y quedaba guardado como
+// el día anterior. Se manda el mediodía local del día elegido: cae en ese
+// día con cualquier huso del servidor (±9 h de margen), mismo criterio que
+// LoteFormModal. TODO(backend): pasar la columna a `date` y mandar YYYY-MM-DD.
 function fechaInputAIso(fechaInput: string): string {
-  return new Date(`${fechaInput}T00:00:00.000Z`).toISOString();
+  return new Date(`${fechaInput}T12:00:00`).toISOString();
 }
 
 interface FormValues {
@@ -43,7 +39,7 @@ function buildInitialValues(): FormValues {
     skuId: "",
     cantidad: "",
     loteId: SIN_LOTE_ORIGEN,
-    fecha: hoyComoInputDate(),
+    fecha: aFechaCalendario(),
   };
 }
 
