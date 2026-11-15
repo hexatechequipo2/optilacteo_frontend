@@ -22,6 +22,15 @@ import type {
 } from "../types/consultaLotesProduccion.types";
 import type { DestinoHistorialItem } from "../types/destinoProductivoHistorial.types";
 
+// HU-76: el back siempre manda clasificacionMotivos (array) y clasificacionManual.
+// Se normaliza por si llega un lote sin esos campos (respuestas o mocks previos).
+const normalizarLote = (lote: Lote): Lote => ({
+  ...lote,
+  clasificacion: lote.clasificacion ?? null,
+  clasificacionMotivos: lote.clasificacionMotivos ?? [],
+  clasificacionManual: lote.clasificacionManual ?? false,
+});
+
 // El backend valida existencia del proveedor, rangos de parámetros y unicidad
 // del código directamente (404/400/409 con mensaje); no hace falta duplicar
 // esas validaciones acá.
@@ -32,7 +41,7 @@ export const loteService = {
     const { data } = await api.get<PaginatedLotes>("/lotes", {
       params: { limit: 100, ...filters },
     });
-    return data.data;
+    return data.data.map(normalizarLote);
   },
 
   // Pide 1 solo registro para leer el "total" del paginado sin traer todos
@@ -49,12 +58,12 @@ export const loteService = {
   // candidatos a asociar (ver LoteFormModal.tsx).
   create: async (dto: CreateLoteDto): Promise<LoteCreateResponse> => {
     const { data } = await api.post<LoteCreateResponse>("/lotes", dto);
-    return data;
+    return { ...data, lote: normalizarLote(data.lote) };
   },
 
   update: async (id: number, dto: UpdateLoteDto): Promise<Lote> => {
     const { data } = await api.patch<Lote>(`/lotes/${id}`, dto);
-    return data;
+    return normalizarLote(data);
   },
 
   // PATCH /lotes/:id/finalizar (lote.controller.ts): HU-62 amplió el rol
@@ -64,7 +73,7 @@ export const loteService = {
   // envía `rendimiento` si el usuario lo cargó en el modal.
   finalizar: async (id: number, dto?: FinalizarLoteDto): Promise<Lote> => {
     const { data } = await api.patch<Lote>(`/lotes/${id}/finalizar`, dto);
-    return data;
+    return normalizarLote(data);
   },
 
   // HU-22: bandeja dedicada de lotes No Apto sin revisión vigente (el
@@ -72,7 +81,7 @@ export const loteService = {
   // reclasificaron de nuevo). No está paginado.
   getNoAptos: async (): Promise<Lote[]> => {
     const { data } = await api.get<Lote[]>("/lotes/no-aptos");
-    return data;
+    return data.map(normalizarLote);
   },
 
   // POST /lotes/:id/revision devuelve el lote actualizado completo (no solo
@@ -81,7 +90,7 @@ export const loteService = {
   // cual vía extraerMensajeError).
   revisar: async (id: number, dto: RevisarLoteDto): Promise<Lote> => {
     const { data } = await api.post<Lote>(`/lotes/${id}/revision`, dto);
-    return data;
+    return normalizarLote(data);
   },
 
   getHistorialRevisiones: async (id: number): Promise<LoteRevision[]> => {
@@ -196,7 +205,7 @@ export const loteService = {
     const { data } = await api.patch<Lote>(`/lotes/${id}/destino-productivo`, {
       destinoProductivoId,
     });
-    return data;
+    return normalizarLote(data);
   },
 };
 

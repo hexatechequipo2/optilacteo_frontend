@@ -491,10 +491,45 @@ test.describe("LotesPage", () => {
   });
 
 
-    test("muestra error cuando un parámetro está fuera del umbral configurado", async ({
+    test("no bloquea un parámetro fuera del umbral: guarda y muestra No apto", async ({
     page,
   }) => {
     await mockLotesDeps(page);
+
+    // HU-76: el back guarda el lote fuera de umbral (201) y lo clasifica No Apto.
+    await page.route("**/lotes*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          lote: {
+            ...LOTE_1,
+            id: 99,
+            codigo: "LOT-2026-099",
+            clasificacion: "no_apto",
+            clasificacionManual: false,
+            clasificacionMotivos: [
+              {
+                parametro: "ph",
+                valor: 2,
+                nivel: "critico",
+                origen: "inicial",
+                enRevisionPorConflicto: false,
+                umbralMin: 6,
+                umbralMax: 7.5,
+                umbralAlertaMin: 5.9,
+                umbralAlertaMax: 7.6,
+              },
+            ],
+          },
+          sensoresDisponibles: [],
+          warnings: ["El valor de 'ph' (2) está fuera del rango permitido [6.00 - 7.50]"],
+        }),
+      });
+    });
 
     await page.route("**/config-param*", async (route) => {
       const rt = route.request().resourceType();
@@ -524,7 +559,9 @@ test.describe("LotesPage", () => {
     await page.getByRole("button", { name: /nuevo lote/i }).click();
 
     await page.getByLabel("Proveedor *").selectOption({ value: "1" });
+    await page.getByLabel("Tambo de origen *").selectOption({ value: "1" });
     await page.getByLabel("Fecha de ingreso *").fill("2026-08-01");
+    await page.getByLabel("Cantidad ingresada (L) *").fill("1000");
     await page.locator("#lote-form").getByText("Leche cruda").click();
     // pH por debajo del mínimo configurado (6–7.5)
     await page.getByLabel("pH (sin unidad)").fill("2");
@@ -533,7 +570,11 @@ test.describe("LotesPage", () => {
 
     await page.getByRole("button", { name: "Registrar lote" }).click();
 
-    await expect(page.getByText("Debe estar entre 6 y 7.5")).toBeVisible();
+    await expect(page.getByText("Debe estar entre 6 y 7.5")).not.toBeVisible();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Lote registrado")).toBeVisible();
+    await expect(dialog.getByText("No apto")).toBeVisible();
+    await expect(dialog.getByText("(rango normal 6 – 7.5)")).toBeVisible();
   });
 });
 

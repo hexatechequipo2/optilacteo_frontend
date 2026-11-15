@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, HelpCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, HelpCircle, type LucideIcon } from "lucide-react";
 import { ClasificacionLote } from "../types/lote.types";
 
 const RESULTADO_META: Record<
@@ -27,12 +27,22 @@ const FALLBACK_META = {
   className: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
 };
 
+// HU-76: lote guardado sin clasificar (faltan parámetros o configuración).
+// Gris a propósito: el ámbar queda para los motivos en nivel de alerta.
+const PENDIENTE_META = {
+  label: "Pendiente de clasificar",
+  icon: Clock,
+  className: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+};
+
 interface ClasificacionLoteBadgeProps {
-  resultado: ClasificacionLote;
+  // null = pendiente de clasificar (HU-76).
+  resultado: ClasificacionLote | null;
 }
 
 export function ClasificacionLoteBadge({ resultado }: ClasificacionLoteBadgeProps) {
-  const { label, icon: Icon, className } = RESULTADO_META[resultado] ?? FALLBACK_META;
+  const { label, icon: Icon, className } =
+    resultado === null ? PENDIENTE_META : (RESULTADO_META[resultado] ?? FALLBACK_META);
 
   return (
     <span
