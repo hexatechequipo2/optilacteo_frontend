@@ -594,3 +594,39 @@ test.describe("AuthContext › Sesión", () => {
     ).toEqual([null, null]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Transversal · Rate limit 429 en recuperación de contraseña (PR #167)
+// ---------------------------------------------------------------------------
+
+test.describe("Transversal · ForgotPasswordPage: rate limit y 5xx", () => {
+  test("Transversal · un 429 al pedir el link pide esperar un minuto", async ({ page }) => {
+    await page.route("**/request-password-reset", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await route.fulfill({ status: 429, contentType: "text/plain", body: "ThrottlerException: Too Many Requests" });
+    });
+    await page.goto("/forgot-password");
+    await page.getByLabel("Correo corporativo").fill("admin@optilacteo.com");
+    await page.getByRole("button", { name: "Enviar link de recuperación" }).click();
+
+    await expect(page.getByText("Demasiados intentos. Esperá un minuto y volvé a intentar.")).toBeVisible();
+    await expect(page.getByText("Revisá tu correo")).toHaveCount(0);
+  });
+
+  test("Transversal · un 500 al pedir el link muestra el mensaje genérico y no el técnico", async ({ page }) => {
+    await page.route("**/request-password-reset", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "QueryFailedError: relation users does not exist" }),
+      });
+    });
+    await page.goto("/forgot-password");
+    await page.getByLabel("Correo corporativo").fill("admin@optilacteo.com");
+    await page.getByRole("button", { name: "Enviar link de recuperación" }).click();
+
+    await expect(page.getByText("No se pudo conectar con el servidor. Intentá nuevamente.")).toBeVisible();
+    await expect(page.getByText(/QueryFailedError/)).toHaveCount(0);
+  });
+});
