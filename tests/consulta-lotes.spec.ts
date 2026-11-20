@@ -1,5 +1,12 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsResponsableCalidad } from "./fixtures/mockAuth.ts";
+import {
+  loginAsAdministrador,
+  loginAsGerente,
+  loginAsOperario,
+  loginAsResponsableCalidad,
+  loginAsResponsableProduccion,
+  quitarPermisos,
+} from "./fixtures/mockAuth.ts";
 
 // HU-77: ConsultaLotesPage conectada a GET /lotes/producciones/consulta.
 
@@ -334,5 +341,431 @@ test.describe("HU-77 — Detalle y trazabilidad del lote de producción", () => 
     await alerta.getByRole("button", { name: "Reintentar" }).click();
     await expect(page.getByRole("heading", { name: "LP-0012" })).toBeVisible();
     await expect(alerta).toBeHidden();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-77 · Consulta de lotes de producción (Sprint 6)
+// ---------------------------------------------------------------------------
+//
+// HU-77-D1 (diferencia documentada): GET /proveedores pide recepcion:READ
+// (proveedor.controller.ts:37), la consulta pide trazabilidad:READ
+// (lote.controller.ts:86) y GET /tambos acepta cualquiera de los dos
+// (tambo.controller.ts:41). Un rol con trazabilidad sin recepción ve la
+// consulta pero no puede filtrar por proveedor. Los tests siguen al backend.
+
+const RUTA_CONSULTA = /\/lotes\/producciones\/consulta\?/;
+const menuLateral = (page: Page) => page.getByRole("complementary");
+
+function diferido() {
+  let liberar!: () => void;
+  const promesa = new Promise<void>((r) => (liberar = r));
+  return { promesa, liberar };
+}
+
+// Un pedido abortado por el front no se puede completar: se ignora el error.
+async function fulfillSiSigue(route: Parameters<Parameters<Page["route"]>[1]>[0], body: unknown, status = 200) {
+  try {
+    await route.fulfill(json(body, status));
+  } catch {
+    // pedido cancelado por el AbortController
+  }
+}
+
+test.describe("HU-77 · Consulta de lotes de producción", () => {
+  // --- Unitarios: service ---------------------------------------------------
+
+  test("HU-77 · el primer pedido manda page=1 y limit=20", async ({ page }) => {
+    const pedidos: URL[] = [];
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, (route) => {
+      pedidos.push(new URL(route.request().url()));
+      return route.fulfill(json(respuestaOk));
+    });
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+
+    const params = pedidos[0].searchParams;
+    expect(params.get("page")).toBe("1");
+    expect(params.get("limit")).toBe("20");
+  });
+
+  test("HU-77 · un 400 de la consulta muestra el mensaje del backend", async ({ page }) => {
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, (route) =>
+      route.fulfill(json({ message: ["fechaDesde must be a valid ISO 8601 date string"] }, 400)),
+    );
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+
+    await expect(
+      page.getByRole("alert").filter({ hasText: "fechaDesde must be a valid ISO 8601 date string" }),
+    ).toBeVisible();
+  });
+
+  test("HU-77 · un error de red en la consulta muestra el mensaje genérico con Reintentar", async ({ page }) => {
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, (route) => route.abort("failed"));
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+
+    const alerta = page.getByRole("alert").filter({ hasText: "No se pudieron cargar los lotes de producción" });
+    await expect(alerta).toBeVisible();
+    await expect(alerta.getByRole("button", { name: "Reintentar" })).toBeVisible();
+  });
+
+  test("HU-77 · detalle: un 403 muestra el mensaje del backend y no 'No se encontró el lote'", async ({ page }) => {
+    await mockBase(page);
+    await page.route(RUTA_TRAZABILIDAD, (route) =>
+      route.fulfill(json({ message: "No tenés permiso sobre Trazabilidad." }, 403)),
+    );
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta/12");
+
+    await expect(page.getByRole("alert").filter({ hasText: "No tenés permiso sobre Trazabilidad." })).toBeVisible();
+    await expect(page.getByText("No se encontró el lote")).toHaveCount(0);
+  });
+
+  // --- Unitarios: hooks (loading / error / data) ----------------------------
+
+  test("HU-77 · en la primera carga muestra 'Cargando lotes…' sin el estado vacío", async ({ page }) => {
+    const gate = diferido();
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, async (route) => {
+      await gate.promesa;
+      await fulfillSiSigue(route, respuestaOk);
+    });
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+
+    await expect(page.getByText("Cargando lotes…")).toBeVisible();
+    await expect(page.getByText("No se encontraron lotes")).toHaveCount(0);
+
+    gate.liberar();
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+    await expect(page.getByText("Cargando lotes…")).toHaveCount(0);
+  });
+
+  test("HU-77 · una respuesta tardía de un filtro anterior no pisa la actual", async ({ page }) => {
+    const gate = diferido();
+    const LOTE_FINALIZADO = { ...LOTE, id: 99, codigo: "LP-0099", estado: "finalizado" };
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, async (route) => {
+      const estado = new URL(route.request().url()).searchParams.get("estado");
+      if (estado === "finalizado") {
+        return fulfillSiSigue(route, { data: [LOTE_FINALIZADO], total: 1, page: 1, limit: 20 });
+      }
+      // El pedido sin filtro queda colgado hasta después del filtrado.
+      await gate.promesa;
+      await fulfillSiSigue(route, respuestaOk);
+    });
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+    await expect(page.getByText("Cargando lotes…")).toBeVisible();
+
+    await page.getByLabel("Estado").selectOption({ label: "Finalizado" });
+    await expect(page.getByRole("cell", { name: "LP-0099" })).toBeVisible();
+
+    gate.liberar();
+    await page.waitForTimeout(500);
+    await expect(page.getByRole("cell", { name: "LP-0099" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toHaveCount(0);
+  });
+
+  test("HU-77 · si la página pedida quedó fuera de rango, salta a la última con datos", async ({ page }) => {
+    const pedidos: URL[] = [];
+    let seBorraron = false;
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, (route) => {
+      const url = new URL(route.request().url());
+      pedidos.push(url);
+      const pagina = Number(url.searchParams.get("page"));
+      if (pagina === 3) {
+        // Entre una consulta y otra se borraron lotes: ya hay solo 21 (2 páginas).
+        seBorraron = true;
+        return route.fulfill(json({ data: [], total: 21, page: 3, limit: 20 }));
+      }
+      return route.fulfill(json({ data: [LOTE], total: seBorraron ? 21 : 45, page: pagina, limit: 20 }));
+    });
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+    const nav = page.getByRole("navigation", { name: "Paginación de lotes" });
+    await expect(nav.getByText("Página 1 de 3")).toBeVisible();
+
+    await nav.getByRole("button", { name: "Página siguiente" }).click();
+    await expect(nav.getByText("Página 2 de 3")).toBeVisible();
+    await nav.getByRole("button", { name: "Página siguiente" }).click();
+
+    await expect(nav.getByText("Página 2 de 2")).toBeVisible();
+    expect(pedidos.at(-1)!.searchParams.get("page")).toBe("2");
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+  });
+
+  test("HU-77 · detalle: muestra 'Cargando lote…' con aria-busy mientras carga", async ({ page }) => {
+    const gate = diferido();
+    await mockBase(page);
+    await page.route(RUTA_TRAZABILIDAD, async (route) => {
+      await gate.promesa;
+      await fulfillSiSigue(route, TRAZABILIDAD);
+    });
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta/12");
+
+    await expect(page.locator('[aria-busy="true"]').filter({ hasText: "Cargando lote…" })).toBeVisible();
+    gate.liberar();
+    await expect(page.getByRole("heading", { name: "LP-0012" })).toBeVisible();
+    await expect(page.getByText("Cargando lote…")).toHaveCount(0);
+  });
+
+  test("HU-77 · detalle: un id inválido en la URL muestra 'No se encontró el lote' sin llamar al back", async ({ page }) => {
+    const pedidos: string[] = [];
+    await mockBase(page);
+    await page.route(RUTA_TRAZABILIDAD, (route) => {
+      pedidos.push(route.request().url());
+      return route.fulfill(json(TRAZABILIDAD));
+    });
+    await loginAsResponsableCalidad(page);
+
+    for (const id of ["abc", "0", "-3", "1.5"]) {
+      await page.goto(`/lotes/consulta/${id}`);
+      await expect(page.getByText("No se encontró el lote"), id).toBeVisible();
+    }
+    expect(pedidos).toEqual([]);
+  });
+
+  // --- Unitarios: componentes (render, interacción, validaciones) -----------
+
+  test("HU-77 · si Desde es posterior a Hasta avisa y no manda las fechas", async ({ page }) => {
+    const pedidos: URL[] = [];
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, (route) => {
+      pedidos.push(new URL(route.request().url()));
+      return route.fulfill(json(respuestaOk));
+    });
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+
+    await page.getByLabel("Desde").fill("2026-10-15");
+    await page.getByLabel("Hasta").fill("2026-10-10");
+
+    await expect(
+      page.getByText('La fecha "Desde" no puede ser posterior a "Hasta". El filtro de período no se aplica.'),
+    ).toBeVisible();
+    await expect.poll(() => pedidos.at(-1)!.searchParams.has("fechaDesde")).toBe(false);
+    expect(pedidos.at(-1)!.searchParams.has("fechaHasta")).toBe(false);
+  });
+
+  test("HU-77 · sin filtros y sin lotes muestra el texto local sin Limpiar filtros", async ({ page }) => {
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, (route) => route.fulfill(json({ data: [], total: 0, page: 1, limit: 20 })));
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+
+    await expect(page.getByText("No se encontraron lotes")).toBeVisible();
+    await expect(page.getByText("Todavía no hay lotes de producción registrados.")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("button", { name: "Limpiar filtros" })).toHaveCount(0);
+  });
+
+  test("HU-77 · el badge de estado muestra las tres etiquetas con la descripción en el title", async ({ page }) => {
+    const lotes = [
+      { ...LOTE, id: 1, codigo: "LP-0001", estado: "sin_consumos", estadoDescripcion: "Todavía no consumió lotes de ingreso." },
+      { ...LOTE, id: 2, codigo: "LP-0002", estado: "en_proceso", estadoDescripcion: "Al menos uno sigue abierto." },
+      { ...LOTE, id: 3, codigo: "LP-0003", estado: "finalizado", estadoDescripcion: "Todos sus lotes de ingreso están cerrados." },
+    ];
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, (route) => route.fulfill(json({ data: lotes, total: 3, page: 1, limit: 20 })));
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+
+    const esperado: [string, string, string][] = [
+      ["LP-0001", "Sin consumos", "Todavía no consumió lotes de ingreso."],
+      ["LP-0002", "En proceso", "Al menos uno sigue abierto."],
+      ["LP-0003", "Finalizado", "Todos sus lotes de ingreso están cerrados."],
+    ];
+    for (const [codigo, etiqueta, descripcion] of esperado) {
+      const badge = page.getByRole("row", { name: new RegExp(codigo) }).getByTitle(descripcion);
+      await expect(badge, codigo).toHaveText(etiqueta);
+    }
+  });
+
+  test("HU-77 · si fallan los proveedores, ese combo queda deshabilitado con aviso y el resto sigue andando", async ({ page }) => {
+    await mockBase(page);
+    await page.route(/\/proveedores\?/, (route) => route.fulfill(json({ message: "x" }, 500)));
+    await page.route(RUTA_CONSULTA, (route) => route.fulfill(json(respuestaOk)));
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+
+    await expect(page.getByLabel("Proveedor")).toBeDisabled();
+    await expect(page.getByText("No se pudieron cargar los proveedores.")).toBeVisible();
+    await expect(page.getByLabel("Tambo", { exact: true })).toBeEnabled();
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+  });
+
+  test("HU-77 · si fallan los tambos, ese combo queda deshabilitado con aviso y el resto sigue andando", async ({ page }) => {
+    await mockBase(page);
+    await page.route(/\/tambos$/, (route) => route.fulfill(json({ message: "x" }, 500)));
+    await page.route(RUTA_CONSULTA, (route) => route.fulfill(json(respuestaOk)));
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+
+    await expect(page.getByLabel("Tambo", { exact: true })).toBeDisabled();
+    await expect(page.getByText("No se pudieron cargar los tambos.")).toBeVisible();
+    await expect(page.getByLabel("Proveedor")).toBeEnabled();
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+  });
+
+  test("HU-77 · detalle: un evento de tipo desconocido se muestra como 'Evento'", async ({ page }) => {
+    await mockBase(page);
+    await page.route(RUTA_TRAZABILIDAD, (route) =>
+      route.fulfill(
+        json({
+          ...TRAZABILIDAD,
+          eventos: [
+            {
+              tipo: "TIPO_NUEVO_DEL_BACK",
+              fecha: "2026-10-11T13:05:00.000Z",
+              descripcion: "Evento que el front todavía no conoce",
+              detalle: {},
+              loteOrigenId: 1,
+              loteOrigenCodigo: "L-1",
+            },
+          ],
+        }),
+      ),
+    );
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta/12");
+
+    const eventos = page.getByRole("list", { name: "Eventos de trazabilidad" }).getByRole("listitem");
+    await expect(eventos).toHaveCount(1);
+    await expect(eventos.first()).toContainText("Evento");
+    await expect(eventos.first()).toContainText("Lote de origen: L-1");
+  });
+
+  test("HU-77 · detalle: 'Volver al listado' vuelve a /lotes/consulta", async ({ page }) => {
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, (route) => route.fulfill(json(respuestaOk)));
+    await page.route(RUTA_TRAZABILIDAD, (route) => route.fulfill(json(TRAZABILIDAD)));
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta/12");
+    await expect(page.getByRole("heading", { name: "LP-0012" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Volver al listado" }).click();
+
+    await expect(page).toHaveURL(/\/lotes\/consulta$/);
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+  });
+
+  // --- Permisos por rol (matriz por defecto de mockAuth.ts) -----------------
+
+  const ROLES_CON_CONSULTA: [string, (page: Page) => Promise<void>][] = [
+    ["Gerente", loginAsGerente],
+    ["Operario de línea", loginAsOperario],
+    ["Responsable de producción", loginAsResponsableProduccion],
+    ["Responsable de calidad", loginAsResponsableCalidad],
+  ];
+
+  for (const [rol, login] of ROLES_CON_CONSULTA) {
+    test(`HU-77 · ${rol} ve 'Consulta de lotes' en el Sidebar y el listado`, async ({ page }) => {
+      await mockBase(page);
+      await page.route(RUTA_CONSULTA, (route) => route.fulfill(json(respuestaOk)));
+      await login(page);
+      await page.goto("/lotes/consulta");
+
+      await expect(menuLateral(page).getByText("Consulta de lotes", { exact: true })).toBeVisible();
+      await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+    });
+  }
+
+  test("HU-77 · Administrador no ve el ítem y en /lotes/consulta ve 'Acceso no autorizado' sin hacer la consulta", async ({ page }) => {
+    const pedidos: string[] = [];
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, (route) => {
+      pedidos.push(route.request().url());
+      return route.fulfill(json(respuestaOk));
+    });
+    await loginAsAdministrador(page);
+    await page.goto("/lotes/consulta");
+
+    await expect(page.getByText("Acceso no autorizado")).toBeVisible();
+    await expect(menuLateral(page).getByText("Consulta de lotes", { exact: true })).toHaveCount(0);
+    expect(pedidos).toEqual([]);
+  });
+
+  // --- Matriz dinámica (quitarPermisos, HU-72) ------------------------------
+
+  test("HU-77 · un Gerente sin trazabilidad no ve el ítem y las rutas de consulta dan 'Acceso no autorizado'", async ({ page }) => {
+    const pedidos: string[] = [];
+    await mockBase(page);
+    await page.route(/\/lotes\/producciones\//, (route) => {
+      pedidos.push(route.request().url());
+      return route.fulfill(json(respuestaOk));
+    });
+    await loginAsGerente(page);
+    await quitarPermisos(page, "Gerente", ["trazabilidad"]);
+
+    for (const url of ["/lotes/consulta", "/lotes/consulta/12"]) {
+      await page.goto(url);
+      await expect(page.getByText("Acceso no autorizado"), url).toBeVisible();
+      await expect(menuLateral(page).getByText("Consulta de lotes", { exact: true }), url).toHaveCount(0);
+    }
+    expect(pedidos).toEqual([]);
+  });
+
+  test("HU-77 · un Operario sin recepcion ve la consulta pero no puede filtrar por proveedor", async ({ page }) => {
+    await mockBase(page);
+    // Sigue al backend: GET /proveedores pide recepcion:READ; GET /tambos
+    // acepta trazabilidad:READ (HU-77-D1).
+    await page.route(/\/proveedores\?/, (route) =>
+      route.fulfill(json({ message: "No tenés permiso sobre Recepción." }, 403)),
+    );
+    await page.route(RUTA_CONSULTA, (route) => route.fulfill(json(respuestaOk)));
+    await loginAsOperario(page);
+    await quitarPermisos(page, "Operario de línea", ["recepcion"]);
+    await page.goto("/lotes/consulta");
+
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+    await expect(page.getByLabel("Proveedor")).toBeDisabled();
+    await expect(page.getByText("No se pudieron cargar los proveedores.")).toBeVisible();
+    await expect(page.getByLabel("Tambo", { exact: true })).toBeEnabled();
+  });
+
+  // --- E2E: flujo principal -------------------------------------------------
+
+  test("HU-77 · flujo principal: filtrar, abrir la trazabilidad y volver al listado", async ({ page }) => {
+    const pedidos: URL[] = [];
+    await mockBase(page);
+    await page.route(RUTA_CONSULTA, (route) => {
+      pedidos.push(new URL(route.request().url()));
+      return route.fulfill(json(respuestaOk));
+    });
+    await page.route(RUTA_TRAZABILIDAD, (route) => route.fulfill(json(TRAZABILIDAD)));
+    await loginAsResponsableProduccion(page);
+    // Arranca desde un enlace directo al detalle: la landing
+    // (/dashboard-produccion) no renderiza con los [] genéricos de mockBase.
+    await page.goto("/lotes/consulta/12");
+    await expect(page.getByRole("heading", { name: "LP-0012" })).toBeVisible();
+
+    await menuLateral(page).getByText("Consulta de lotes", { exact: true }).click();
+    await expect(page).toHaveURL(/\/lotes\/consulta$/);
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
+
+    await page.getByLabel("Proveedor").selectOption({ label: "Tambos Unidos SRL" });
+    await page.getByLabel("Estado").selectOption({ label: "En proceso" });
+    await expect.poll(() => pedidos.at(-1)!.searchParams.get("estado")).toBe("en_proceso");
+    expect(pedidos.at(-1)!.searchParams.get("proveedorId")).toBe("7");
+
+    await page.getByRole("row", { name: /LP-0012/ }).getByRole("button", { name: /Ver trazabilidad/ }).click();
+    await expect(page).toHaveURL(/\/lotes\/consulta\/12$/);
+    await expect(page.getByRole("heading", { name: "LP-0012" })).toBeVisible();
+    await expect(
+      page.getByRole("list", { name: "Eventos de trazabilidad" }).getByRole("listitem"),
+    ).toHaveCount(3);
+
+    await page.getByRole("button", { name: "Volver al listado" }).click();
+    await expect(page).toHaveURL(/\/lotes\/consulta$/);
+    await expect(page.getByRole("cell", { name: "LP-0012" })).toBeVisible();
   });
 });

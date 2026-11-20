@@ -1649,7 +1649,10 @@ test("guardar sin cambiar el destino vigente no envía PATCH al destino producti
   await page.getByTitle("Editar lote").first().click();
   await page.getByRole("dialog").waitFor({ state: "visible" });
   await page.waitForLoadState("networkidle");
-  // El efecto ya sincronizó el select con destinoProductivoId: 1 — no cambiamos nada
+  // No cambiamos nada. Ojo: el select NO queda precargado con el destino
+  // vigente (queda en "Sin asignar", ver HU-78-H2); el test pasa porque con
+  // el selector vacío asignarDestinoProductivoSiCorresponde no manda el PATCH
+  // del destino, no porque el valor coincida con el vigente.
   await page.getByRole("button", { name: "Guardar destino" }).click();
   await page.waitForLoadState("networkidle");
 
