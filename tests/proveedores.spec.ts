@@ -1,5 +1,12 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsAdministrador } from "./fixtures/mockAuth.ts";
+import {
+  loginAsAdministrador,
+  loginAsGerente,
+  loginAsOperario,
+  loginAsResponsableCalidad,
+  loginAsResponsableProduccion,
+  quitarPermisos,
+} from "./fixtures/mockAuth.ts";
 
 /**
  * useProveedores pagina con PAGE_SIZE=3. Cuando hay texto de búsqueda,
@@ -949,5 +956,248 @@ test.describe("ProveedoresPage (HU-64) › Orden por estabilidad", () => {
     await expect(nueva.getByText("Sin datos suficientes")).toBeVisible();
     await expect(nueva).not.toContainText("%");
     await expect(page.getByRole("row", { name: /Tambo Sin Datos/ }).getByText("faltan 1 lote")).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-73 · Proveedores: teléfono, opcionales en null y unicidad por empresa (Sprint 6)
+// ---------------------------------------------------------------------------
+
+test.describe("HU-73 · Proveedores: teléfono, opcionales y unicidad por empresa", () => {
+  async function capturarPatch(page: Page, respuesta?: { status: number; body: unknown }) {
+    const capturado: { payload?: Record<string, unknown> } = {};
+    await page.route("**/proveedores/1", async (route) => {
+      if (route.request().method() !== "PATCH") return route.fallback();
+      capturado.payload = route.request().postDataJSON();
+      await route.fulfill({
+        status: respuesta?.status ?? 200,
+        contentType: "application/json",
+        body: JSON.stringify(respuesta?.body ?? { ...PROVEEDORES_MOCK.data[0], ...capturado.payload }),
+      });
+    });
+    return capturado;
+  }
+
+  async function abrirAlta(page: Page) {
+    await page.getByRole("button", { name: /nuevo proveedor/i }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Razón social *").fill("Proveedor Test");
+    await dialog.getByLabel("CUIT *").fill("30111111111");
+    await dialog.getByLabel("Empresa asignada *").selectOption("1");
+    return dialog;
+  }
+
+  // --- Unitarios: service ---------------------------------------------------
+
+  test("HU-73 · un 409 sin campo conocido se muestra como error general con el mensaje del back", async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await loginAsAdministrador(page);
+    await page.route("**/proveedores", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "El proveedor está siendo editado por otro usuario." }),
+      });
+    });
+    await page.goto("/proveedores");
+    const dialog = await abrirAlta(page);
+    await dialog.getByRole("button", { name: "Crear proveedor" }).click();
+
+    await expect(dialog.getByText("El proveedor está siendo editado por otro usuario.")).toBeVisible();
+    await expect(dialog).toBeVisible();
+  });
+
+  test("HU-73 · un 409 de CUIT en la edición también se muestra en el campo", async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await loginAsAdministrador(page);
+    await capturarPatch(page, { status: 409, body: { field: "cuit", message: "Ya existe un proveedor con ese CUIT en la empresa" } });
+    await page.goto("/proveedores");
+    await page.getByRole("button", { name: "Editar Tambo El Roble" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("CUIT *").fill("30222222222");
+    await dialog.getByRole("button", { name: "Guardar cambios" }).click();
+
+    await expect(dialog.getByText("Ya existe un proveedor con ese CUIT en la empresa")).toBeVisible();
+  });
+
+  // --- Componente (validaciones e interacción) ------------------------------
+
+  test("HU-73 · corregir el CUIT después de un 409 limpia el error del campo", async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await loginAsAdministrador(page);
+    await page.route("**/proveedores", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ field: "cuit", message: "Ya existe un proveedor con ese CUIT" }),
+      });
+    });
+    await page.goto("/proveedores");
+    const dialog = await abrirAlta(page);
+    await dialog.getByRole("button", { name: "Crear proveedor" }).click();
+    await expect(dialog.getByText("Ya existe un proveedor con ese CUIT")).toBeVisible();
+
+    await dialog.getByLabel("CUIT *").fill("30999999999");
+
+    await expect(dialog.getByText("Ya existe un proveedor con ese CUIT")).toHaveCount(0);
+  });
+
+  test("HU-73 · cambiar de empresa limpia los errores de unicidad (es por empresa)", async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await page.route("**/empresa*", async (route) => {
+      const rt = route.request().resourceType();
+      if (route.request().method() !== "GET" || (rt !== "fetch" && rt !== "xhr")) return route.fallback();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            EMPRESAS_MOCK.data[0],
+            { id: 2, name: "Lácteos del Sur", cuit: "30-98765432-1", plan: "pro", isActive: true },
+          ],
+          meta: { page: 1, limit: 5, total: 2, totalPages: 1 },
+        }),
+      });
+    });
+    await loginAsAdministrador(page);
+    await page.route("**/proveedores", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ field: "razonSocial", message: "Ya existe un proveedor con esa razón social" }),
+      });
+    });
+    await page.goto("/proveedores");
+    const dialog = await abrirAlta(page);
+    await dialog.getByRole("button", { name: "Crear proveedor" }).click();
+    await expect(dialog.getByText("Ya existe un proveedor con esa razón social")).toBeVisible();
+
+    await dialog.getByLabel("Empresa asignada *").selectOption("2");
+
+    await expect(dialog.getByText("Ya existe un proveedor con esa razón social")).toHaveCount(0);
+  });
+
+  test("HU-73 · editar y vaciar provincia, localidad y capacidad los manda como null", async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await loginAsAdministrador(page);
+    const capturado = await capturarPatch(page);
+    await page.goto("/proveedores");
+    await page.getByRole("button", { name: "Editar Tambo El Roble" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByLabel("Provincia")).toHaveValue("Cordoba");
+
+    await dialog.getByLabel("Provincia").selectOption("");
+    await dialog.getByLabel("Volumen de entrega (L/día)").fill("");
+    await dialog.getByRole("button", { name: "Guardar cambios" }).click();
+
+    await expect(dialog).not.toBeVisible();
+    expect(capturado.payload).toMatchObject({ provincia: null, localidad: null, capacidad: null });
+  });
+
+  test("HU-73 · un teléfono inválido en la edición no manda el PATCH y al corregirlo sí", async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await loginAsAdministrador(page);
+    const capturado = await capturarPatch(page);
+    await page.goto("/proveedores");
+    await page.getByRole("button", { name: "Editar Tambo El Roble" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByLabel("Teléfono")).toHaveValue("3534000000");
+
+    await dialog.getByLabel("Teléfono").fill("353-abc");
+    await dialog.getByRole("button", { name: "Guardar cambios" }).click();
+    await expect(
+      dialog.getByText("El teléfono solo puede tener números, espacios, guiones y un + al inicio"),
+    ).toBeVisible();
+    expect(capturado.payload).toBeUndefined();
+
+    await dialog.getByLabel("Teléfono").fill("+54 353 412-3456");
+    await dialog.getByRole("button", { name: "Guardar cambios" }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(capturado.payload).toMatchObject({ telefono: "+54 353 412-3456" });
+  });
+
+  // --- Permisos por rol (matriz por defecto de mockAuth.ts) -----------------
+  // POST /proveedores pide recepcion:crear y PATCH recepcion:editar.
+
+  const ROLES_HU73: [string, (page: Page) => Promise<void>, boolean, boolean][] = [
+    ["Gerente", loginAsGerente, true, true],
+    ["Responsable de calidad", loginAsResponsableCalidad, true, false],
+    ["Responsable de producción", loginAsResponsableProduccion, false, false],
+    ["Operario de línea", loginAsOperario, false, false],
+    ["Administrador", loginAsAdministrador, true, true],
+  ];
+  for (const [rol, login, crea, edita] of ROLES_HU73) {
+    test(`HU-73 · ${rol}: ${crea ? "crea" : "no crea"} y ${edita ? "edita" : "no edita"} proveedores`, async ({ page }) => {
+      await mockProveedoresAndEmpresas(page);
+      await login(page);
+      await page.goto("/proveedores");
+
+      await expect(page.getByRole("table").getByText("Tambo El Roble")).toBeVisible();
+      await expect(page.getByRole("button", { name: /nuevo proveedor/i })).toHaveCount(crea ? 1 : 0);
+      await expect(page.getByRole("button", { name: "Editar Tambo El Roble" })).toHaveCount(edita ? 1 : 0);
+    });
+  }
+
+  // --- Matriz dinámica (quitarPermisos, HU-72) ------------------------------
+
+  test("HU-73 · un Gerente sin recepcion no entra a /proveedores", async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await loginAsGerente(page);
+    await quitarPermisos(page, "Gerente", ["recepcion"]);
+    await page.goto("/proveedores");
+
+    await expect(page.getByText("Acceso no autorizado")).toBeVisible();
+    await expect(page.getByRole("button", { name: /nuevo proveedor/i })).toHaveCount(0);
+  });
+
+  // --- E2E: flujo principal -------------------------------------------------
+
+  test("HU-73 · flujo principal: alta con 409 de razón social, corrección, y edición vaciando el teléfono", async ({ page }) => {
+    await mockProveedoresAndEmpresas(page);
+    await loginAsAdministrador(page);
+    let intentos = 0;
+    let altaPayload: Record<string, unknown> | undefined;
+    await page.route("**/proveedores", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      intentos++;
+      altaPayload = route.request().postDataJSON();
+      if (intentos === 1) {
+        return route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({ field: "razonSocial", message: "Ya existe un proveedor con esa razón social" }),
+        });
+      }
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ ...PROVEEDORES_MOCK.data[0], id: 9, ...altaPayload }),
+      });
+    });
+    const capturado = await capturarPatch(page);
+    await page.goto("/proveedores");
+
+    const dialog = await abrirAlta(page);
+    await dialog.getByLabel("Teléfono").fill("+54 353 412-3456");
+    await dialog.getByRole("button", { name: "Crear proveedor" }).click();
+    await expect(dialog.getByText("Ya existe un proveedor con esa razón social")).toBeVisible();
+
+    await dialog.getByLabel("Razón social *").fill("Proveedor Test 2");
+    await expect(dialog.getByText("Ya existe un proveedor con esa razón social")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Crear proveedor" }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(altaPayload).toMatchObject({ razonSocial: "Proveedor Test 2", telefono: "+54 353 412-3456" });
+    expect(altaPayload).not.toHaveProperty("emailContacto");
+
+    await page.getByRole("button", { name: "Editar Tambo El Roble" }).click();
+    // El modal carga los valores en un efecto: esperar antes de vaciar.
+    await expect(dialog.getByLabel("Teléfono")).toHaveValue("3534000000");
+    await dialog.getByLabel("Teléfono").fill("");
+    await dialog.getByRole("button", { name: "Guardar cambios" }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(capturado.payload).toMatchObject({ telefono: null });
   });
 });
