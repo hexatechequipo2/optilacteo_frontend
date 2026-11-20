@@ -290,3 +290,26 @@ test("HistorialAlertasPage (HU-79) - filtra por Falso positivo y manda estado=fa
   await expect(tabla.getByText("Falso positivo")).toBeVisible();
   expect(pedidos.at(-1)!.get("estado")).toBe("falso_positivo");
 });
+
+// ---------------------------------------------------------------------------
+// HU-79 · Error de consulta vs. lista vacía en el historial (Sprint 6)
+// ---------------------------------------------------------------------------
+
+test("HistorialAlertasPage (HU-79) · HU-79 · tras un 500 no muestra el estado vacío y Reintentar recupera", async ({ page }) => {
+  await mockHistorialDeps(page, [HISTORIAL_ABIERTA]);
+  let falla = true;
+  await page.route("**/notificaciones/historial*", (route) =>
+    falla ? route.fulfill({ status: 500 }) : route.fallback(),
+  );
+  await loginAsResponsableCalidad(page);
+  await page.goto("/alertas/historial");
+
+  await expect(page.getByText("No se pudo cargar el historial de alertas.")).toBeVisible();
+  await expect(page.getByText("No hay alertas para los filtros seleccionados")).toHaveCount(0);
+
+  falla = false;
+  await page.getByRole("button", { name: "Reintentar" }).click();
+
+  await expect(page.getByText("No se pudo cargar el historial de alertas.")).toHaveCount(0);
+  await expect(page.getByRole("table")).toBeVisible();
+});
