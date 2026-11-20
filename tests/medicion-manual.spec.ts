@@ -1,5 +1,12 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsOperario, loginAsResponsableProduccion } from "./fixtures/mockAuth.ts";
+import {
+  loginAsAdministrador,
+  loginAsGerente,
+  loginAsOperario,
+  loginAsResponsableCalidad,
+  loginAsResponsableProduccion,
+  quitarPermisos,
+} from "./fixtures/mockAuth.ts";
 
 const LOTE_1 = {
   id: 1, codigo: "LOT-2026-001", materiaPrima: "leche_cruda",
@@ -732,13 +739,13 @@ test.describe("HU-56 — Confirmación verbal antes de guardar", () => {
 
   // Llega a la revisión con la síntesis indicada y devuelve el diálogo y
   // los POST de registro que se hayan hecho.
-  async function llegarARevision(page: Page, sintesis: "controlable" | "no_disponible") {
+  async function llegarARevision(page: Page, sintesis: "controlable" | "no_disponible", parseo: unknown = PARSEO) {
     await mockMedicionManualDeps(page);
     await mockSpeechRecognitionSoportado(page);
     if (sintesis === "controlable") await mockSpeechSynthesisControlable(page);
     else await mockSpeechSynthesisNoDisponible(page);
     await page.route(/\/lotes\/\d+\/dictado\/parsear/, (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(PARSEO) }),
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(parseo) }),
     );
     const registros: unknown[] = [];
     await page.route(/\/lotes\/\d+\/mediciones-manuales/, async (route) => {
@@ -858,5 +865,180 @@ test.describe("HU-56 — Confirmación verbal antes de guardar", () => {
       revision.getByText("Este navegador no puede leer los valores en voz alta."),
     ).toBeVisible();
     await expect(revision.getByRole("button", { name: "Confirmar registro" })).toBeEnabled();
+  });
+  // --- HU-56 · Sprint 6: casos que faltaban -------------------------------
+
+  // Unitarios: service (POST de la medición tras confirmar por voz)
+  test("HU-56 · si el registro falla tras 'confirmar', avisa y habilita el clic para reintentar", async ({ page }) => {
+    const { revision, registros } = await hastaEscuchar(page);
+    let falla = true;
+    await page.route(/\/lotes\/\d+\/mediciones-manuales/, async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      if (!falla) return route.fallback();
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "x" }) });
+    });
+
+    await simularResultadoFinal(page, "confirmar");
+
+    await expect(
+      revision.getByText("No se pudo registrar la medición. Los valores dictados siguen acá, podés reintentar."),
+    ).toBeVisible();
+    const confirmar = revision.getByRole("button", { name: "Confirmar registro" });
+    await expect(confirmar).toBeEnabled();
+
+    falla = false;
+    await confirmar.click();
+    await expect(revision.getByText("MEDICIÓN REGISTRADA")).toBeVisible();
+    expect(registros).toHaveLength(1);
+  });
+
+  // Unitarios: hook (fases de useConfirmacionVerbal)
+  test("HU-56 · el silencio cuenta como intento fallido y vuelve a pedir el comando", async ({ page }) => {
+    test.slow();
+    const { revision, registros } = await hastaEscuchar(page);
+
+    // SILENCIO_MAX_MS = 8000 (useConfirmacionVerbal.ts). En tiempo real:
+    // terminarLectura usa setTimeout y no convive con page.clock.
+    await expect(revision.getByText("Leyendo los valores en voz alta...")).toBeVisible({ timeout: 12_000 });
+    expect((await enunciados(page)).at(-1)).toBe("No entendí. Decí confirmar o cancelar.");
+    await terminarLectura(page);
+    await expect(revision.getByText("Intento 2 de 3")).toBeVisible();
+    expect(registros).toHaveLength(0);
+  });
+
+  test("HU-56 · micrófono denegado en plena escucha pasa a revisión manual y lo avisa en voz", async ({ page }) => {
+    const { revision, registros } = await hastaEscuchar(page);
+
+    await simularError(page, "not-allowed");
+
+    await expect(revision.getByText("No pudimos confirmar por voz")).toBeVisible();
+    await expect(
+      revision.getByText("No hay acceso al micrófono. Revisá los valores y confirmá con el botón."),
+    ).toBeVisible();
+    await expect(revision.getByRole("button", { name: "Confirmar registro" })).toBeEnabled();
+    expect(await enunciados(page)).toContain("No pudimos confirmar por voz. Confirmá en pantalla.");
+    expect(registros).toHaveLength(0);
+  });
+
+  test("HU-56 · editar un valor durante la lectura la interrumpe y habilita el clic", async ({ page }) => {
+    const { revision } = await llegarARevision(page, "controlable");
+    await expect(revision.getByText("Leyendo los valores en voz alta...")).toBeVisible();
+
+    await revision.locator("#revision-dictado-ph").fill("7");
+
+    await expect(revision.getByText("Confirmación por voz interrumpida")).toBeVisible();
+    await expect(
+      revision.getByText("Modificaste los valores: confirmá con el botón o pedí que se lean de nuevo."),
+    ).toBeVisible();
+    await expect(revision.getByRole("button", { name: "Confirmar registro" })).toBeEnabled();
+    await expect(revision.getByRole("button", { name: /Leer de nuevo/ })).toBeEnabled();
+  });
+
+  test("HU-56 · abrir '¿Descartar este dictado?' corta la escucha: un 'confirmar' no guarda", async ({ page }) => {
+    const { revision, registros } = await hastaEscuchar(page);
+
+    await revision.getByRole("button", { name: "Cerrar" }).click();
+    await expect(revision.getByText("¿Descartar este dictado?")).toBeVisible();
+    await simularResultadoFinal(page, "confirmar");
+    await page.waitForTimeout(300);
+
+    expect(registros).toHaveLength(0);
+    await expect(revision.getByText("MEDICIÓN REGISTRADA")).toHaveCount(0);
+  });
+
+  test("HU-56 · sin parámetros reconocidos no se lee nada ni aparece la confirmación por voz", async ({ page }) => {
+    const { revision } = await llegarARevision(page, "controlable", {
+      textoOriginal: "hola",
+      parametros: [],
+      noReconocido: [{ texto: "hola", motivo: "No es un parámetro" }],
+      obligatoriosFaltantes: [],
+    });
+    await page.waitForTimeout(300);
+
+    expect(await enunciados(page)).toEqual([]);
+    await expect(revision.getByRole("status", { name: "Confirmación por voz" })).toHaveCount(0);
+  });
+
+  // Componente: "Leer de nuevo" toma el valor editado
+  test("HU-56 · 'Leer de nuevo' lee el valor corregido sin el aviso de fuera de rango", async ({ page }) => {
+    const { revision } = await hastaEscuchar(page);
+    await revision.locator("#revision-dictado-ph").fill("7");
+    await expect(revision.getByText("Confirmación por voz interrumpida")).toBeVisible();
+    const antes = (await enunciados(page)).length;
+
+    await revision.getByRole("button", { name: /Leer de nuevo/ }).click();
+    await expect(revision.getByText("Leyendo los valores en voz alta...")).toBeVisible();
+    await terminarLectura(page);
+
+    const releidos = (await enunciados(page)).slice(antes);
+    expect(releidos).toContain("pH 7.");
+    expect(releidos.some((e) => e.includes("fuera de rango"))).toBe(false);
+  });
+
+  // Permisos por rol (matriz por defecto): el dictado pide asistente_voz:ver
+  // (POST /lotes/:id/dictado/parsear, asistente-voz.controller.ts) y la
+  // pantalla monitoreo_alertas:crear. Solo el Operario tiene las dos.
+  test("HU-56 · Operario de línea ve 'Dictar valores' y el botón flotante de dictado", async ({ page }) => {
+    await mockMedicionManualDeps(page);
+    await mockSpeechSynthesisNoDisponible(page);
+    await loginAsOperario(page);
+    await page.goto("/mediciones-manuales");
+
+    await expect(page.getByRole("button", { name: "Dictar valores", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Dictar valores por voz" })).toBeVisible();
+  });
+
+  const ROLES_SIN_DICTADO: [string, (page: Page) => Promise<void>][] = [
+    ["Gerente", loginAsGerente],
+    ["Responsable de calidad", loginAsResponsableCalidad],
+    ["Administrador", loginAsAdministrador],
+  ];
+  for (const [rol, login] of ROLES_SIN_DICTADO) {
+    test(`HU-56 · ${rol} no accede al dictado ni ve el botón flotante`, async ({ page }) => {
+      await mockMedicionManualDeps(page);
+      await mockSpeechSynthesisNoDisponible(page);
+      await login(page);
+      await page.goto("/mediciones-manuales");
+
+      await expect(page.getByText("Acceso no autorizado")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Dictar valores por voz" })).toHaveCount(0);
+    });
+  }
+
+  // Matriz dinámica (quitarPermisos, HU-72)
+  test("HU-56 · un Operario sin asistente_voz carga a mano pero no ve el dictado", async ({ page }) => {
+    await mockMedicionManualDeps(page);
+    await mockSpeechSynthesisNoDisponible(page);
+    await loginAsOperario(page);
+    await quitarPermisos(page, "Operario de línea", ["asistente_voz"]);
+    await page.goto("/mediciones-manuales");
+
+    await expect(page.getByRole("button", { name: "Dictar valores", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Dictar valores por voz" })).toHaveCount(0);
+    await expect(page.getByText("Acceso no autorizado")).toHaveCount(0);
+  });
+
+  // E2E: flujo principal
+  test("HU-56 · flujo principal: corregir un valor, pedir que se lea de nuevo y confirmar por voz", async ({ page }) => {
+    const { revision, registros } = await hastaEscuchar(page);
+
+    await revision.locator("#revision-dictado-ph").fill("6.9");
+    await expect(revision.getByText("Confirmación por voz interrumpida")).toBeVisible();
+    await revision.getByRole("button", { name: /Leer de nuevo/ }).click();
+    await terminarLectura(page);
+    await expect(revision.getByText("Intento 1 de 3")).toBeVisible();
+
+    await simularResultadoFinal(page, "correcto");
+
+    await expect(revision.getByText("MEDICIÓN REGISTRADA")).toBeVisible();
+    expect(registros).toEqual([
+      {
+        tipoMateriaPrima: "leche_cruda",
+        parametros: [
+          { parametro: "ph", valor: 6.9 },
+          { parametro: "temperatura", valor: 4 },
+        ],
+      },
+    ]);
   });
 });
