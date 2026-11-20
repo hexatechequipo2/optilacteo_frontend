@@ -1078,3 +1078,102 @@ test("ConfiguracionPage - un Responsable de calidad sin configuracion_empresa no
     page.getByRole("button", { name: "Comparación histórica" }),
   ).not.toBeVisible();
 });
+
+// ---------------------------------------------------------------------------
+// Transversal · Umbral de densidad en kg/m³ y coma decimal (PR #171)
+// ---------------------------------------------------------------------------
+
+test.describe("Transversal · Umbrales: densidad en kg/m³ y coma decimal", () => {
+  const densidadCard = (page: Page) => page.locator("xpath=//h3[normalize-space()='Densidad']/..");
+
+  async function completar(page: Page, valores: [string, string, string, string]) {
+    const card = densidadCard(page);
+    await card.getByLabel("Alerta mín", { exact: true }).fill(valores[0]);
+    await card.getByLabel("Mín", { exact: true }).fill(valores[1]);
+    await card.getByLabel("Máx", { exact: true }).fill(valores[2]);
+    await card.getByLabel("Alerta máx", { exact: true }).fill(valores[3]);
+    await card.getByLabel("Alerta máx", { exact: true }).blur();
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await mockConfiguracionDeps(page);
+    await loginAsGerente(page);
+    await page.goto("/configuracion");
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: "Umbrales de calidad" }).click();
+    await expect(page.getByText("7 parámetros por tipo de materia prima")).toBeVisible();
+  });
+
+  test("Transversal · la card de densidad explica la unidad, el rango y que se puede usar coma", async ({ page }) => {
+    await expect(
+      densidadCard(page).getByText("Valores en kg/m³, entre 1000 y 1100 (ej.: 1028). Podés usar coma decimal."),
+    ).toBeVisible();
+    await expect(densidadCard(page).getByLabel("Mín", { exact: true })).toHaveAttribute("placeholder", "1028");
+  });
+
+  test("Transversal · acepta coma decimal y manda números en el POST", async ({ page }) => {
+    let postBody: Record<string, unknown> | undefined;
+    await page.route("**/config-parametros*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.fallback();
+      if (route.request().method() !== "POST") return route.fallback();
+      postBody = route.request().postDataJSON();
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ...postBody, id: 77 }) });
+    });
+
+    await completar(page, ["1025", "1027,5", "1033,5", "1036"]);
+    await densidadCard(page).getByRole("button", { name: "Guardar" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Guardar" }).click();
+
+    await expect.poll(() => postBody).toMatchObject({
+      parametro: "densidad",
+      umbralAlertaMin: 1025,
+      umbralMin: 1027.5,
+      umbralMax: 1033.5,
+      umbralAlertaMax: 1036,
+    });
+  });
+
+  test("Transversal · separador de miles o g/mL se marcan con el ejemplo esperado", async ({ page }) => {
+    await completar(page, ["1.027,4", "1,028", "1033", "1036"]);
+
+    await expect(densidadCard(page).getByText("Debe ser un número")).toBeVisible();
+    await expect(densidadCard(page).getByText("Debe estar entre 1000 y 1100 (ej.: 1028)")).toBeVisible();
+    await expect(densidadCard(page).getByText("Corregí los valores marcados para ver las zonas del semáforo.")).toBeVisible();
+  });
+
+  test("Transversal · con valores incompletos la barra pide completar los 4", async ({ page }) => {
+    await densidadCard(page).getByLabel("Mín", { exact: true }).fill("1028");
+
+    await expect(densidadCard(page).getByText("Completá los 4 valores para ver las zonas del semáforo.")).toBeVisible();
+  });
+
+  test("Transversal · guardar con errores avisa en la card que no se guardó y no hace el POST", async ({ page }) => {
+    let posted = false;
+    await page.route("**/config-parametros*", async (route) => {
+      if (route.request().method() === "POST") posted = true;
+      return route.fallback();
+    });
+    await completar(page, ["1,025", "1,027", "1,033", "1,036"]);
+    await densidadCard(page).getByRole("button", { name: "Guardar" }).click();
+
+    await expect(
+      densidadCard(page).getByRole("alert").filter({ hasText: "No se guardó: revisá los valores marcados (se esperan kg/m³, ej.: 1028)." }),
+    ).toBeVisible();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    expect(posted).toBe(false);
+  });
+});
+
+test.describe("Transversal · Umbrales con la matriz dinámica (HU-72)", () => {
+  test("Transversal · un Gerente sin configuracion_empresa no ve la pestaña de umbrales", async ({ page }) => {
+    await mockConfiguracionDeps(page);
+    await loginAsGerente(page);
+    await quitarPermisos(page, "Gerente", ["configuracion_empresa"]);
+    await page.goto("/configuracion");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByText("Acceso no autorizado")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Umbrales de calidad" })).toHaveCount(0);
+  });
+});
