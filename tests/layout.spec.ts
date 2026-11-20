@@ -1,5 +1,12 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsAdministrador, loginAsResponsableCalidad } from "./fixtures/mockAuth.ts";
+import {
+  loginAsAdministrador,
+  loginAsGerente,
+  loginAsOperario,
+  loginAsResponsableCalidad,
+  loginAsResponsableProduccion,
+  quitarPermisos,
+} from "./fixtures/mockAuth.ts";
 import { mockSocketIo } from "./fixtures/socketIoMock.ts";
 
 // Capas transversales del Layout: campana de notificaciones (REST + WS
@@ -461,5 +468,236 @@ test.describe("InactivityMonitor (HU-04) › Cierre por inactividad", () => {
     await expect(aviso(page)).toHaveCount(0);
     await page.clock.fastForward("01:01");
     await expect(aviso(page)).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-79 · Campana: error de carga y contador (Sprint 6)
+// ---------------------------------------------------------------------------
+// GET/PATCH /notificaciones y /no-leidas/count no llevan @Permissions en el
+// back: la campana es de cada usuario, sin depender de la matriz.
+
+test.describe("HU-79 · Campana: error de carga y contador", () => {
+  const campana = (page: Page) => page.getByRole("button", { name: /^Notificaciones/ });
+
+  test("HU-79 · si falla la carga de notificaciones muestra el error con Reintentar y recupera", async ({ page }) => {
+    await mockLayout(page, { notificaciones: [notificacion(1, "Lote LOT-1 No Apto")] });
+    let falla = true;
+    await page.route(/\/notificaciones(\?|$)/, (route) =>
+      falla && route.request().method() === "GET" ? route.fulfill({ status: 503, body: "" }) : route.fallback(),
+    );
+    await loginAsAdministrador(page);
+    await page.goto("/planes");
+
+    await campana(page).click();
+    await expect(page.getByText("No se pudieron cargar las notificaciones.")).toBeVisible();
+    await expect(page.getByText("No tenés notificaciones.")).toHaveCount(0);
+
+    falla = false;
+    await page.getByRole("button", { name: "Reintentar" }).click();
+    await expect(page.getByText("Lote LOT-1 No Apto")).toBeVisible();
+  });
+
+  test("HU-79 · si falla el conteo inicial no muestra badge en vez de un 0", async ({ page }) => {
+    await mockLayout(page, { notificaciones: [notificacion(1, "Lote LOT-1 No Apto")] });
+    await page.route("**/notificaciones/no-leidas/count", (route) => route.fulfill({ status: 500, body: "" }));
+    await loginAsAdministrador(page);
+    await page.goto("/planes");
+    await page.waitForLoadState("networkidle");
+
+    await expect(campana(page)).toHaveAccessibleName("Notificaciones");
+  });
+
+  test("HU-79 · si falla el resync tras marcar, conserva el contador ajustado", async ({ page }) => {
+    await mockLayout(page, {
+      notificaciones: [notificacion(1, "Uno"), notificacion(2, "Dos"), notificacion(3, "Tres")],
+    });
+    await page.route("**/notificaciones/*/leida", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+    );
+    await loginAsAdministrador(page);
+    await page.goto("/planes");
+    await expect(campana(page)).toHaveAccessibleName("Notificaciones, 3 sin leer");
+
+    await page.route("**/notificaciones/no-leidas/count", (route) => route.fulfill({ status: 500, body: "" }));
+    await campana(page).click();
+    await page.getByRole("button", { name: "Marcar como leído" }).first().click();
+
+    await expect(campana(page)).toHaveAccessibleName("Notificaciones, 2 sin leer");
+    await page.waitForTimeout(500);
+    await expect(campana(page)).toHaveAccessibleName("Notificaciones, 2 sin leer");
+  });
+
+  test("HU-79 · flujo principal: marcar una, marcar todas y recargar sin badge", async ({ page }) => {
+    const servidor = await mockLayout(page, {
+      notificaciones: [notificacion(1, "Uno"), notificacion(2, "Dos"), notificacion(3, "Tres")],
+    });
+    await page.route("**/notificaciones/*/leida", async (route) => {
+      servidor.noLeidas--;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await page.route("**/notificaciones/leidas", async (route) => {
+      servidor.noLeidas = 0;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    await loginAsAdministrador(page);
+    await page.goto("/planes");
+    await expect(campana(page)).toHaveAccessibleName("Notificaciones, 3 sin leer");
+
+    await campana(page).click();
+    await page.getByRole("button", { name: "Marcar como leído" }).first().click();
+    await expect(campana(page)).toHaveAccessibleName("Notificaciones, 2 sin leer");
+
+    await page.getByRole("button", { name: "Marcar todas como leídas" }).click();
+    await expect(campana(page)).toHaveAccessibleName("Notificaciones");
+    await expect(page.getByRole("button", { name: "Marcar como leído" })).toHaveCount(0);
+
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await expect(campana(page)).toHaveAccessibleName("Notificaciones");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-81 · Nombre de empresa y rol en la barra lateral (Sprint 6)
+// ---------------------------------------------------------------------------
+
+const EMPRESA_NOMBRE_LARGO = "Cooperativa Láctea del Centro y Sur de Córdoba Limitada";
+
+// /lotes/consulta es una pantalla de empresa que renderiza con un listado
+// vacío (el [] genérico de mockLayout rompe las otras).
+async function mockPantallaEmpresa(page: Page, empresa: unknown = { id: 10, name: EMPRESA_NOMBRE_LARGO, logoUrl: null }) {
+  await mockLayout(page);
+  await page.route(/\/lotes\/producciones\/consulta\?/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ data: [], total: 0, page: 1, limit: 20 }),
+    }),
+  );
+  // El botón flotante de dictado (Layout) se rompe si GET /lotes es [] plano.
+  await page.route(/\/(lotes|proveedores)\?/, (route) => {
+    const rt = route.request().resourceType();
+    return rt === "fetch" || rt === "xhr"
+      ? route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ data: [], total: 0, page: 1, limit: 100, meta: { page: 1, limit: 100, total: 0, totalPages: 0 } }),
+        })
+      : route.fallback();
+  });
+  await page.route("**/empresa/me", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(empresa) }),
+  );
+}
+
+const encabezadoMenu = (page: Page) => page.getByRole("complementary");
+
+test.describe("HU-81 · Nombre de empresa y rol en la barra lateral", () => {
+  test("HU-81 · muestra el nombre completo de la empresa, sin recortar, y el rol largo completo", async ({ page }) => {
+    await mockPantallaEmpresa(page);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/lotes/consulta");
+
+    const nombre = encabezadoMenu(page).getByRole("heading", { name: EMPRESA_NOMBRE_LARGO });
+    await expect(nombre).toBeVisible();
+    await expect(nombre).not.toHaveClass(/truncate/);
+    await expect(encabezadoMenu(page).getByText("Responsable de producción", { exact: true }).first()).toBeVisible();
+    await expect(encabezadoMenu(page).getByText("Producción", { exact: true })).toHaveCount(0);
+  });
+
+  test("HU-81 · usa el logo de la empresa con su nombre como texto alternativo", async ({ page }) => {
+    await mockPantallaEmpresa(page, { id: 10, name: "Lácteos del Sur", logoUrl: "https://cdn.example.com/logo-lacteos.png" });
+    await page.route("https://cdn.example.com/**", (route) => route.fulfill({ status: 200, contentType: "image/png", body: "" }));
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+
+    const logo = encabezadoMenu(page).getByRole("img", { name: "Lácteos del Sur" });
+    await expect(logo).toHaveAttribute("src", "https://cdn.example.com/logo-lacteos.png");
+  });
+
+  test("HU-81 · si la empresa no carga, muestra OptiLácteo en vez de dejar el encabezado vacío", async ({ page }) => {
+    await mockPantallaEmpresa(page);
+    await page.route("**/empresa/me", (route) => route.fulfill({ status: 500, body: "" }));
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes/consulta");
+
+    await expect(encabezadoMenu(page).getByRole("heading", { name: "OptiLácteo" })).toBeVisible();
+  });
+
+  // Permisos por rol: el encabezado no depende de la matriz, cada rol ve su
+  // nombre completo.
+  const ROLES_HU81: [string, (page: Page) => Promise<void>][] = [
+    ["Gerente", loginAsGerente],
+    ["Responsable de producción", loginAsResponsableProduccion],
+    ["Responsable de calidad", loginAsResponsableCalidad],
+    ["Operario de línea", loginAsOperario],
+  ];
+  for (const [rol, login] of ROLES_HU81) {
+    test(`HU-81 · ${rol} ve la empresa y su rol completo en el encabezado`, async ({ page }) => {
+      await mockPantallaEmpresa(page);
+      await login(page);
+      await page.goto("/lotes/consulta");
+
+      await expect(encabezadoMenu(page).getByRole("heading", { name: EMPRESA_NOMBRE_LARGO })).toBeVisible();
+      await expect(encabezadoMenu(page).getByText(rol, { exact: true }).first()).toBeVisible();
+    });
+  }
+
+  test("HU-81 · Administrador (sin empresa) ve OptiLácteo y su rol", async ({ page }) => {
+    await mockLayout(page);
+    await loginAsAdministrador(page);
+    await page.goto("/planes");
+
+    await expect(encabezadoMenu(page).getByRole("heading", { name: "OptiLácteo" })).toBeVisible();
+    await expect(encabezadoMenu(page).getByText("Administrador", { exact: true }).first()).toBeVisible();
+  });
+
+  // Matriz dinámica (HU-72): el menú refleja la matriz, no el rol.
+  test("HU-81 · un Responsable de calidad sin trazabilidad no ve Consulta de lotes ni Revisión de calidad en el menú", async ({ page }) => {
+    await mockPantallaEmpresa(page);
+    await loginAsResponsableCalidad(page);
+    await quitarPermisos(page, "Responsable de calidad", ["trazabilidad"]);
+    // /lotes sigue habilitada por recepcion ("Acceso no autorizado" se dibuja
+    // sin el Layout, así que el menú se revisa desde una pantalla permitida).
+    await page.goto("/lotes");
+
+    await expect(encabezadoMenu(page).getByRole("heading", { name: EMPRESA_NOMBRE_LARGO })).toBeVisible();
+    await expect(encabezadoMenu(page).getByText("Lotes", { exact: true })).toBeVisible();
+    await expect(encabezadoMenu(page).getByText("Consulta de lotes", { exact: true })).toHaveCount(0);
+    await expect(encabezadoMenu(page).getByText("Revisión de calidad", { exact: true })).toHaveCount(0);
+  });
+
+  // E2E: colapsar, navegar con el ícono, ítem activo y expandir.
+  test("HU-81 · flujo principal: colapsar, navegar por ícono con ítem activo y expandir con el nombre de la empresa", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockPantallaEmpresa(page);
+    await page.route(/\/(lotes|proveedores)\?/, (route) => {
+      const rt = route.request().resourceType();
+      return rt === "fetch" || rt === "xhr"
+        ? route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ data: [], total: 0, page: 1, limit: 100, meta: { page: 1, limit: 100, total: 0, totalPages: 0 } }),
+          })
+        : route.fallback();
+    });
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+    const toggleMenu = page.locator("header").getByRole("button", { name: /^(Colapsar|Expandir) menú lateral$/ });
+
+    await toggleMenu.click();
+    await expect(toggleMenu).toHaveAccessibleName("Expandir menú lateral");
+    await expect(encabezadoMenu(page).getByRole("heading", { name: EMPRESA_NOMBRE_LARGO })).toBeHidden();
+
+    // Los ítems del menú son botones con title (ver el test de colapsar).
+    await encabezadoMenu(page).getByRole("button", { name: "Consulta de lotes" }).click();
+    await expect(page).toHaveURL(/\/lotes\/consulta$/);
+    await expect(encabezadoMenu(page).locator('[aria-current="page"]')).toHaveCount(1);
+    await expect(encabezadoMenu(page).locator('[aria-current="page"]')).toHaveAttribute("title", "Consulta de lotes");
+
+    await toggleMenu.click();
+    await expect(encabezadoMenu(page).getByRole("heading", { name: EMPRESA_NOMBRE_LARGO })).toBeVisible();
+    await expect(encabezadoMenu(page).getByText("Consulta de lotes", { exact: true })).toBeVisible();
   });
 });
