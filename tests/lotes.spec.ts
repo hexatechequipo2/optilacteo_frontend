@@ -2699,3 +2699,493 @@ test.describe("HistorialMedicionesManualesTab (HU-20) › Filtros, errores y pag
     await expect(dialog.getByText("1 de 2 · 25 mediciones")).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// HU-78 · Destino sugerido por IA (Sprint 6)
+// ---------------------------------------------------------------------------
+//
+// D2 (diferencia documentada): el backend controla la recomendación con el
+// módulo `trazabilidad` (GET /recomendaciones/lote/:loteId → READ, PATCH
+// /recomendaciones/:id/responder → UPDATE, ml.controller.ts:29-47), no con
+// `destino_productivo_ia`. Ese módulo solo controla el catálogo GET
+// /destinos-productivos (destino-productivo.controller.ts:36-37). Los tests
+// siguen al backend.
+
+type LoginFn = (page: Page) => Promise<void>;
+
+async function prepararHu78(
+  page: Page,
+  opciones: { login?: LoginFn; antesDeIr?: (page: Page) => Promise<void> } = {},
+) {
+  await mockLotesDeps(page);
+  await mockPrimerLoteApto(page);
+  await page.route("**/destinos-productivos*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(DESTINOS_MOCK) });
+  });
+  await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+  });
+  await mockRecomendacionPendiente(page, RECOMENDACION_MOCK);
+  await (opciones.login ?? loginAsResponsableProduccion)(page);
+  if (opciones.antesDeIr) await opciones.antesDeIr(page);
+  await page.goto("/lotes");
+  await page.waitForLoadState("networkidle");
+}
+
+async function abrirEdicionHu78(page: Page) {
+  await page.getByTitle("Editar lote").first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.waitFor({ state: "visible" });
+  await page.waitForLoadState("networkidle");
+  return dialog;
+}
+
+function registrarGetsRecomendacion(page: Page): string[] {
+  const gets: string[] = [];
+  page.on("request", (req) => {
+    if (req.method() === "GET" && /\/recomendaciones\/lote\/\d+/.test(req.url())) gets.push(req.url());
+  });
+  return gets;
+}
+
+function mockResponder(page: Page, respuesta: { status: number; body: unknown }) {
+  return page.route(/\/recomendaciones\/\d+\/responder/, async (route) => {
+    await route.fulfill({
+      status: respuesta.status,
+      contentType: "application/json",
+      body: JSON.stringify(respuesta.body),
+    });
+  });
+}
+
+const JUSTIFICACION_HU78 = "El proveedor informó menor contenido de grasa al ingreso.";
+
+test.describe("HU-78 · Destino sugerido por IA", () => {
+  // --- Unitarios: service ---------------------------------------------------
+
+  test("HU-78 · pide la recomendación del lote abierto y el catálogo de destinos", async ({ page }) => {
+    await prepararHu78(page);
+    const urls: string[] = [];
+    page.on("request", (req) => {
+      if (req.method() === "GET") urls.push(new URL(req.url()).pathname);
+    });
+    await abrirEdicionHu78(page);
+
+    expect(urls).toContain(`/recomendaciones/lote/${LOTE_1.id}`);
+    expect(urls.some((u) => u.endsWith("/destinos-productivos"))).toBe(true);
+  });
+
+  test("HU-78 · un 403 del GET muestra el mensaje del backend", async ({ page }) => {
+    await prepararHu78(page);
+    await page.route(/\/recomendaciones\/lote\/\d+/, (route) =>
+      route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "No tenés permiso para ver recomendaciones." }),
+      }),
+    );
+    const dialog = await abrirEdicionHu78(page);
+
+    await expect(dialog.getByText("Error del servicio")).toBeVisible();
+    await expect(dialog.getByText("No tenés permiso para ver recomendaciones.")).toBeVisible();
+  });
+
+  test("HU-78 · un error de red en el GET muestra el mensaje genérico", async ({ page }) => {
+    await prepararHu78(page);
+    await page.route(/\/recomendaciones\/lote\/\d+/, (route) => route.abort("failed"));
+    const dialog = await abrirEdicionHu78(page);
+
+    await expect(dialog.getByText("Error del servicio")).toBeVisible();
+    await expect(dialog.getByText("No se pudo cargar la recomendación de destino.")).toBeVisible();
+  });
+
+  test("HU-78 · un 500 al responder muestra el error y no da la respuesta por confirmada", async ({ page }) => {
+    await prepararHu78(page);
+    await mockResponder(page, { status: 500, body: { message: "Internal server error" } });
+    const dialog = await abrirEdicionHu78(page);
+
+    await dialog.getByRole("button", { name: "Aceptar recomendación" }).click();
+
+    await expect(dialog.getByText("No se pudo registrar la respuesta. Intentá nuevamente.")).toBeVisible();
+    await expect(dialog.getByText("Recomendación aceptada")).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Aceptar recomendación" })).toBeEnabled();
+  });
+
+  test("HU-78 · un 400 al responder muestra el mensaje del backend", async ({ page }) => {
+    await prepararHu78(page);
+    await mockResponder(page, { status: 400, body: { message: "La recomendación ya fue respondida." } });
+    const dialog = await abrirEdicionHu78(page);
+
+    await dialog.getByRole("button", { name: "Aceptar recomendación" }).click();
+
+    await expect(dialog.getByText("La recomendación ya fue respondida.")).toBeVisible();
+    await expect(dialog.getByText("Recomendación aceptada")).toHaveCount(0);
+  });
+
+  // --- Unitarios: hook (loading / error / data) -----------------------------
+
+  test("HU-78 · mientras carga muestra 'Buscando…' y deshabilita Actualizar", async ({ page }) => {
+    await prepararHu78(page);
+    let liberar!: () => void;
+    const pendiente = new Promise<void>((r) => (liberar = r));
+    await page.route(/\/recomendaciones\/lote\/\d+/, async (route) => {
+      await pendiente;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(RECOMENDACION_MOCK) });
+    });
+    await page.getByTitle("Editar lote").first().click();
+    const dialog = page.getByRole("dialog");
+
+    await expect(dialog.getByText("Buscando una recomendación para este lote...")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Actualizar" })).toBeDisabled();
+
+    liberar();
+    await expect(dialog.getByText("Destino recomendado por el sistema: Queso")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Actualizar" })).toBeEnabled();
+  });
+
+  test("HU-78 · CA10: si falla una relectura no queda a la vista la recomendación anterior", async ({ page }) => {
+    await prepararHu78(page);
+    const dialog = await abrirEdicionHu78(page);
+    await expect(dialog.getByText("Destino recomendado por el sistema: Queso")).toBeVisible();
+
+    await page.route(/\/recomendaciones\/lote\/\d+/, (route) =>
+      route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "x" }) }),
+    );
+    await dialog.getByRole("button", { name: "Actualizar" }).click();
+
+    await expect(dialog.getByText("No se pudo cargar la recomendación de destino.")).toBeVisible();
+    await expect(dialog.getByText(/Destino recomendado por el sistema/)).toHaveCount(0);
+    await expect(dialog.getByText("87%")).toHaveCount(0);
+  });
+
+  test("HU-78 · Reintentar recupera la recomendación tras un error", async ({ page }) => {
+    await prepararHu78(page);
+    const control = { falla: true };
+    await page.route(/\/recomendaciones\/lote\/\d+/, async (route) => {
+      if (control.falla) {
+        return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "x" }) });
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(RECOMENDACION_MOCK) });
+    });
+    const dialog = await abrirEdicionHu78(page);
+    await expect(dialog.getByText("Error del servicio")).toBeVisible();
+
+    control.falla = false;
+    await dialog.getByRole("button", { name: "Reintentar" }).click();
+
+    await expect(dialog.getByText("Destino recomendado por el sistema: Queso")).toBeVisible();
+    await expect(dialog.getByText("Error del servicio")).toHaveCount(0);
+  });
+
+  test("HU-78 · muestra 'Aplicando...' y deshabilita las acciones durante el PATCH", async ({ page }) => {
+    await prepararHu78(page);
+    let liberar!: () => void;
+    const pendiente = new Promise<void>((r) => (liberar = r));
+    await page.route(/\/recomendaciones\/\d+\/responder/, async (route) => {
+      await pendiente;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+    const dialog = await abrirEdicionHu78(page);
+
+    await dialog.getByRole("button", { name: "Aceptar recomendación" }).click();
+
+    await expect(dialog.getByRole("button", { name: "Aplicando..." })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Elegí otro destino" })).toBeDisabled();
+    liberar();
+    await expect(dialog.getByText("Recomendación aceptada")).toBeVisible();
+  });
+
+  test("HU-78 · al aceptar vuelve a pedir el historial de destino del lote", async ({ page }) => {
+    await prepararHu78(page);
+    await mockResponder(page, { status: 200, body: {} });
+    let getsHistorial = 0;
+    page.on("request", (req) => {
+      if (req.method() === "GET" && /\/lotes\/\d+\/destino-productivo\/historial/.test(req.url())) getsHistorial++;
+    });
+    const dialog = await abrirEdicionHu78(page);
+    const antes = getsHistorial;
+
+    await dialog.getByRole("button", { name: "Aceptar recomendación" }).click();
+    await expect(dialog.getByText("Recomendación aceptada")).toBeVisible();
+
+    await expect.poll(() => getsHistorial).toBeGreaterThan(antes);
+  });
+
+  // --- Unitarios: componente (render, interacción, validaciones) ------------
+
+  test("HU-78 · Cancelar el rechazo vuelve a los botones y limpia el formulario", async ({ page }) => {
+    await prepararHu78(page);
+    const dialog = await abrirEdicionHu78(page);
+
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await dialog.locator("#recomendacion-destino-real").selectOption("2");
+    await dialog.locator("#justificacion-divergencia").fill("texto a medio escribir");
+    await dialog.locator("#lote-form").getByRole("button", { name: "Cancelar", exact: true }).click();
+
+    await expect(dialog.getByRole("button", { name: "Aceptar recomendación" })).toBeVisible();
+    await expect(dialog.locator("#recomendacion-destino-real")).toHaveCount(0);
+
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await expect(dialog.locator("#recomendacion-destino-real")).toHaveValue("");
+    await expect(dialog.locator("#justificacion-divergencia")).toHaveValue("");
+    await expect(dialog.getByText("0/30 mínimo 30 caracteres")).toBeVisible();
+  });
+
+  test("HU-78 · al elegir otro destino muestra cuál reemplaza al recomendado", async ({ page }) => {
+    await prepararHu78(page);
+    const dialog = await abrirEdicionHu78(page);
+
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await dialog.locator("#recomendacion-destino-real").selectOption("2");
+
+    await expect(
+      dialog.getByText(/Elegiste\s*Yogur\s*en lugar del destino recomendado\s*Queso/),
+    ).toBeVisible();
+  });
+
+  test("HU-78 · CA9: con sugerencia pendiente el selector manual de destino sigue habilitado", async ({ page }) => {
+    await prepararHu78(page);
+    const dialog = await abrirEdicionHu78(page);
+
+    await expect(dialog.getByRole("button", { name: "Aceptar recomendación" })).toBeVisible();
+    const selectorManual = dialog.locator("#lote-destino-productivo");
+    await expect(selectorManual).toBeEnabled();
+    await selectorManual.selectOption("3");
+    await expect(selectorManual).toHaveValue("3");
+  });
+
+  test("HU-78 · No Apto: 'Ir a la revisión de calidad' navega a /lotes/revision", async ({ page }) => {
+    await prepararHu78(page, {
+      antesDeIr: async (p) => {
+        await p.route("**/lotes*", async (route) => {
+          const rt = route.request().resourceType();
+          if (rt !== "fetch" && rt !== "xhr") return route.continue();
+          if (route.request().method() !== "GET") return route.continue();
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ ...LOTES_PAGINATED_MOCK, data: [{ ...LOTE_1, clasificacion: "no_apto" }], total: 1 }),
+          });
+        });
+      },
+    });
+    const dialog = await abrirEdicionHu78(page);
+
+    await dialog.getByRole("button", { name: "Ir a la revisión de calidad" }).click();
+
+    await expect(page).toHaveURL(/\/lotes\/revision$/);
+  });
+
+  test("HU-78 · si falla el catálogo, el rechazo lo avisa y Aceptar sigue disponible", async ({ page }) => {
+    await prepararHu78(page, {
+      antesDeIr: async (p) => {
+        await p.route("**/destinos-productivos*", (route) =>
+          route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "x" }) }),
+        );
+      },
+    });
+    await mockResponder(page, { status: 200, body: {} });
+    const dialog = await abrirEdicionHu78(page);
+
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await expect(dialog.getByText("No se pudieron cargar los destinos productivos.").first()).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Confirmar destino real" })).toBeDisabled();
+
+    await dialog.locator("#lote-form").getByRole("button", { name: "Cancelar", exact: true }).click();
+    await dialog.getByRole("button", { name: "Aceptar recomendación" }).click();
+    await expect(dialog.getByText("Recomendación aceptada")).toBeVisible();
+  });
+
+  // --- Permisos por rol (matriz por defecto de mockAuth.ts) -----------------
+
+  const ROLES_CON_SUGERENCIA: [string, LoginFn][] = [
+    ["Gerente", loginAsGerente],
+    ["Responsable de producción", loginAsResponsableProduccion],
+    ["Responsable de calidad", loginAsResponsableCalidad],
+  ];
+
+  for (const [rol, login] of ROLES_CON_SUGERENCIA) {
+    test(`HU-78 · ${rol} ve la sugerencia con Aceptar y Elegí otro destino`, async ({ page }) => {
+      await prepararHu78(page, { login });
+      const dialog = await abrirEdicionHu78(page);
+
+      await expect(dialog.getByText("Destino recomendado por el sistema: Queso")).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Aceptar recomendación" })).toBeEnabled();
+      await expect(dialog.getByRole("button", { name: "Elegí otro destino" })).toBeEnabled();
+    });
+  }
+
+  // Decisión de producto pendiente de validación del PO, el backend permite
+  // trazabilidad:READ (ml.controller.ts:47) — el Operario podría leer la
+  // sugerencia, pero el front hoy no se la muestra (D1).
+  test("HU-78 · Operario de línea no llega a la sugerencia ni hace GET /recomendaciones/lote", async ({ page }) => {
+    const gets = registrarGetsRecomendacion(page);
+    await prepararHu78(page, { login: loginAsOperario });
+
+    await expect(page.getByTitle("Editar lote")).toHaveCount(0);
+    await expect(page.getByText("SUGERENCIA DEL SISTEMA")).toHaveCount(0);
+    expect(gets).toEqual([]);
+  });
+
+  test("HU-78 · Administrador no llega a la sugerencia ni hace GET /recomendaciones/lote", async ({ page }) => {
+    const gets = registrarGetsRecomendacion(page);
+    await prepararHu78(page, { login: loginAsAdministrador });
+
+    await expect(page.getByTitle("Editar lote")).toHaveCount(0);
+    await expect(page.getByText("SUGERENCIA DEL SISTEMA")).toHaveCount(0);
+    expect(gets).toEqual([]);
+  });
+
+  // --- Matriz dinámica (quitarPermisos, HU-72) ------------------------------
+
+  // HALLAZGO HU-78-H1: la tarjeta no chequea trazabilidad:READ, el backend
+  // rechaza el GET (ml.controller.ts:47).
+  test("HU-78 · un Gerente sin trazabilidad no ve la sugerencia ni la pide", async ({ page }) => {
+    test.fail();
+    const gets = registrarGetsRecomendacion(page);
+    await prepararHu78(page, {
+      login: loginAsGerente,
+      antesDeIr: (p) => quitarPermisos(p, "Gerente", ["trazabilidad"]),
+    });
+    // Sin trazabilidad el Gerente conserva recepcion:editar, así que puede
+    // abrir "Editar lote" (LotesPage.tsx:165-167).
+    const dialog = await abrirEdicionHu78(page);
+
+    await expect(dialog.getByText("SUGERENCIA DEL SISTEMA")).toHaveCount(0);
+    expect(gets).toEqual([]);
+  });
+
+  test("HU-78 · Responsable de producción sin destino_productivo_ia acepta la sugerencia y el rechazo avisa que no cargó el catálogo", async ({ page }) => {
+    await prepararHu78(page, {
+      antesDeIr: async (p) => {
+        await quitarPermisos(p, "Responsable de producción", ["destino_productivo_ia"]);
+        // Sigue al backend: GET /destinos-productivos pide destino_productivo_ia:READ.
+        await p.route("**/destinos-productivos*", (route) =>
+          route.fulfill({
+            status: 403,
+            contentType: "application/json",
+            body: JSON.stringify({ message: "No tenés permiso sobre Destino productivo (IA)." }),
+          }),
+        );
+      },
+    });
+    await mockResponder(page, { status: 200, body: {} });
+    const dialog = await abrirEdicionHu78(page);
+
+    await expect(dialog.getByText("Destino recomendado por el sistema: Queso")).toBeVisible();
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await expect(dialog.getByText("No tenés permiso sobre Destino productivo (IA).").first()).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Confirmar destino real" })).toBeDisabled();
+
+    await dialog.locator("#lote-form").getByRole("button", { name: "Cancelar", exact: true }).click();
+    await dialog.getByRole("button", { name: "Aceptar recomendación" }).click();
+    await expect(dialog.getByText("Recomendación aceptada")).toBeVisible();
+  });
+
+  // --- E2E: flujo principal -------------------------------------------------
+
+  test("HU-78 · flujo principal: rechazar la sugerencia eligiendo otro destino con justificación", async ({ page }) => {
+    const estado = { respondida: false };
+    await prepararHu78(page, {
+      antesDeIr: async (p) => {
+        await p.route(/\/recomendaciones\/lote\/\d+/, (route) =>
+          estado.respondida
+            ? route.fulfill({ status: 200, body: "" })
+            : route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(RECOMENDACION_MOCK) }),
+        );
+        await p.route(/\/lotes\/\d+\/destino-productivo\/historial/, (route) =>
+          route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(
+              estado.respondida
+                ? [
+                    {
+                      id: 1,
+                      loteId: LOTE_1.id,
+                      destinoProductivoId: 2,
+                      destinoProductivoNombre: "Yogur",
+                      destinoAnteriorId: null,
+                      destinoAnteriorNombre: null,
+                      usuarioId: 4,
+                      origen: "recomendacion_ml",
+                      recomendacionDestinoId: RECOMENDACION_MOCK.id,
+                      createdAt: "2026-11-19T12:00:00.000Z",
+                    },
+                  ]
+                : [],
+            ),
+          }),
+        );
+      },
+    });
+    let body: unknown = null;
+    await page.route(/\/recomendaciones\/\d+\/responder/, async (route) => {
+      body = route.request().postDataJSON();
+      estado.respondida = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+
+    const dialog = await abrirEdicionHu78(page);
+    await expect(dialog.getByText("Destino recomendado por el sistema: Queso")).toBeVisible();
+    await expect(dialog.getByText("87%")).toBeVisible();
+
+    await dialog.getByRole("button", { name: "Elegí otro destino" }).click();
+    await dialog.locator("#recomendacion-destino-real").selectOption("2");
+    await dialog.locator("#justificacion-divergencia").fill(JUSTIFICACION_HU78);
+    await dialog.getByRole("button", { name: "Confirmar destino real" }).click();
+
+    await expect(dialog.getByText("Recomendación rechazada")).toBeVisible();
+    await expect(dialog.getByText("Destino asignado: Yogur")).toBeVisible();
+    expect(body).toEqual({ aceptada: false, destinoRealId: 2, justificacion: JUSTIFICACION_HU78 });
+
+    // Al reabrir el lote, el destino vigente ya es el elegido.
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    const reabierto = await abrirEdicionHu78(page);
+    await expect(reabierto.getByText("Destino asignado: Yogur")).toBeVisible();
+    await expect(reabierto.getByText("No hay una recomendación pendiente para este lote.")).toBeVisible();
+  });
+
+  // HALLAZGO HU-78-H2: el selector manual no precarga el destino vigente.
+  // LoteFormModal vive siempre montado (LotesPage.tsx:726) con lote
+  // undefined, así que useDestinoProductivoLote arranca con isLoading=false
+  // (useDestinoProductivoLote.ts:57) y el efecto de "aplicar una sola vez"
+  // (LoteFormModal.tsx:363-372) corre antes del fetch y fija "Sin asignar".
+  test("HU-78 · el selector manual muestra el destino vigente que informa la tarjeta", async ({ page }) => {
+    test.fail();
+    await prepararHu78(page, {
+      antesDeIr: async (p) => {
+        await p.route(/\/recomendaciones\/lote\/\d+/, (route) => route.fulfill({ status: 200, body: "" }));
+        await p.route(/\/lotes\/\d+\/destino-productivo\/historial/, (route) =>
+          route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify([
+              {
+                id: 1,
+                loteId: LOTE_1.id,
+                destinoProductivoId: 1,
+                destinoProductivoNombre: "Queso",
+                destinoAnteriorId: null,
+                destinoAnteriorNombre: null,
+                usuarioId: 4,
+                origen: "manual",
+                recomendacionDestinoId: null,
+                createdAt: "2026-08-01T12:00:00.000Z",
+              },
+            ]),
+          }),
+        );
+      },
+    });
+    const dialog = await abrirEdicionHu78(page);
+
+    await expect(dialog.getByText("Destino asignado: Queso")).toBeVisible();
+    await expect(dialog.locator("#lote-destino-productivo")).toHaveValue("1");
+  });
+});
