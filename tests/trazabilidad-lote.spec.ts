@@ -825,3 +825,79 @@ test.describe("HistorialTrazabilidadModal (HU-32) › Detalle por tipo de evento
     await expect(dialog.getByText("DESTINO PRODUCTIVO")).toHaveCount(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// HU-76 · Clasificación con motivos en el detalle de trazabilidad (Sprint 6)
+// ---------------------------------------------------------------------------
+
+test.describe("HU-76 · TrazabilidadLoteModal › Clasificación", () => {
+  test("HU-76 · muestra la sección CLASIFICACIÓN con sus motivos", async ({ page }) => {
+    await mockTrazabilidadDeps(page);
+    await page.route("**/lotes*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...LOTES_PAGINATED_MOCK,
+          data: [
+            {
+              ...LOTE_CON_SALDO,
+              clasificacion: "no_apto",
+              clasificacionManual: false,
+              clasificacionMotivos: [
+                {
+                  parametro: "temperatura",
+                  valor: 9.5,
+                  nivel: "critico",
+                  origen: "sensor",
+                  enRevisionPorConflicto: false,
+                  umbralMin: 2,
+                  umbralMax: 6,
+                  umbralAlertaMin: 1,
+                  umbralAlertaMax: 7,
+                },
+              ],
+            },
+          ],
+          total: 1,
+        }),
+      });
+    });
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+
+    await abrirModalPorTitulo(page, "LOT-2026-001", "Trazabilidad y consumo parcial");
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("CLASIFICACIÓN", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("No apto", { exact: true })).toBeVisible();
+    await expect(
+      dialog.getByRole("list", { name: "Motivos de la clasificación" }).getByRole("listitem"),
+    ).toHaveText(["Temperatura 9.5 °C · Crítico (rango normal 2 – 6)"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-75 · Fecha calendario en exportaciones (fix de fechas, PR #166)
+// ---------------------------------------------------------------------------
+
+test.describe("HU-75 · Export CSV de trazabilidad: fecha del nombre en hora AR", () => {
+  test.use({ timezoneId: "America/Argentina/Cordoba" });
+
+  test("HU-75 · a las 22:30 AR el CSV se nombra con el día de hoy, no el siguiente", async ({ page }) => {
+    await page.clock.setFixedTime(new Date("2026-11-19T22:30:00-03:00"));
+    await mockTrazabilidadDeps(page);
+    await loginAsResponsableCalidad(page);
+    await page.goto("/lotes");
+    await abrirModalPorTitulo(page, "LOT-2026-001", "Historial de trazabilidad completo");
+
+    const descargaPromise = page.waitForEvent("download");
+    await page.getByRole("dialog").getByRole("button", { name: "Exportar CSV" }).click();
+    const descarga = await descargaPromise;
+
+    expect(descarga.suggestedFilename()).toBe("trazabilidad-LOT-2026-001-2026-11-19.csv");
+  });
+});

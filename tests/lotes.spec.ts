@@ -6,6 +6,7 @@ import {
   loginAsGerente,
   loginAsOperario,
   loginAsResponsableProduccion,
+  permisosPorDefecto,
   quitarPermisos,
 } from "./fixtures/mockAuth.js";
 // ---------------------------------------------------------------------------
@@ -3190,5 +3191,405 @@ test.describe("HU-78 · Destino sugerido por IA", () => {
 
     await expect(dialog.getByText("Destino asignado: Queso")).toBeVisible();
     await expect(dialog.locator("#lote-destino-productivo")).toHaveValue("1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-76 · Lotes No Apto y clasificación con motivos (Sprint 6)
+// ---------------------------------------------------------------------------
+
+const MOTIVO_PH_CRITICO = {
+  parametro: "ph",
+  valor: 2,
+  nivel: "critico",
+  origen: "inicial",
+  enRevisionPorConflicto: false,
+  umbralMin: 6,
+  umbralMax: 7.5,
+  umbralAlertaMin: 5.9,
+  umbralAlertaMax: 7.6,
+};
+
+const LOTE_NO_APTO_HU76 = {
+  ...LOTE_1,
+  clasificacion: "no_apto",
+  clasificacionManual: false,
+  clasificacionMotivos: [MOTIVO_PH_CRITICO],
+};
+
+async function prepararListadoHu76(page: Page, lotes: unknown[], login: LoginFn = loginAsResponsableCalidad) {
+  await mockLotesDeps(page);
+  await page.route("**/lotes*", async (route) => {
+    const rt = route.request().resourceType();
+    if (rt !== "fetch" && rt !== "xhr") return route.continue();
+    if (route.request().method() !== "GET") return route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...LOTES_PAGINATED_MOCK, data: lotes, total: lotes.length }),
+    });
+  });
+  await login(page);
+}
+
+async function mockAltaHu76(page: Page, respuesta: { status?: number; body: unknown }) {
+  await page.route("**/lotes*", async (route) => {
+    const rt = route.request().resourceType();
+    // fallback (no continue): los GET siguen al mock del listado, no a la red.
+    if (rt !== "fetch" && rt !== "xhr") return route.fallback();
+    if (route.request().method() !== "POST") return route.fallback();
+    await route.fulfill({
+      status: respuesta.status ?? 201,
+      contentType: "application/json",
+      body: JSON.stringify(respuesta.body),
+    });
+  });
+}
+
+async function completarAltaHu76(page: Page, ph = "6.8") {
+  await page.getByRole("button", { name: /nuevo lote/i }).click();
+  await page.getByLabel("Proveedor *").selectOption({ value: "1" });
+  await page.getByLabel("Tambo de origen *").selectOption({ value: "1" });
+  await page.getByLabel("Fecha de ingreso *").fill("2026-08-01");
+  await page.getByLabel("Cantidad ingresada (L) *").fill("1000");
+  await page.locator("#lote-form").getByText("Leche cruda").click();
+  await page.getByLabel("pH (sin unidad)").fill(ph);
+  await page.getByLabel("Destino inicial *").selectOption({ value: "produccion" });
+  await page.getByLabel("Número de remito *").fill("R-000123");
+  await page.getByRole("button", { name: "Registrar lote" }).click();
+}
+
+const filaLote = (page: Page, codigo: string) => page.getByRole("row", { name: new RegExp(codigo) });
+
+test.describe("HU-76 · Lotes No Apto y clasificación con motivos", () => {
+  // --- Unitarios: service ---------------------------------------------------
+
+  test("HU-76 · un lote del listado sin clasificación ni motivos se muestra como pendiente sin romper", async ({ page }) => {
+    const { clasificacion: _omitida, ...loteViejo } = LOTE_1;
+    await prepararListadoHu76(page, [loteViejo]);
+    await page.goto("/lotes");
+
+    await expect(filaLote(page, "LOT-2026-001").getByText("Pendiente de clasificar")).toBeVisible();
+  });
+
+  test("HU-76 · si POST /lotes no trae clasificación ni motivos igual se muestra el resultado", async ({ page }) => {
+    const { clasificacion: _omitida, ...loteViejo } = LOTE_1;
+    await prepararListadoHu76(page, [LOTE_1]);
+    await mockAltaHu76(page, { body: { lote: { ...loteViejo, id: 99, codigo: "LOT-2026-099" }, sensoresDisponibles: [] } });
+    await page.goto("/lotes");
+    await completarAltaHu76(page);
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Lote registrado")).toBeVisible();
+    await expect(dialog.getByText("Pendiente de clasificar")).toBeVisible();
+  });
+
+  test("HU-76 · un 422 por rango físico imposible muestra el mensaje del back y no avanza", async ({ page }) => {
+    const MENSAJE = "El valor 20 está fuera del rango físico posible para ph (0-14).";
+    await prepararListadoHu76(page, [LOTE_1]);
+    await mockAltaHu76(page, { status: 422, body: { statusCode: 422, message: MENSAJE } });
+    await page.goto("/lotes");
+    await completarAltaHu76(page, "20");
+
+    await expect(page.getByText(MENSAJE)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Registrar lote" })).toBeVisible();
+    await expect(page.getByText("Lote registrado")).toHaveCount(0);
+  });
+
+  // --- Unitarios: componentes (render, interacción, validaciones) -----------
+
+  test("HU-76 · resultado Apto: badge Apto, sin motivos y con el código en la descripción", async ({ page }) => {
+    await prepararListadoHu76(page, [LOTE_1]);
+    await mockAltaHu76(page, {
+      body: {
+        lote: { ...LOTE_1, id: 99, codigo: "LOT-2026-099", clasificacion: "apto", clasificacionManual: false, clasificacionMotivos: [] },
+        sensoresDisponibles: [],
+      },
+    });
+    await page.goto("/lotes");
+    await completarAltaHu76(page);
+
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByText("El lote LOT-2026-099 se guardó. Resultado de la clasificación automática:"),
+    ).toBeVisible();
+    await expect(dialog.getByText("Apto", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("list", { name: "Motivos de la clasificación" })).toHaveCount(0);
+  });
+
+  test("HU-76 · resultado Pendiente: muestra el aviso del back en Información del registro", async ({ page }) => {
+    const AVISO = "Faltan parámetros para clasificar el lote: grasa, proteina.";
+    await prepararListadoHu76(page, [LOTE_1]);
+    await mockAltaHu76(page, {
+      body: {
+        lote: { ...LOTE_1, id: 99, codigo: "LOT-2026-099", clasificacion: null, clasificacionManual: false, clasificacionMotivos: [] },
+        sensoresDisponibles: [],
+        warnings: [AVISO],
+      },
+    });
+    await page.goto("/lotes");
+    await completarAltaHu76(page);
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Pendiente de clasificar")).toBeVisible();
+    await expect(dialog.getByText("Información del registro")).toBeVisible();
+    await expect(dialog.getByText(AVISO)).toBeVisible();
+  });
+
+  test("HU-76 · si hay sensores para asociar, ese paso también muestra la clasificación", async ({ page }) => {
+    await prepararListadoHu76(page, [LOTE_1]);
+    await mockAltaHu76(page, {
+      body: {
+        lote: { ...LOTE_NO_APTO_HU76, id: 99, codigo: "LOT-2026-099" },
+        sensoresDisponibles: [{ id: 5, nombre: "Sensor pH Lab", ubicacion: "laboratorio", estado: "activo" }],
+      },
+    });
+    await page.goto("/lotes");
+    await completarAltaHu76(page, "2");
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Asociar sensores al lote")).toBeVisible();
+    await expect(dialog.getByText("No apto", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Sensor pH Lab")).toBeVisible();
+  });
+
+  test("HU-76 · Cerrar en el resultado cierra el modal", async ({ page }) => {
+    await prepararListadoHu76(page, [LOTE_1]);
+    await mockAltaHu76(page, { body: { lote: { ...LOTE_NO_APTO_HU76, id: 99, codigo: "LOT-2026-099" }, sensoresDisponibles: [] } });
+    await page.goto("/lotes");
+    await completarAltaHu76(page, "2");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Lote registrado")).toBeVisible();
+
+    // .last(): el pie del modal (el primero es la X del encabezado).
+    await dialog.getByRole("button", { name: "Cerrar", exact: true }).last().click();
+
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("HU-76 · motivos: orden del back, nivel, unidad, decimales sin ceros de más y parámetro desconocido", async ({ page }) => {
+    await prepararListadoHu76(page, [LOTE_1]);
+    await mockAltaHu76(page, {
+      body: {
+        lote: {
+          ...LOTE_NO_APTO_HU76,
+          id: 99,
+          codigo: "LOT-2026-099",
+          clasificacionMotivos: [
+            { ...MOTIVO_PH_CRITICO, parametro: "grasa", valor: "3.20", umbralMin: "3.50", umbralMax: 4.2 },
+            { ...MOTIVO_PH_CRITICO, parametro: "acidez", valor: 18, nivel: "alerta", umbralMin: 14, umbralMax: 17 },
+            { ...MOTIVO_PH_CRITICO, parametro: "lactosa", valor: 4.5, nivel: "alerta", umbralMin: 4.7, umbralMax: 5.2 },
+          ],
+        },
+        sensoresDisponibles: [],
+      },
+    });
+    await page.goto("/lotes");
+    await completarAltaHu76(page, "2");
+
+    const motivos = page.getByRole("dialog").getByRole("list", { name: "Motivos de la clasificación" }).getByRole("listitem");
+    await expect(motivos).toHaveText([
+      "Materia grasa 3.2 % · Crítico (rango normal 3.5 – 4.2)",
+      "Acidez titulable 18 °D · Alerta (rango normal 14 – 17)",
+      "lactosa 4.5 · Alerta (rango normal 4.7 – 5.2)",
+    ]);
+  });
+
+  test("HU-76 · en la tabla los motivos salen compactos, sin el rango normal", async ({ page }) => {
+    await prepararListadoHu76(page, [LOTE_NO_APTO_HU76]);
+    await page.goto("/lotes");
+
+    const fila = filaLote(page, "LOT-2026-001");
+    await expect(fila.getByText("No apto", { exact: true })).toBeVisible();
+    await expect(fila.getByRole("list", { name: "Motivos de la clasificación" }).getByRole("listitem")).toHaveText([
+      "pH 2 · Crítico",
+    ]);
+    await expect(fila.getByText(/rango normal/)).toHaveCount(0);
+  });
+
+  test("HU-76 · un lote aprobado a mano muestra la marca y la lista como Motivos revisados", async ({ page }) => {
+    await prepararListadoHu76(page, [
+      { ...LOTE_NO_APTO_HU76, clasificacion: "apto", clasificacionManual: true },
+    ]);
+    await page.goto("/lotes");
+
+    const fila = filaLote(page, "LOT-2026-001");
+    await expect(fila.getByText("Aprobado manualmente")).toBeVisible();
+    await expect(fila.getByRole("list", { name: "Motivos revisados" })).toBeVisible();
+    await expect(fila.getByRole("list", { name: "Motivos de la clasificación" })).toHaveCount(0);
+  });
+
+  test("HU-76 · Editar lote muestra la clasificación de solo lectura y el PATCH no la manda", async ({ page }) => {
+    await prepararListadoHu76(page, [LOTE_NO_APTO_HU76], loginAsResponsableProduccion);
+    await mockRecomendacionPendiente(page, null);
+    await page.route(/\/lotes\/\d+\/destino-productivo\/historial/, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+    );
+    let body: Record<string, unknown> | null = null;
+    await page.route(/\/lotes\/\d+$/, async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      body = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(LOTE_NO_APTO_HU76) });
+    });
+    await page.goto("/lotes");
+    await page.waitForLoadState("networkidle");
+    await page.getByTitle("Editar lote").first().click();
+    const dialog = page.getByRole("dialog");
+    await page.waitForLoadState("networkidle");
+
+    await expect(dialog.getByText("CLASIFICACIÓN", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("list", { name: "Motivos de la clasificación" })).toContainText("pH 2 · Crítico");
+    await expect(dialog.getByRole("combobox", { name: /clasificaci/i })).toHaveCount(0);
+
+    await dialog.getByRole("button", { name: "Guardar destino" }).click();
+    await expect.poll(() => body).not.toBeNull();
+    expect(Object.keys(body!).sort()).toEqual(["destinoInicial", "fechaIngreso", "materiaPrima"]);
+  });
+
+  // --- Permisos por rol (matriz por defecto de mockAuth.ts) -----------------
+
+  const ROLES_HU76: [string, LoginFn, boolean][] = [
+    ["Gerente", loginAsGerente, true],
+    ["Responsable de calidad", loginAsResponsableCalidad, true],
+    ["Responsable de producción", loginAsResponsableProduccion, false],
+    ["Operario de línea", loginAsOperario, false],
+  ];
+
+  for (const [rol, login, puedeCrear] of ROLES_HU76) {
+    test(`HU-76 · ${rol} ve la clasificación con motivos ${puedeCrear ? "y" : "pero no"} '+ Nuevo lote'`, async ({ page }) => {
+      await prepararListadoHu76(page, [LOTE_NO_APTO_HU76], login);
+      await page.goto("/lotes");
+
+      const fila = filaLote(page, "LOT-2026-001");
+      await expect(fila.getByText("No apto", { exact: true })).toBeVisible();
+      await expect(fila.getByText("pH 2 · Crítico")).toBeVisible();
+      await expect(page.getByRole("button", { name: /nuevo lote/i })).toHaveCount(puedeCrear ? 1 : 0);
+    });
+  }
+
+  test("HU-76 · Administrador: /lotes da 'Acceso no autorizado'", async ({ page }) => {
+    await prepararListadoHu76(page, [LOTE_NO_APTO_HU76], loginAsAdministrador);
+    await page.goto("/lotes");
+
+    await expect(page.getByText("Acceso no autorizado")).toBeVisible();
+    await expect(page.getByText("No apto", { exact: true })).toHaveCount(0);
+  });
+
+  // --- Matriz dinámica (quitarPermisos, HU-72) ------------------------------
+
+  // HU-76-D1 (diferencia documentada, a revisar con el PO): el back devuelve
+  // la clasificación a cualquier rol con recepcion (GET /lotes acepta
+  // recepcion|trazabilidad READ, POST /lotes pide recepcion:CREATE,
+  // lote.controller.ts:50,60). El front la oculta en la tabla sin
+  // monitoreo_alertas ni trazabilidad (LotesPage.tsx:177) pero la muestra en
+  // el resultado del alta (LoteFormModal.tsx:627). Con la matriz por defecto
+  // no pasa: solo con una matriz personalizada.
+  test("HU-76 · 18a · un Responsable de calidad sin monitoreo_alertas ni trazabilidad no ve la clasificación en la tabla", async ({ page }) => {
+    await prepararListadoHu76(page, [LOTE_NO_APTO_HU76]);
+    await quitarPermisos(page, "Responsable de calidad", ["monitoreo_alertas", "trazabilidad"]);
+    await page.goto("/lotes");
+
+    const fila = filaLote(page, "LOT-2026-001");
+    await expect(fila).toBeVisible();
+    await expect(fila.getByText("No apto", { exact: true })).toHaveCount(0);
+    await expect(fila.getByText("pH 2 · Crítico")).toHaveCount(0);
+  });
+
+  test("HU-76 · D1 · con recepcion RCUE y sin monitoreo_alertas ni trazabilidad, la clasificación no está en la tabla pero sí en el resultado del alta", async ({ page }) => {
+    await prepararListadoHu76(page, [LOTE_NO_APTO_HU76]);
+    // Matriz personalizada (HU-72): recepcion con editar para que se monte el
+    // modal de alta (ver HU-76-H1), sin los módulos que muestran la columna.
+    const base = permisosPorDefecto("Responsable de calidad");
+    await page.route("**/auth/me/permisos", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...base,
+          permisos: base.permisos
+            .filter((p) => !["monitoreo_alertas", "trazabilidad"].includes(p.modulo))
+            .map((p) => (p.modulo === "recepcion" ? { ...p, canUpdate: true } : p)),
+        }),
+      }),
+    );
+    await mockAltaHu76(page, { body: { lote: { ...LOTE_NO_APTO_HU76, id: 99, codigo: "LOT-2026-099" }, sensoresDisponibles: [] } });
+    await page.goto("/lotes");
+
+    await expect(filaLote(page, "LOT-2026-001")).toBeVisible();
+    await expect(filaLote(page, "LOT-2026-001").getByText("No apto", { exact: true })).toHaveCount(0);
+
+    await completarAltaHu76(page, "2");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Lote registrado")).toBeVisible();
+    await expect(dialog.getByText("No apto", { exact: true })).toBeVisible();
+  });
+
+  // HALLAZGO HU-76-H1: con recepcion:crear y sin editar en recepcion ni
+  // trazabilidad se ve "+ Nuevo lote" (LotesPage.tsx:166,361) pero el modal
+  // solo se monta con puedeEditarLote (LotesPage.tsx:726): el clic no hace
+  // nada. El back permite el alta (lote.controller.ts:50). Origen HU-49
+  // (3567b29), no Sprint 6; solo con una matriz personalizada (HU-72).
+  test("HU-76 · 18b · con recepcion:crear y sin permiso de editar puede abrir el alta de lote", async ({ page }) => {
+    test.fail();
+    await prepararListadoHu76(page, [LOTE_NO_APTO_HU76]);
+    await quitarPermisos(page, "Responsable de calidad", ["monitoreo_alertas", "trazabilidad"]);
+    await page.goto("/lotes");
+
+    await page.getByRole("button", { name: /nuevo lote/i }).click();
+    await expect(page.getByLabel("Proveedor *")).toBeVisible();
+  });
+
+  test("HU-76 · un Gerente sin recepcion no ve '+ Nuevo lote' pero sigue viendo la clasificación", async ({ page }) => {
+    await prepararListadoHu76(page, [LOTE_NO_APTO_HU76], loginAsGerente);
+    await quitarPermisos(page, "Gerente", ["recepcion"]);
+    await page.goto("/lotes");
+
+    const fila = filaLote(page, "LOT-2026-001");
+    await expect(fila.getByText("No apto", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /nuevo lote/i })).toHaveCount(0);
+  });
+
+  // --- E2E: flujo principal -------------------------------------------------
+
+  test("HU-76 · flujo principal: registrar un lote No Apto y verlo en la tabla con su motivo", async ({ page }) => {
+    await prepararListadoHu76(page, [LOTE_2]);
+    await mockAltaHu76(page, {
+      body: {
+        lote: { ...LOTE_NO_APTO_HU76, id: 99, codigo: "LOT-2026-099" },
+        sensoresDisponibles: [],
+        warnings: ["El valor de 'ph' (2) está fuera del rango permitido [6.00 - 7.50]"],
+      },
+    });
+    await page.goto("/lotes");
+    await completarAltaHu76(page, "2");
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Lote registrado")).toBeVisible();
+    await expect(dialog.getByText("No apto", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("pH 2 · Crítico (rango normal 6 – 7.5)")).toBeVisible();
+    // .last(): el pie del modal (el primero es la X del encabezado).
+    await dialog.getByRole("button", { name: "Cerrar", exact: true }).last().click();
+
+    const fila = filaLote(page, "LOT-2026-099");
+    await expect(fila.getByText("No apto", { exact: true })).toBeVisible();
+    await expect(fila.getByText("pH 2 · Crítico")).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HU-75 · Fecha calendario por defecto (fix de fechas, PR #166)
+// ---------------------------------------------------------------------------
+
+test.describe("HU-75 · Alta de lote: fecha por defecto en hora AR", () => {
+  test.use({ timezoneId: "America/Argentina/Cordoba" });
+
+  test("HU-75 · a las 22:30 AR el alta de lote propone el día de hoy, no el siguiente", async ({ page }) => {
+    // 22:30 AR = 01:30 UTC del día siguiente: toISOString() daría el 20.
+    await page.clock.setFixedTime(new Date("2026-11-19T22:30:00-03:00"));
+    await prepararListadoHu76(page, [LOTE_1]);
+    await page.goto("/lotes");
+    await page.getByRole("button", { name: /nuevo lote/i }).click();
+
+    await expect(page.getByLabel("Fecha de ingreso *")).toHaveValue("2026-11-19");
   });
 });
