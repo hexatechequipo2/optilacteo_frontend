@@ -1,5 +1,8 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
 import {
+  loginAsAdministrador,
+  loginAsGerente,
+  loginAsOperario,
   loginAsResponsableProduccion,
   loginAsResponsableCalidad,
   quitarPermisos,
@@ -856,4 +859,88 @@ test("AlertasPage (HU-79) - con un 503 muestra el error con Reintentar y al rein
   await expect(cardDe(page, "LOT-2026-001")).toBeVisible();
   await expect(page.getByText("Informativas", { exact: true })).toBeVisible();
   await expect(page.getByText("No se pudieron cargar las alertas.")).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// HU-79 · Estados de error y carga en Alertas (Sprint 6)
+// ---------------------------------------------------------------------------
+
+test.describe("HU-79 · AlertasPage: carga, error y permisos", () => {
+  test("HU-79 · mientras carga no muestra contadores en 0 ni el estado vacío", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_CRITICA]);
+    let liberar!: () => void;
+    const pendiente = new Promise<void>((r) => (liberar = r));
+    let retener = true;
+    await page.route("**/notificacion*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET" || !retener) return route.fallback();
+      await pendiente;
+      return route.fallback();
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await expect(page.getByText("Informativas", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/No hay alertas .*para los filtros seleccionados/)).toHaveCount(0);
+
+    retener = false;
+    liberar();
+    await expect(cardDe(page, "LOT-2026-001")).toBeVisible();
+    await expect(page.getByText("Informativas", { exact: true })).toBeVisible();
+  });
+
+  test("HU-79 · un error de red muestra el error con Reintentar, sin contadores", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_CRITICA]);
+    await page.route("**/notificacion*", async (route) => {
+      const rt = route.request().resourceType();
+      if (rt !== "fetch" && rt !== "xhr") return route.continue();
+      if (route.request().method() !== "GET") return route.fallback();
+      if (new URL(route.request().url()).pathname.endsWith("/no-leidas/count")) return route.fallback();
+      return route.abort("failed");
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/alertas");
+
+    await expect(page.getByText("No se pudieron cargar las alertas.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reintentar" }).first()).toBeVisible();
+    await expect(page.getByText("Informativas", { exact: true })).toHaveCount(0);
+  });
+
+  // Permisos por rol: /alertas pide monitoreo_alertas:ver (todos los roles de
+  // empresa lo tienen en la matriz por defecto).
+  const ROLES_HU79: [string, (page: Page) => Promise<void>][] = [
+    ["Gerente", loginAsGerente],
+    ["Responsable de producción", loginAsResponsableProduccion],
+    ["Responsable de calidad", loginAsResponsableCalidad],
+    ["Operario de línea", loginAsOperario],
+  ];
+  for (const [rol, login] of ROLES_HU79) {
+    test(`HU-79 · ${rol} ve las alertas con sus contadores`, async ({ page }) => {
+      await mockAlertasDeps(page, [ALERTA_CRITICA]);
+      await login(page);
+      await page.goto("/alertas");
+
+      await expect(cardDe(page, "LOT-2026-001")).toBeVisible();
+      await expect(page.getByText("Informativas", { exact: true })).toBeVisible();
+    });
+  }
+
+  test("HU-79 · Administrador no entra a /alertas", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_CRITICA]);
+    await loginAsAdministrador(page);
+    await page.goto("/alertas");
+
+    await expect(page.getByText("Acceso no autorizado")).toBeVisible();
+  });
+
+  test("HU-79 · un Operario sin monitoreo_alertas no entra a /alertas", async ({ page }) => {
+    await mockAlertasDeps(page, [ALERTA_CRITICA]);
+    await loginAsOperario(page);
+    await quitarPermisos(page, "Operario de línea", ["monitoreo_alertas"]);
+    await page.goto("/alertas");
+
+    await expect(page.getByText("Acceso no autorizado")).toBeVisible();
+    await expect(cardDe(page, "LOT-2026-001")).toHaveCount(0);
+  });
 });
