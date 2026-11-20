@@ -1,5 +1,12 @@
 import { test, expect, type Page } from "./fixtures/coverageFixtures.ts";
-import { loginAsResponsableProduccion } from "./fixtures/mockAuth.ts";
+import {
+  loginAsAdministrador,
+  loginAsGerente,
+  loginAsOperario,
+  loginAsResponsableCalidad,
+  loginAsResponsableProduccion,
+  quitarPermisos,
+} from "./fixtures/mockAuth.ts";
 
 // HU-39 · EvolucionIndicadoresPanel en DashboardProduccionPage.
 // El panel vive en /dashboard-produccion (allowedRoles: ["Responsable de
@@ -490,4 +497,200 @@ test("un período sin mediciones corta la línea en vez de unir los puntos vecin
   for (const linea of await lineas.all()) {
     expect((await linea.getAttribute("points"))?.trim().split(" ")).toHaveLength(2);
   }
+});
+
+// ---------------------------------------------------------------------------
+// HU-75 · Rango de fechas del dashboard (Sprint 6)
+// ---------------------------------------------------------------------------
+
+function registrarConsultasEvolucion(page: Page): URLSearchParams[] {
+  const consultas: URLSearchParams[] = [];
+  page.on("request", (req) => {
+    if (req.url().includes("/indicadores/evolucion")) consultas.push(new URL(req.url()).searchParams);
+  });
+  return consultas;
+}
+
+async function irAlDashboard(page: Page, login: (page: Page) => Promise<void> = loginAsResponsableProduccion) {
+  await mockDashboardProduccionDeps(page);
+  await login(page);
+  await page.goto("/dashboard-produccion");
+  await page.waitForLoadState("networkidle");
+}
+
+test.describe("HU-75 · Rango de fechas del dashboard", () => {
+  // --- Unitarios: service ---------------------------------------------------
+
+  test("HU-75 · un período predefinido manda periodo e indicadores, sin desde ni hasta", async ({ page }) => {
+    const consultas = registrarConsultasEvolucion(page);
+    await irAlDashboard(page);
+
+    await page.getByRole("button", { name: "Semana", exact: true }).click();
+    await expect.poll(() => consultas.at(-1)?.get("periodo")).toBe("semana");
+    const params = consultas.at(-1)!;
+    expect(params.get("indicadores")).toBe("grasa,proteina");
+    expect(params.has("desde")).toBe(false);
+    expect(params.has("hasta")).toBe(false);
+  });
+
+  test("HU-75 · un error de red se muestra como error de consulta con Reintentar", async ({ page }) => {
+    await mockDashboardProduccionDeps(page);
+    await page.route("**/indicadores/evolucion*", (route) => route.abort("failed"));
+    await loginAsResponsableProduccion(page);
+    await page.goto("/dashboard-produccion");
+
+    await expect(page.getByText("No se pudo cargar la evolución de indicadores.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reintentar" })).toBeVisible();
+    await expect(page.getByText("No hay registros para el período seleccionado")).toHaveCount(0);
+  });
+
+  // --- Unitarios: hook (loading / error / data) -----------------------------
+
+  test("HU-75 · mientras carga muestra 'Cargando evolución de indicadores...'", async ({ page }) => {
+    await mockDashboardProduccionDeps(page);
+    let liberar!: () => void;
+    const pendiente = new Promise<void>((r) => (liberar = r));
+    await page.route("**/indicadores/evolucion*", async (route) => {
+      await pendiente;
+      await route
+        .fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(EVOLUCION_MOCK) })
+        .catch(() => {});
+    });
+    await loginAsResponsableProduccion(page);
+    await page.goto("/dashboard-produccion");
+
+    await expect(page.getByText("Cargando evolución de indicadores...")).toBeVisible();
+    liberar();
+    await expect(page.locator("svg polyline")).toHaveCount(2);
+    await expect(page.getByText("Cargando evolución de indicadores...")).toHaveCount(0);
+  });
+
+  // --- Componente (validaciones) ---------------------------------------------
+
+  test("HU-75 · el mismo día en Desde y Hasta es un rango válido y se consulta", async ({ page }) => {
+    const consultas = registrarConsultasEvolucion(page);
+    await irAlDashboard(page);
+    await page.getByRole("button", { name: "Rango personalizado" }).click();
+    const fechas = page.locator('input[type="date"]');
+    await fechas.nth(0).fill("2026-06-10");
+    await fechas.nth(1).fill("2026-06-10");
+
+    await expect
+      .poll(() => consultas.filter((c) => c.get("periodo") === "rango").at(-1)?.get("hasta"))
+      .toBe("2026-06-10");
+    expect(consultas.filter((c) => c.get("periodo") === "rango").at(-1)!.get("desde")).toBe("2026-06-10");
+    await expect(page.getByText('La fecha "desde" no puede ser posterior a la fecha "hasta".')).toHaveCount(0);
+  });
+
+  test("HU-75 · corregir un rango invertido saca el error y vuelve a consultar", async ({ page }) => {
+    const consultas = registrarConsultasEvolucion(page);
+    await irAlDashboard(page);
+    await page.getByRole("button", { name: "Rango personalizado" }).click();
+    const fechas = page.locator('input[type="date"]');
+    await fechas.nth(0).fill("2026-06-20");
+    await fechas.nth(1).fill("2026-06-15");
+    await expect(page.getByText('La fecha "desde" no puede ser posterior a la fecha "hasta".')).toBeVisible();
+
+    await fechas.nth(0).fill("2026-06-10");
+
+    await expect(page.getByText('La fecha "desde" no puede ser posterior a la fecha "hasta".')).toHaveCount(0);
+    await expect
+      .poll(() => consultas.filter((c) => c.get("periodo") === "rango").at(-1)?.get("desde"))
+      .toBe("2026-06-10");
+    await expect(page.locator("svg polyline")).toHaveCount(2);
+  });
+
+  // --- Permisos por rol (matriz por defecto de mockAuth.ts) -----------------
+  // GET /dashboard/indicadores/evolucion pide dashboard:READ
+  // (dashboard.controller.ts:85-86): todos los roles de empresa lo tienen.
+
+  const ROLES_HU75: [string, (page: Page) => Promise<void>][] = [
+    ["Gerente", loginAsGerente],
+    ["Responsable de producción", loginAsResponsableProduccion],
+    ["Responsable de calidad", loginAsResponsableCalidad],
+    ["Operario de línea", loginAsOperario],
+  ];
+  for (const [rol, login] of ROLES_HU75) {
+    test(`HU-75 · ${rol} ve la evolución de indicadores con el rango personalizado`, async ({ page }) => {
+      await irAlDashboard(page, login);
+
+      await expect(page.locator("svg polyline")).toHaveCount(2);
+      await expect(page.getByRole("button", { name: "Rango personalizado" })).toBeVisible();
+    });
+  }
+
+  test("HU-75 · Administrador no entra al dashboard de producción ni consulta la evolución", async ({ page }) => {
+    const consultas = registrarConsultasEvolucion(page);
+    await mockDashboardProduccionDeps(page);
+    await loginAsAdministrador(page);
+    await page.goto("/dashboard-produccion");
+
+    await expect(page.getByText("Acceso no autorizado")).toBeVisible();
+    expect(consultas).toHaveLength(0);
+  });
+
+  // --- Matriz dinámica (quitarPermisos, HU-72) ------------------------------
+
+  test("HU-75 · un Responsable de producción sin dashboard no ve el panel ni consulta", async ({ page }) => {
+    const consultas = registrarConsultasEvolucion(page);
+    await mockDashboardProduccionDeps(page);
+    await loginAsResponsableProduccion(page);
+    // La landing (/dashboard-produccion) ya consultó: se descarta antes de
+    // sacar el permiso.
+    await page.waitForLoadState("networkidle");
+    consultas.length = 0;
+    await quitarPermisos(page, "Responsable de producción", ["dashboard"]);
+    await page.goto("/dashboard-produccion");
+
+    await expect(page.getByText("Acceso no autorizado")).toBeVisible();
+    expect(consultas).toHaveLength(0);
+  });
+
+  // --- E2E: flujo principal -------------------------------------------------
+
+  test("HU-75 · flujo principal: rango invertido, corrección, gráfico y vuelta a un período predefinido", async ({ page }) => {
+    const consultas = registrarConsultasEvolucion(page);
+    await irAlDashboard(page, loginAsGerente);
+
+    await page.getByRole("button", { name: "Rango personalizado" }).click();
+    const fechas = page.locator('input[type="date"]');
+    await fechas.nth(0).fill("2026-06-10");
+    await expect(page.getByText("Elegí las fechas Desde y Hasta")).toBeVisible();
+    await fechas.nth(1).fill("2026-06-05");
+    await expect(page.getByText("Corregí el rango de fechas para ver el gráfico.")).toBeVisible();
+
+    await fechas.nth(1).fill("2026-06-15");
+    await expect(page.locator("svg polyline")).toHaveCount(2);
+    const rango = consultas.filter((c) => c.get("periodo") === "rango").at(-1)!;
+    expect([rango.get("desde"), rango.get("hasta")]).toEqual(["2026-06-10", "2026-06-15"]);
+
+    // "Mes" también existe en otro panel del dashboard: se acota al de evolución.
+    const panelEvolucion = page
+      .locator("div", { has: page.getByRole("button", { name: "Rango personalizado" }) })
+      .last();
+    await panelEvolucion.getByRole("button", { name: "Mes", exact: true }).click();
+    await expect.poll(() => consultas.at(-1)?.get("periodo")).toBe("mes");
+    expect(consultas.at(-1)!.has("desde")).toBe(false);
+  });
+});
+
+// HU-75 (EP-7): navegador en un huso adelantado y de noche. Las fechas del
+// rango viajan como se eligieron, sin corrimiento.
+test.describe("HU-75 · Rango de fechas con el navegador en otro huso", () => {
+  test.use({ timezoneId: "Asia/Tokyo" });
+
+  test("HU-75 · en Asia/Tokyo a las 23:30 el rango viaja exactamente como se eligió", async ({ page }) => {
+    await page.clock.setFixedTime(new Date("2026-06-15T23:30:00+09:00"));
+    const consultas = registrarConsultasEvolucion(page);
+    await irAlDashboard(page);
+    await page.getByRole("button", { name: "Rango personalizado" }).click();
+    const fechas = page.locator('input[type="date"]');
+    await fechas.nth(0).fill("2026-06-14");
+    await fechas.nth(1).fill("2026-06-15");
+
+    await expect
+      .poll(() => consultas.filter((c) => c.get("periodo") === "rango").at(-1)?.get("hasta"))
+      .toBe("2026-06-15");
+    expect(consultas.filter((c) => c.get("periodo") === "rango").at(-1)!.get("desde")).toBe("2026-06-14");
+  });
 });

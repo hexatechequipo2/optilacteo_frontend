@@ -406,3 +406,22 @@ test.describe("IngresoCamaraPage (HU-67)", () => {
     await expect(page.getByText("Acceso no autorizado")).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// HU-75 · Fecha calendario por defecto (fix de fechas, PR #166)
+// ---------------------------------------------------------------------------
+
+test.describe("HU-75 · Ingreso a cámara: fecha por defecto en hora AR", () => {
+  test.use({ timezoneId: "America/Argentina/Cordoba" });
+
+  test("HU-75 · a las 22:30 AR el formulario propone el día de hoy, no el siguiente", async ({ page }) => {
+    await page.clock.setFixedTime(new Date("2026-11-19T22:30:00-03:00"));
+    await mockIngresoCamaraDeps(page);
+    await loginAsResponsableProduccion(page);
+    await page.goto("/ingreso-camara");
+
+    await page.getByRole("button", { name: "+ Nuevo ingreso" }).click();
+
+    await expect(page.getByRole("dialog").getByLabel("Fecha de ingreso a cámara *")).toHaveValue("2026-11-19");
+  });
+});
